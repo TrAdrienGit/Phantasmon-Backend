@@ -1,0 +1,12 @@
+---
+description: Only Phantasmon-Client and Phantasmon-Backend may be edited in this workspace.
+alwaysApply: true
+---
+
+# Writable repos
+
+Edit only `Phantasmon-Client` and `Phantasmon-Backend`.
+
+Treat as read-only (no edits, no commits, no generated files): `architectury-api`, `ClothConfig`, `cobblemon`, `fabric`, `fabric-language-kotlin`, `pokemon-showdown`, `pokemon-showdown-client`.
+
+If a change seems to belong upstream, stop and tell Adrien.

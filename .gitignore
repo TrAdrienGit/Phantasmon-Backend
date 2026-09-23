@@ -5,11 +5,16 @@
 application-local.yml
 application-local.yaml
 application-local.properties
+local.properties
+*.pem
+*.key
 
 # === Gradle ===
 .gradle/
 build/
 out/
+classes/
+!gradle/wrapper/gradle-wrapper.jar
 
 # === Spring Boot ===
 *.log
@@ -24,19 +29,37 @@ HELP.md
 .vscode/
 !.vscode/extensions.json
 .classpath
+.factorypath
 .project
 .settings/
 bin/
+*.launch
+*.code-workspace
 
 # === OS ===
 .DS_Store
 Thumbs.db
+Desktop.ini
+
+# === JVM ===
+hs_err_pid*
+replay_pid*
+*.hprof
 
 # === Docker / DB locale ===
 pgdata/
+data/postgres/
 docker-compose.override.yml
+
+# === Cursor local (commit .cursor/skills and .cursor/rules) ===
+.cursorignore.local
 
 # === Divers ===
 *.class
 *.jar
-!gradle-wrapper.jar
+!gradle/wrapper/gradle-wrapper.jar
+*.war
+*.ear
+*~
+*.swp
+*.swo

@@ -1,0 +1,14 @@
+---
+description: Phantasmon architecture — no Minecraft server mod, backend is source of truth.
+alwaysApply: true
+---
+
+# Architecture
+
+- No Phantasmon code on the Minecraft/Cobblemon server. Ghosts are client-only entities.
+- Backend is the only source of truth. Clients never talk peer-to-peer.
+- Store Cobblemon **identifiers** only, never base stats or assets.
+- Structured API errors (`error_code` + `details`). Client i18n FR+EN, no hardcoded UI strings.
+- Follow CAD Partie 3 over Partie 1 on legality. Spec order: CONTEXT → Partie 4 → 3 → 2 → schema/OpenAPI → Partie 1 (product only).
+- Backend first (phases 0–4), combat last (phase 9).
+- Details: skills `phantasmon-workspace`, `phantasmon-client`, `phantasmon-backend`.
