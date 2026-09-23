@@ -1,0 +1,558 @@
+openapi: 3.0.3
+info:
+  title: Phantasmon Backend API
+  description: >
+    API du backend Phantasmon — source de vérité pour les Pokémon fantômes,
+    les échanges et les combats. Consommée exclusivement par le mod client
+    Fabric (aucun serveur Minecraft n'appelle cette API).
+  version: 0.1.0
+servers:
+  - url: https://api.phantasmon.example.com
+    description: À adapter selon l'environnement (dev/staging/prod)
+
+security:
+  - bearerAuth: []
+
+paths:
+  /health:
+    get:
+      summary: Vérifie la disponibilité du backend
+      security: []
+      responses:
+        "200":
+          description: Backend disponible
+
+  /version:
+    get:
+      summary: Version courante et version minimale supportée du client
+      security: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  current_version:
+                    type: string
+                    example: "1.4.2"
+                  min_supported_version:
+                    type: string
+                    example: "1.3.0"
+
+  /auth/session:
+    post:
+      summary: Échange une preuve de session Mojang contre un JWT
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [uuid, username, server_id]
+              properties:
+                uuid:
+                  type: string
+                  format: uuid
+                username:
+                  type: string
+                server_id:
+                  type: string
+      responses:
+        "200":
+          description: Authentification réussie
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  access_token:
+                    type: string
+                  refresh_token:
+                    type: string
+                  expires_in:
+                    type: integer
+        "401":
+          $ref: "#/components/responses/Error"
+
+  /players/{uuid}/pokemon:
+    get:
+      summary: Liste les Pokémon d'un joueur
+      parameters:
+        - $ref: "#/components/parameters/PlayerUuid"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Pokemon"
+
+  /players/{uuid}/pc:
+    get:
+      summary: Contenu paginé du PC Ghost
+      parameters:
+        - $ref: "#/components/parameters/PlayerUuid"
+        - name: box
+          in: query
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Pokemon"
+
+  /players/{uuid}/team:
+    get:
+      summary: Équipe active du joueur
+      parameters:
+        - $ref: "#/components/parameters/PlayerUuid"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Pokemon"
+    put:
+      summary: Définit l'équipe active du joueur
+      parameters:
+        - $ref: "#/components/parameters/PlayerUuid"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                type: string
+                format: uuid
+      responses:
+        "200":
+          description: OK
+
+  /pokemon:
+    post:
+      summary: Crée un Pokémon (idempotent via request_uuid)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PokemonCreateRequest"
+      responses:
+        "201":
+          description: Créé
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Pokemon"
+        "422":
+          $ref: "#/components/responses/Error"
+
+  /pokemon/{uuid}:
+    patch:
+      summary: Modifie un Pokémon
+      parameters:
+        - $ref: "#/components/parameters/PokemonUuid"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PokemonUpdateRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Pokemon"
+        "403":
+          $ref: "#/components/responses/Error"
+        "422":
+          $ref: "#/components/responses/Error"
+    delete:
+      summary: Supprime un Pokémon
+      parameters:
+        - $ref: "#/components/parameters/PokemonUuid"
+      responses:
+        "204":
+          description: Supprimé
+        "403":
+          $ref: "#/components/responses/Error"
+
+  /pokemon/{uuid}/clone:
+    post:
+      summary: Clone un Pokémon
+      parameters:
+        - $ref: "#/components/parameters/PokemonUuid"
+      responses:
+        "201":
+          description: Clone créé
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Pokemon"
+
+  /pokemon/import-showdown:
+    post:
+      summary: Importe un Pokémon depuis un export Pokémon Showdown
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [showdown_text]
+              properties:
+                showdown_text:
+                  type: string
+      responses:
+        "201":
+          description: Importé
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Pokemon"
+        "422":
+          $ref: "#/components/responses/Error"
+
+  /pokemon/{uuid}/export:
+    get:
+      summary: Exporte un Pokémon au format Showdown
+      parameters:
+        - $ref: "#/components/parameters/PokemonUuid"
+      responses:
+        "200":
+          description: OK
+          content:
+            text/plain:
+              schema:
+                type: string
+
+  /trades:
+    post:
+      summary: Propose un échange
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [recipient_uuid, offered_pokemon_uuid, requested_pokemon_uuid]
+              properties:
+                recipient_uuid:
+                  type: string
+                  format: uuid
+                offered_pokemon_uuid:
+                  type: string
+                  format: uuid
+                requested_pokemon_uuid:
+                  type: string
+                  format: uuid
+      responses:
+        "201":
+          description: Trade créé (PENDING)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Trade"
+
+  /trades/{uuid}:
+    get:
+      summary: Détail d'un trade
+      parameters:
+        - $ref: "#/components/parameters/TradeUuid"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Trade"
+
+  /trades/{uuid}/accept:
+    post:
+      summary: Accepte un trade (transaction atomique)
+      parameters:
+        - $ref: "#/components/parameters/TradeUuid"
+      responses:
+        "200":
+          description: Trade complété
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Trade"
+        "409":
+          $ref: "#/components/responses/Error"
+
+  /trades/{uuid}/cancel:
+    post:
+      summary: Annule un trade en attente
+      parameters:
+        - $ref: "#/components/parameters/TradeUuid"
+      responses:
+        "200":
+          description: Trade annulé
+
+  /players/{uuid}/trades:
+    get:
+      summary: Trades en cours d'un joueur
+      parameters:
+        - $ref: "#/components/parameters/PlayerUuid"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Trade"
+
+  /battles:
+    post:
+      summary: Crée une session de combat Ghost
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [opponent_uuid, team]
+              properties:
+                opponent_uuid:
+                  type: string
+                  format: uuid
+                team:
+                  type: array
+                  items:
+                    type: string
+                    format: uuid
+      responses:
+        "201":
+          description: Session créée
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BattleSession"
+
+  /battles/{uuid}:
+    get:
+      summary: État d'une session de combat
+      parameters:
+        - $ref: "#/components/parameters/BattleUuid"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BattleSession"
+
+  /battles/{uuid}/result:
+    post:
+      summary: Soumet le résultat d'un combat (vérifié par les garde-fous backend)
+      parameters:
+        - $ref: "#/components/parameters/BattleUuid"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                winner_uuid:
+                  type: string
+                  format: uuid
+                log:
+                  type: object
+      responses:
+        "200":
+          description: Résultat accepté
+        "409":
+          description: Résultat jugé incohérent par les garde-fous
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /admin/pokemon/{uuid}:
+    get:
+      summary: (Admin) Inspecte un Pokémon
+      parameters:
+        - $ref: "#/components/parameters/PokemonUuid"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Pokemon"
+        "403":
+          $ref: "#/components/responses/Error"
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    PlayerUuid:
+      name: uuid
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    PokemonUuid:
+      name: uuid
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    TradeUuid:
+      name: uuid
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    BattleUuid:
+      name: uuid
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+  responses:
+    Error:
+      description: Erreur métier structurée
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+
+  schemas:
+    ErrorResponse:
+      type: object
+      properties:
+        error_code:
+          type: string
+          example: ERROR_LEGALITY_EV_TOTAL_EXCEEDED
+        details:
+          type: object
+
+    Pokemon:
+      type: object
+      properties:
+        uuid:
+          type: string
+          format: uuid
+        owner_uuid:
+          type: string
+          format: uuid
+        species:
+          type: string
+        form:
+          type: string
+        level:
+          type: integer
+        nature:
+          type: string
+        ability:
+          type: string
+        is_shiny:
+          type: boolean
+        box_id:
+          type: integer
+        box_slot:
+          type: integer
+        team_slot:
+          type: integer
+          nullable: true
+        cobblemon_data_version:
+          type: string
+        data:
+          type: object
+          description: IVs, EVs, moves, held_item, friendship, origin...
+
+    PokemonCreateRequest:
+      allOf:
+        - $ref: "#/components/schemas/Pokemon"
+        - type: object
+          required: [request_uuid]
+          properties:
+            request_uuid:
+              type: string
+              format: uuid
+
+    PokemonUpdateRequest:
+      type: object
+      properties:
+        data:
+          type: object
+        level:
+          type: integer
+        team_slot:
+          type: integer
+          nullable: true
+
+    Trade:
+      type: object
+      properties:
+        uuid:
+          type: string
+          format: uuid
+        initiator_uuid:
+          type: string
+          format: uuid
+        recipient_uuid:
+          type: string
+          format: uuid
+        offered_pokemon:
+          type: string
+          format: uuid
+        requested_pokemon:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [PENDING, ACCEPTED, CANCELLED, COMPLETED]
+
+    BattleSession:
+      type: object
+      properties:
+        uuid:
+          type: string
+          format: uuid
+        player_a:
+          type: string
+          format: uuid
+        player_b:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [PENDING, ACTIVE, FINISHED, ABORTED]
+        result:
+          type: object
+          nullable: true
