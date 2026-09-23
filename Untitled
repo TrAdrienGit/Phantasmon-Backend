@@ -1,8 +1,0 @@
-# -------------------------------------------- #
-# BDD Configuration
-
-BDD_USER='phantasmon_agent'
-BDD_PASSWORD='Su)ByxE-)W4&Y2cO}Dwy9Xj~Fz9FwS#JRXDAa5;o'
-BDD_NAME='db_phantasmon'
-BDD_HOST='localhost'
-BDD_PORT=5432

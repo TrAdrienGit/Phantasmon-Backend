@@ -1,6 +1,7 @@
 # === Env / secrets ===
 .env
 .env.*
+!.env.template
 !.env.example
 application-local.yml
 application-local.yaml

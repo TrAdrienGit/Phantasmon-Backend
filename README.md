@@ -31,11 +31,8 @@ See the [full design document](https://github.com/your-account/phantasmon-docs) 
 git clone https://github.com/your-account/phantasmon-backend.git
 cd phantasmon-backend
 
-# Start local PostgreSQL
-docker compose up -d
-
-# Copy the environment template and fill in local values
-cp .env.example .env
+# Copy the environment template and fill in local PostgreSQL credentials
+cp .env.template .env
 
 # Run the backend
 ./gradlew bootRun

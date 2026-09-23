@@ -7,7 +7,7 @@ alwaysApply: true
 
 When adding secrets, local run dirs, Docker volumes, IDE files, or build outputs, update `.gitignore` in the same change.
 
-Must ignore: `.env` (keep `!.env.example`), `application-local.*`, `.gradle/`, `build/`, `pgdata/`, crash dumps, `*.hprof`.
+Must ignore: `.env` (keep `!.env.template`), `application-local.*`, `.gradle/`, `build/`, `pgdata/`, crash dumps, `*.hprof`.
 
 Must **not** ignore: `.cursor/skills/`, `.cursor/rules/`, `gradle/wrapper/gradle-wrapper.jar`, `Documentation/`, Flyway migrations.
 
