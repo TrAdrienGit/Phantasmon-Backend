@@ -53,6 +53,80 @@ idempotency_keys (request_uuid PK, player_uuid — pas de FK stricte, voir §7)
 Aucune autre table n'est nécessaire pour le périmètre V1 (pas de table `teams` séparée — voir §3.2 ;
 pas de table `presence` — voir §8).
 
+### 2.1 Diagramme ER (Mermaid)
+
+Reflète l'état réellement appliqué par les migrations Flyway (`src/main/resources/db/migration/`).
+Se rend nativement sur GitHub. À maintenir en même temps que toute migration ajoutée/modifiée.
+
+```mermaid
+erDiagram
+    PLAYERS ||--o{ POKEMON : owns
+    PLAYERS ||--o{ TRADES : initiates
+    PLAYERS ||--o{ TRADES : receives
+    PLAYERS ||--o{ BATTLE_SESSIONS : "plays (a/b)"
+    POKEMON ||--o{ TRADES : "offered/requested"
+
+    PLAYERS {
+        uuid uuid PK
+        varchar last_username
+        timestamptz created_at
+        timestamptz last_seen_at
+    }
+
+    POKEMON {
+        uuid uuid PK
+        uuid owner_uuid FK
+        varchar species
+        varchar form
+        smallint level
+        varchar nature
+        varchar ability
+        boolean is_shiny
+        smallint box_id
+        smallint box_slot
+        smallint team_slot
+        varchar cobblemon_data_version
+        jsonb data
+        timestamptz created_at
+        timestamptz updated_at
+    }
+
+    TRADES {
+        uuid uuid PK
+        uuid initiator_uuid FK
+        uuid recipient_uuid FK
+        uuid offered_pokemon FK
+        uuid requested_pokemon FK
+        varchar status
+        timestamptz created_at
+        timestamptz resolved_at
+    }
+
+    BATTLE_SESSIONS {
+        uuid uuid PK
+        uuid player_a FK
+        uuid player_b FK
+        jsonb team_a
+        jsonb team_b
+        varchar status
+        jsonb result
+        timestamptz created_at
+        timestamptz finished_at
+    }
+
+    IDEMPOTENCY_KEYS {
+        uuid request_uuid PK
+        uuid player_uuid "pas de FK stricte, voir §7"
+        varchar endpoint
+        jsonb response_snapshot
+        timestamptz created_at
+    }
+```
+
+`idempotency_keys.player_uuid` n'a volontairement pas de FK vers `players` (§7.3/§9.5) ; elle n'apparaît
+donc pas comme une relation dans ce diagramme, seulement comme une colonne informative. De même,
+`battle_sessions.team_a`/`team_b` sont des snapshots JSONB sans FK SQL vers `pokemon` (§6.4).
+
 ---
 
 ## 3. Table `players`
