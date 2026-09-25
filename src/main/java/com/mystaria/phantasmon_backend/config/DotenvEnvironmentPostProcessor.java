@@ -9,6 +9,7 @@ import java.util.Map;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.env.EnvironmentPostProcessor;
+import org.springframework.core.Ordered;
 import org.springframework.core.env.ConfigurableEnvironment;
 import org.springframework.core.env.MapPropertySource;
 
@@ -16,8 +17,17 @@ import org.springframework.core.env.MapPropertySource;
  * Loads a project-root {@code .env} into the Spring Environment so local
  * {@code BDD_*} keys work with {@code ./gradlew bootRun} without exporting them
  * in the shell. Missing file is ignored (CI / Testcontainers).
+ *
+ * <p>Runs at {@link Ordered#HIGHEST_PRECEDENCE} so other {@link EnvironmentPostProcessor}s
+ * (e.g. {@link com.mystaria.phantasmon_backend.logging.SessionLogFileEnvironmentPostProcessor})
+ * can rely on {@code .env} values already being present in the {@link ConfigurableEnvironment}.
  */
-public class DotenvEnvironmentPostProcessor implements EnvironmentPostProcessor {
+public class DotenvEnvironmentPostProcessor implements EnvironmentPostProcessor, Ordered {
+
+	@Override
+	public int getOrder() {
+		return HIGHEST_PRECEDENCE;
+	}
 
 	private static final String PROPERTY_SOURCE_NAME = "phantasmonDotenv";
 

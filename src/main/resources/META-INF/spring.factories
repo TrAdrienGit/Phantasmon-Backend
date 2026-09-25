@@ -1,1 +1,2 @@
-org.springframework.boot.env.EnvironmentPostProcessor=com.mystaria.phantasmon_backend.config.DotenvEnvironmentPostProcessor
+org.springframework.boot.env.EnvironmentPostProcessor=com.mystaria.phantasmon_backend.config.DotenvEnvironmentPostProcessor,\
+com.mystaria.phantasmon_backend.logging.SessionLogFileEnvironmentPostProcessor

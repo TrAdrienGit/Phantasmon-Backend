@@ -30,9 +30,10 @@ autonome (jar). Il ne couvre pas l'hébergement final (choix d'infrastructure no
 | `BDD_USER` | Rôle PostgreSQL applicatif | `phantasmon_agent` |
 | `BDD_PASSWORD` | Mot de passe de ce rôle | *(secret)* |
 | `JWT_SECRET` | Clé de signature HMAC-SHA256 des JWT | *(secret, ex. sortie de `openssl rand -base64 64`)* |
+| `LOGGING_ENABLED` | Active/désactive le logging fichier (voir §9) | `true` (défaut) |
 
 `JWT_SECRET` est **obligatoire** : sans elle, le démarrage échoue immédiatement avec une erreur du type
-`Could not resolve placeholder 'phantasmon.jwt.secret'`.
+`Could not resolve placeholder 'phantasmon.jwt.secret'`. `LOGGING_ENABLED` est optionnelle (défaut `true`).
 
 ### 2.1 En développement local — fichier `.env`
 
@@ -126,6 +127,7 @@ Voir `Documentation/PHANTASMON_API_REFERENCE.md` pour le détail de tous les end
 | `FATAL: authentification par mot de passe échouée` | `BDD_USER`/`BDD_PASSWORD` incorrects, ou rôle/BDD inexistants côté PostgreSQL |
 | Port 8080 déjà utilisé | Une autre instance tourne déjà ; changer via `server.port` (propriété Spring) |
 | `/health` répond `503` | Le backend tourne mais ne peut pas joindre PostgreSQL (vérifier les identifiants et la disponibilité du serveur) |
+| Aucun fichier dans `log/` | `LOGGING_ENABLED=false` (comportement voulu), ou dossier `log/` absent/sans droits d'écriture |
 
 ---
 
@@ -134,3 +136,46 @@ Voir `Documentation/PHANTASMON_API_REFERENCE.md` pour le détail de tous les end
 `JWT_SECRET` et `BDD_PASSWORD` sont de vrais secrets : ne jamais les committer, ne jamais les afficher
 dans des logs partagés. Voir `.gitignore` (le `.env` y est explicitement exclu, `.env.template` reste
 suivi par git).
+
+---
+
+## 9. Logs fichier
+
+Chaque session du backend (chaque démarrage) crée **un seul fichier** dans `log/` à la racine du projet,
+nommé :
+
+```
+Log-Phantasmon-Backend_<AAAA-MM-JJ>_<HH-MM-SS>.txt
+```
+
+Un redémarrage crée un nouveau fichier — les anciens ne sont jamais réutilisés ni écrasés. Le fichier
+contient tout ce que la console affiche (démarrage, migrations Flyway, chaque appel REST via
+`RequestLoggingFilter` avec méthode/chemin/statut/durée, événements métier importants comme
+l'authentification ou la création de joueur) — le même niveau `INFO` que la console.
+
+### 9.1 Activer/désactiver
+
+Contrôlé par `LOGGING_ENABLED` dans `.env` (ou la variable d'environnement système équivalente) :
+
+```
+LOGGING_ENABLED=true   # comportement par défaut si absent
+LOGGING_ENABLED=false  # aucun fichier créé ; la console continue de logger normalement
+```
+
+### 9.2 Rétention — plafond de 5 Go
+
+Le dossier `log/` est plafonné à **5 Go au total**. Une vérification a lieu au démarrage puis toutes les
+heures (`LogRetentionService`) : si le dossier dépasse le plafond, les fichiers de session les **plus
+anciens** sont supprimés en premier jusqu'à repasser sous la limite. Seuls les fichiers nommés
+`Log-Phantasmon-Backend_*.txt` sont concernés — tout autre fichier présent dans `log/` est ignoré par
+sécurité.
+
+### 9.3 Détails techniques
+
+Contrairement à une configuration Logback classique par XML, ce projet pilote le nom de fichier et le
+toggle via un `EnvironmentPostProcessor` Java (`SessionLogFileEnvironmentPostProcessor`) qui positionne la
+propriété standard `logging.file.name` de Spring Boot avant que la journalisation ne démarre — c'est ce
+mécanisme natif de Spring Boot qui décide d'attacher ou non un appender fichier. Un essai avec un
+`logback-spring.xml` personnalisé (`<if>` conditionnel) s'est révélé peu fiable à cause du double passage
+d'initialisation de Logback avec Spring (`<springProperty>` non résolu assez tôt) — voir la mémoire du
+projet pour le détail si cette zone doit être retouchée un jour.

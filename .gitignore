@@ -22,6 +22,9 @@ classes/
 spring.log
 HELP.md
 
+# === Phantasmon file logs (one per session, see PHANTASMON_BACKEND_RUNNING.md) ===
+/log/
+
 # === IDE ===
 .idea/
 *.iml

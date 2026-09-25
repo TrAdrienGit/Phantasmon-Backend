@@ -14,7 +14,7 @@ import com.mystaria.phantasmon_backend.TestcontainersConfiguration;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @Import(TestcontainersConfiguration.class)
-@SpringBootTest
+@SpringBootTest(properties = "phantasmon.logging.enabled=false")
 @Transactional
 class PlayerServiceTest {
 
