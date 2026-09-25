@@ -4,9 +4,9 @@
 
 ## Overview
 
-The Phantasmon Backend does not depend on any Minecraft server — it runs as a standalone service and talks only to the [Phantasmon Client](https://github.com/your-account/phantasmon-client) (Fabric mod). It is the sole authority of the system: ownership, Pokémon legality, trade atomicity, and battle arbitration are all enforced here.
+The Phantasmon Backend does not depend on any Minecraft server — it runs as a standalone service and talks only to the [Phantasmon Client](https://github.com/TrAdrienGit/phantasmon-client) (Fabric mod). It is the sole authority of the system: ownership, Pokémon legality, trade atomicity, and battle arbitration are all enforced here.
 
-See the [full design document](https://github.com/your-account/phantasmon-docs) for the complete architecture, technical decisions, and development plan.
+See the [full design document](https://github.com/TrAdrienGit/phantasmon-backend/Documentation) for the complete architecture, technical decisions, and development plan.
 
 ## Tech stack
 
