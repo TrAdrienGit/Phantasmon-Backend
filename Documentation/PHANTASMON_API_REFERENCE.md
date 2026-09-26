@@ -342,6 +342,75 @@ Implémentation : `com.mystaria.phantasmon_backend.trade.{TradeController,TradeS
 
 ---
 
+### `POST /battles`
+
+- **Auth** : Bearer — l'initiateur est déduit du JWT, jamais du corps de la requête
+- **Corps requête**
+
+```json
+{
+  "request_uuid": "b1a4c2b0-1234-4d5e-8f90-abcdef123456",
+  "opponent_uuid": "9f8e7d6c-5432-1abc-def0-123456789abc",
+  "team": ["...", "..."]
+}
+```
+
+`request_uuid` obligatoire (idempotence, même mécanisme que `POST /pokemon`/`POST /trades`).
+`team` est **uniquement** l'équipe de l'appelant (ownership revérifiée en base). L'équipe de
+l'adversaire n'est **jamais** prise dans la requête — le backend la dérive lui-même de son équipe
+active actuelle (`pokemon.team_slot IS NOT NULL`, triée par `team_slot`), pour qu'aucun des deux
+joueurs ne puisse dicter ce que l'autre combat.
+
+- **Réponse 201 Created**
+
+```json
+{
+  "uuid": "...",
+  "player_a": "b1a4c2b0-...",
+  "player_b": "9f8e7d6c-...",
+  "team_a": ["..."],
+  "team_b": ["..."],
+  "status": "ACTIVE",
+  "result": null,
+  "created_at": "...",
+  "finished_at": null
+}
+```
+
+La session démarre directement `ACTIVE` (pas d'étape d'acceptation séparée côté API — le CAD Partie 2 §9.1
+suppose que les deux joueurs ont déjà convenu du combat côté client avant cet appel).
+
+- **Réponse 403 Forbidden** — `ERROR_OWNERSHIP_MISMATCH` : un `pokemon_uuid` de `team` n'appartient pas à l'appelant
+- **Réponse 404 Not Found** — `ERROR_PLAYER_NOT_FOUND` (`opponent_uuid` inconnu) ou `ERROR_POKEMON_NOT_FOUND`
+- **Réponse 409 Conflict** — `ERROR_BATTLE_SELF` (`opponent_uuid` == l'appelant) ou `ERROR_BATTLE_OPPONENT_NO_TEAM` (l'adversaire n'a aucun Pokémon avec `team_slot` défini)
+- **Réponse 422 Unprocessable Content** — `ERROR_BATTLE_INVALID_TEAM` (équipe vide, > 6 Pokémon, ou doublons)
+
+### `GET /battles/{uuid}`
+
+- **Auth** : Bearer — seuls `player_a` et `player_b` peuvent consulter (403 `ERROR_OWNERSHIP_MISMATCH` sinon)
+
+### `POST /battles/{uuid}/result`
+
+- **Auth** : Bearer — seuls `player_a` et `player_b` peuvent soumettre un résultat
+- **Corps requête**
+
+```json
+{ "winner_uuid": "b1a4c2b0-...", "log": { "turns": 3 } }
+```
+
+- **Réponse 200 OK** — `status: "FINISHED"`, `result: {"winner_uuid": ..., "log": {...}}`, `finished_at` renseigné
+- **Réponse 409 Conflict** — `ERROR_BATTLE_INVALID_STATE` si la session n'est plus `ACTIVE` (déjà terminée) — protège aussi contre une double soumission
+- **Réponse 422 Unprocessable Content** — `ERROR_BATTLE_INVALID_RESULT` si `winner_uuid` n'est ni `player_a` ni `player_b`
+
+**Garde-fous V1 (CAD Partie 2 §9.2)** : seuls ces contrôles de cohérence globale sont faits ici —
+le backend ne rejoue aucun calcul de combat (pas de moteur Cobblemon côté serveur, hors scope V1,
+voir `PHANTASMON_BACKEND_CONVENTIONS` règle 7). L'arbitrage réel (client hôte, alternance d'hôte
+entre combats successifs) arrive avec le client Phase 9.
+
+Implémentation : `com.mystaria.phantasmon_backend.battle.{BattleController,BattleService}`.
+
+---
+
 ## WebSocket
 
 ### Connexion
@@ -398,4 +467,4 @@ Enveloppe générique, dans les deux sens :
 
 ## Non implémenté (cible OpenAPI, pour suivi)
 
-Endpoints décrits dans `phantasmon-backend-openapi.yaml` mais absents du code à ce jour : `GET/PUT /players/{uuid}/team`, `POST /pokemon/import-showdown`, `GET /pokemon/{uuid}/export`, `POST /battles*`, `GET/POST /admin/*`. Ils seront documentés ici avec exemples concrets au fur et à mesure de leur implémentation (voir `Documentation/CAD_Phantasmon_Partie_4_Plan_Developpement.md` pour l'ordre des phases).
+Endpoints décrits dans `phantasmon-backend-openapi.yaml` mais absents du code à ce jour : `GET/PUT /players/{uuid}/team`, `POST /pokemon/import-showdown`, `GET /pokemon/{uuid}/export`, `GET/POST /admin/*`. Ils seront documentés ici avec exemples concrets au fur et à mesure de leur implémentation (voir `Documentation/CAD_Phantasmon_Partie_4_Plan_Developpement.md` pour l'ordre des phases).
