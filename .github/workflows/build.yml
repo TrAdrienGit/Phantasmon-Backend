@@ -38,6 +38,14 @@ jobs:
         run: ./gradlew build -x test
 
       - name: Run tests (unitaires + intégration Testcontainers)
+        env:
+          # Test-only value, never the real deployment secret (which lives in
+          # the untracked .env, see feedback_phantasmon_env_secrets memory).
+          # Required because phantasmon.jwt.secret has no default in
+          # application.properties — nothing overrides it for tests the way
+          # Testcontainers' @ServiceConnection overrides the datasource, so
+          # JwtService needs *some* value to build its bean at context startup.
+          JWT_SECRET: ci-test-only-jwt-secret-never-used-in-production
         run: ./gradlew test
 
       - name: Publish test report on failure
