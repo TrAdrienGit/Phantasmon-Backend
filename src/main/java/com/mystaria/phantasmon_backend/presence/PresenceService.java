@@ -33,23 +33,38 @@ public class PresenceService {
 	}
 
 	public void join(UUID playerUuid, String serverFingerprint, String dimension) {
-		presences.put(playerUuid, new PlayerPresence(playerUuid, serverFingerprint, dimension, null, clock.instant()));
+		presences.put(playerUuid, new PlayerPresence(playerUuid, serverFingerprint, dimension, null, clock.instant(), null));
 	}
 
-	public void leave(UUID playerUuid) {
-		presences.remove(playerUuid);
+	/** Returns the removed presence (if any) so the caller can broadcast a despawn for its active ghost, if it had one. */
+	public Optional<PlayerPresence> leave(UUID playerUuid) {
+		return Optional.ofNullable(presences.remove(playerUuid));
 	}
 
 	public void heartbeat(UUID playerUuid) {
 		presences.computeIfPresent(playerUuid, (uuid, presence) -> new PlayerPresence(
 				presence.playerUuid(), presence.serverFingerprint(), presence.dimension(),
-				presence.position(), clock.instant()));
+				presence.position(), clock.instant(), presence.activeGhostPokemonUuid()));
 	}
 
 	public void updatePosition(UUID playerUuid, double x, double y, double z, String dimension) {
 		presences.computeIfPresent(playerUuid, (uuid, presence) -> new PlayerPresence(
 				presence.playerUuid(), presence.serverFingerprint(), dimension,
-				new Position(x, y, z), presence.lastHeartbeatAt()));
+				new Position(x, y, z), presence.lastHeartbeatAt(), presence.activeGhostPokemonUuid()));
+	}
+
+	/** Marks {@code pokemonUuid} as the Ghost Pokémon this player currently has sent out (CAD Partie 2 §7/§8). */
+	public void sendOutGhost(UUID playerUuid, UUID pokemonUuid) {
+		presences.computeIfPresent(playerUuid, (uuid, presence) -> new PlayerPresence(
+				presence.playerUuid(), presence.serverFingerprint(), presence.dimension(),
+				presence.position(), presence.lastHeartbeatAt(), pokemonUuid));
+	}
+
+	/** Clears whatever Ghost Pokémon this player currently has out, if any. */
+	public void recallGhost(UUID playerUuid) {
+		presences.computeIfPresent(playerUuid, (uuid, presence) -> new PlayerPresence(
+				presence.playerUuid(), presence.serverFingerprint(), presence.dimension(),
+				presence.position(), presence.lastHeartbeatAt(), null));
 	}
 
 	public Optional<PlayerPresence> find(UUID playerUuid) {

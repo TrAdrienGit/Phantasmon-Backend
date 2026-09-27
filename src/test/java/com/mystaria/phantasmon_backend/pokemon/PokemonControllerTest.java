@@ -157,4 +157,157 @@ class PokemonControllerTest {
 		mockMvc.perform(get("/players/" + ownerUuid + "/pokemon").header("Authorization", bearerToken))
 				.andExpect(jsonPath("$.length()").value(1));
 	}
+
+	@Test
+	void assigningToTeamClearsPcLocationNoDuplication() throws Exception {
+		String createResponse = mockMvc.perform(post("/pokemon").header("Authorization", bearerToken)
+						.contentType(MediaType.APPLICATION_JSON).content(validCreateBody(UUID.randomUUID())))
+				.andExpect(status().isCreated())
+				.andReturn().getResponse().getContentAsString();
+		String pokemonUuid = com.jayway.jsonpath.JsonPath.read(createResponse, "$.uuid");
+		// Auto-assigned to PC box 1 slot 1 by create() — confirm the starting point.
+		com.jayway.jsonpath.JsonPath.read(createResponse, "$.box_id");
+
+		mockMvc.perform(patch("/pokemon/" + pokemonUuid).header("Authorization", bearerToken)
+						.contentType(MediaType.APPLICATION_JSON)
+						.content("{\"team_slot\": 3}"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.team_slot").value(3))
+				.andExpect(jsonPath("$.box_id").doesNotExist())
+				.andExpect(jsonPath("$.box_slot").doesNotExist());
+
+		// A plain omitted team_slot must leave it untouched (partial-update convention).
+		mockMvc.perform(patch("/pokemon/" + pokemonUuid).header("Authorization", bearerToken)
+						.contentType(MediaType.APPLICATION_JSON)
+						.content("{\"level\": 55}"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.team_slot").value(3));
+
+		mockMvc.perform(patch("/pokemon/" + pokemonUuid).header("Authorization", bearerToken)
+						.contentType(MediaType.APPLICATION_JSON)
+						.content("{\"box_id\": 1, \"box_slot\": 1}"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.team_slot").doesNotExist())
+				.andExpect(jsonPath("$.box_id").value(1))
+				.andExpect(jsonPath("$.box_slot").value(1));
+	}
+
+	@Test
+	void incompleteBoxDestinationIsRejected() throws Exception {
+		String pokemonUuid = com.jayway.jsonpath.JsonPath.read(
+				mockMvc.perform(post("/pokemon").header("Authorization", bearerToken)
+								.contentType(MediaType.APPLICATION_JSON).content(validCreateBody(UUID.randomUUID())))
+						.andReturn().getResponse().getContentAsString(),
+				"$.uuid");
+
+		mockMvc.perform(patch("/pokemon/" + pokemonUuid).header("Authorization", bearerToken)
+						.contentType(MediaType.APPLICATION_JSON).content("{\"box_id\": 2}"))
+				.andExpect(status().isUnprocessableContent())
+				.andExpect(jsonPath("$.error_code").value("ERROR_POKEMON_INCOMPLETE_BOX_DESTINATION"));
+	}
+
+	/** Uniform drag&drop semantics (Adrien 2026-09-27): occupied destination swaps, regardless of PC/team mix. */
+	@Test
+	void movingPcPokemonOntoOccupiedTeamSlotSwapsBothWays() throws Exception {
+		String teamMemberUuid = com.jayway.jsonpath.JsonPath.read(
+				mockMvc.perform(post("/pokemon").header("Authorization", bearerToken)
+								.contentType(MediaType.APPLICATION_JSON).content(validCreateBody(UUID.randomUUID())))
+						.andReturn().getResponse().getContentAsString(),
+				"$.uuid");
+		mockMvc.perform(patch("/pokemon/" + teamMemberUuid).header("Authorization", bearerToken)
+						.contentType(MediaType.APPLICATION_JSON).content("{\"team_slot\": 1}"))
+				.andExpect(status().isOk());
+
+		String createPcResponse = mockMvc.perform(post("/pokemon").header("Authorization", bearerToken)
+						.contentType(MediaType.APPLICATION_JSON).content(validCreateBody(UUID.randomUUID())))
+				.andReturn().getResponse().getContentAsString();
+		String pcMonUuid = com.jayway.jsonpath.JsonPath.read(createPcResponse, "$.uuid");
+		int pcMonBoxId = com.jayway.jsonpath.JsonPath.read(createPcResponse, "$.box_id");
+		int pcMonBoxSlot = com.jayway.jsonpath.JsonPath.read(createPcResponse, "$.box_slot");
+
+		mockMvc.perform(patch("/pokemon/" + pcMonUuid).header("Authorization", bearerToken)
+						.contentType(MediaType.APPLICATION_JSON).content("{\"team_slot\": 1}"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.team_slot").value(1))
+				.andExpect(jsonPath("$.box_id").doesNotExist());
+
+		// The bumped team member must land exactly where the PC Pokémon used to be — a swap, not a discard.
+		mockMvc.perform(get("/players/" + ownerUuid + "/pokemon").header("Authorization", bearerToken))
+				.andExpect(jsonPath("$[?(@.uuid == '" + teamMemberUuid + "')].box_id").value(pcMonBoxId))
+				.andExpect(jsonPath("$[?(@.uuid == '" + teamMemberUuid + "')].box_slot").value(pcMonBoxSlot));
+	}
+
+	@Test
+	void movingBetweenPcSlotsSwapsWithTheOccupant() throws Exception {
+		String createFirstResponse = mockMvc.perform(post("/pokemon").header("Authorization", bearerToken)
+						.contentType(MediaType.APPLICATION_JSON).content(validCreateBody(UUID.randomUUID())))
+				.andReturn().getResponse().getContentAsString();
+		String firstUuid = com.jayway.jsonpath.JsonPath.read(createFirstResponse, "$.uuid");
+
+		String createSecondResponse = mockMvc.perform(post("/pokemon").header("Authorization", bearerToken)
+						.contentType(MediaType.APPLICATION_JSON).content(validCreateBody(UUID.randomUUID())))
+				.andReturn().getResponse().getContentAsString();
+		String secondUuid = com.jayway.jsonpath.JsonPath.read(createSecondResponse, "$.uuid");
+		int secondBoxId = com.jayway.jsonpath.JsonPath.read(createSecondResponse, "$.box_id");
+		int secondBoxSlot = com.jayway.jsonpath.JsonPath.read(createSecondResponse, "$.box_slot");
+
+		// Move first onto second's PC slot -> they swap.
+		mockMvc.perform(patch("/pokemon/" + firstUuid).header("Authorization", bearerToken)
+						.contentType(MediaType.APPLICATION_JSON)
+						.content("{\"box_id\": " + secondBoxId + ", \"box_slot\": " + secondBoxSlot + "}"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.box_id").value(secondBoxId))
+				.andExpect(jsonPath("$.box_slot").value(secondBoxSlot));
+
+		mockMvc.perform(get("/players/" + ownerUuid + "/pokemon").header("Authorization", bearerToken))
+				.andExpect(jsonPath("$[?(@.uuid == '" + secondUuid + "')].box_id").value(1))
+				.andExpect(jsonPath("$[?(@.uuid == '" + secondUuid + "')].box_slot").value(1));
+	}
+
+	@Test
+	void movingBetweenTeamSlotsSwapsWithTheOccupant() throws Exception {
+		String firstUuid = com.jayway.jsonpath.JsonPath.read(
+				mockMvc.perform(post("/pokemon").header("Authorization", bearerToken)
+								.contentType(MediaType.APPLICATION_JSON).content(validCreateBody(UUID.randomUUID())))
+						.andReturn().getResponse().getContentAsString(),
+				"$.uuid");
+		String secondUuid = com.jayway.jsonpath.JsonPath.read(
+				mockMvc.perform(post("/pokemon").header("Authorization", bearerToken)
+								.contentType(MediaType.APPLICATION_JSON).content(validCreateBody(UUID.randomUUID())))
+						.andReturn().getResponse().getContentAsString(),
+				"$.uuid");
+
+		mockMvc.perform(patch("/pokemon/" + firstUuid).header("Authorization", bearerToken)
+						.contentType(MediaType.APPLICATION_JSON).content("{\"team_slot\": 1}"))
+				.andExpect(status().isOk());
+		mockMvc.perform(patch("/pokemon/" + secondUuid).header("Authorization", bearerToken)
+						.contentType(MediaType.APPLICATION_JSON).content("{\"team_slot\": 2}"))
+				.andExpect(status().isOk());
+
+		// first (slot 1) moves onto second's slot (2) -> they swap.
+		mockMvc.perform(patch("/pokemon/" + firstUuid).header("Authorization", bearerToken)
+						.contentType(MediaType.APPLICATION_JSON).content("{\"team_slot\": 2}"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.team_slot").value(2));
+
+		mockMvc.perform(get("/players/" + ownerUuid + "/pokemon").header("Authorization", bearerToken))
+				.andExpect(jsonPath("$[?(@.uuid == '" + secondUuid + "')].team_slot").value(1));
+	}
+
+	@Test
+	void movingOwnPokemonOntoItsOwnCurrentSlotIsANoOpNotASelfSwap() throws Exception {
+		String pokemonUuid = com.jayway.jsonpath.JsonPath.read(
+				mockMvc.perform(post("/pokemon").header("Authorization", bearerToken)
+								.contentType(MediaType.APPLICATION_JSON).content(validCreateBody(UUID.randomUUID())))
+						.andReturn().getResponse().getContentAsString(),
+				"$.uuid");
+		mockMvc.perform(patch("/pokemon/" + pokemonUuid).header("Authorization", bearerToken)
+						.contentType(MediaType.APPLICATION_JSON).content("{\"team_slot\": 1}"))
+				.andExpect(status().isOk());
+
+		mockMvc.perform(patch("/pokemon/" + pokemonUuid).header("Authorization", bearerToken)
+						.contentType(MediaType.APPLICATION_JSON).content("{\"team_slot\": 1}"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.team_slot").value(1));
+	}
 }

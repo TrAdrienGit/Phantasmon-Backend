@@ -185,7 +185,7 @@ CREATE TABLE pokemon (
     ability                 VARCHAR(64) NOT NULL,
     is_shiny                BOOLEAN NOT NULL DEFAULT FALSE,
     box_id                  SMALLINT CHECK (box_id BETWEEN 1 AND 16),
-    box_slot                SMALLINT CHECK (box_slot BETWEEN 1 AND 36),
+    box_slot                SMALLINT CHECK (box_slot BETWEEN 1 AND 30),
     team_slot               SMALLINT CHECK (team_slot BETWEEN 1 AND 6),   -- NULL si absent de l'équipe active
     cobblemon_data_version  VARCHAR(32) NOT NULL,
     data                    JSONB NOT NULL,
@@ -226,7 +226,7 @@ CREATE UNIQUE INDEX uq_pokemon_team_slot
 | `ability` | VARCHAR(64) | NOT NULL | Identifiant texte. Pas de contrainte de cohérence espèce/capacité en base — portée par `PokemonLegalityService` (CAD Partie 3 §B), pas par une contrainte SQL, car la liste des capacités valides dépend des données Cobblemon côté client/serveur, pas d'une table de référence en base. |
 | `is_shiny` | BOOLEAN | NOT NULL DEFAULT FALSE | |
 | `box_id` | SMALLINT | CHECK 1-16, nullable | Boîte du Ghost PC (16 boîtes, CAD Partie 1 §12.1). NULL si le Pokémon n'est pas rangé en PC (cas transitoire uniquement — voir §9.3). |
-| `box_slot` | SMALLINT | CHECK 1-36, nullable | Emplacement dans la boîte (36 = 6×6, CAD Partie 1 §12.1). |
+| `box_slot` | SMALLINT | CHECK 1-30, nullable | Emplacement dans la boîte (30 = 6×5 — redimensionné depuis 6×6/36 le 2026-09-27, `V6__resize_pokemon_box.sql`, voir CAD Partie 1 §12.1 mis à jour). |
 | `team_slot` | SMALLINT | CHECK 1-6, nullable | Slot dans l'équipe active. NULL = pas dans l'équipe active. Une équipe active incomplète est autorisée (CAD Partie 1 §15/§17) : les slots occupés n'ont pas besoin d'être contigus du point de vue base de données (l'ordre d'affichage 1-6 est géré côté client/service). |
 | `cobblemon_data_version` | VARCHAR(32) | NOT NULL | Version Cobblemon au moment de la dernière création/modification (CAD Partie 2 §6.1) — sert de base à la détection d'incompatibilité côté client, aucune logique de migration auto en V1. |
 | `data` | JSONB | NOT NULL | Voir structure détaillée §4.4. |
@@ -508,13 +508,19 @@ src/main/resources/db/migration/
 ├── V2__init_pokemon.sql
 ├── V3__init_trades.sql
 ├── V4__init_battle_sessions.sql
-└── V5__init_idempotency_keys.sql
+├── V5__init_idempotency_keys.sql
+└── V6__resize_pokemon_box.sql
 ```
 
 Une table = une migration, dans l'ordre de dépendance des FK (`players` avant `pokemon`,
 `pokemon`/`players` avant `trades` et `battle_sessions`). Toute évolution future du schéma
-(ex. migration de `nickname` vers une colonne, §9.1) passe par une nouvelle migration `V6__...`,
-jamais par une modification de `V1`-`V5`.
+passe par une nouvelle migration, jamais par une modification de celles déjà appliquées —
+`V6` (2026-09-27) en est l'illustration : elle rétrécit la contrainte `CHECK` sur `box_slot`
+(36 → 30, boîte 6×5) plutôt que d'éditer la contrainte inline de `V2`. Comme cette contrainte
+n'avait pas de nom explicite dans `V2` (Postgres en génère un automatiquement,
+`pokemon_box_slot_check`), `V6` le retrouve dynamiquement via `pg_constraint` avant de la
+remplacer par une contrainte nommée (`chk_pokemon_box_slot`) — plus robuste qu'un nom deviné
+en dur si la convention de nommage automatique de Postgres venait à changer.
 
 ---
 

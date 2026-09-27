@@ -231,7 +231,8 @@ second Pokémon (idempotence via `common.IdempotencyService`, table `idempotency
 Autres codes possibles : `ERROR_LEGALITY_IV_OUT_OF_RANGE`, `ERROR_LEGALITY_EV_OUT_OF_RANGE`.
 
 - **Réponse 409 Conflict** — `ERROR_POKEMON_SLOT_OCCUPIED` (emplacement PC déjà pris) ou
-  `ERROR_POKEMON_PC_FULL` (les 576 emplacements sont occupés).
+  `ERROR_POKEMON_PC_FULL` (les 480 emplacements sont occupés — 16 boîtes × 30, redimensionné depuis
+  576/36 le 2026-09-27).
 
 **Limite connue (V1)** : `PokemonLegalityService` ne valide que les IVs/EVs. La cohérence
 espèce/capacité/moveset (CAD Partie 3 §B) n'est **pas** vérifiée côté backend — ce service n'a aucune
@@ -259,7 +260,32 @@ pour une espèce donnée ; cette résolution reste entièrement côté client.
 { "level": 60, "team_slot": 1 }
 ```
 
+**PC et équipe active sont mutuellement exclusifs** (un Pokémon n'est jamais dans les deux à la fois,
+CAD Partie 1 §12/§17 — corrigé 2026-09-27, un vrai bug de duplication existait avant ce correctif).
+`team_slot` (destination d'équipe) et `box_id`+`box_slot` (destination PC) sont deux façons alternatives
+de dire "déplace ce Pokémon ici" — l'une efface automatiquement l'autre. **Sémantique glisser-déposer
+uniforme** (Adrien 2026-09-27), peu importe la combinaison PC/équipe des deux côtés :
+
+- **Emplacement de destination vide** → simple déplacement.
+- **Emplacement de destination occupé par un autre Pokémon** (du même joueur, PC ou équipe peu importe)
+  → **échange** : les deux Pokémon permutent leurs emplacements (PC↔PC, PC↔équipe, équipe↔équipe — tous
+  les cas passent par cet échange).
+
+```json
+{ "team_slot": 2 }
+```
+```json
+{ "box_id": 3, "box_slot": 12 }
+```
+
+Aucun premier-emplacement-libre automatique ici (à la différence de la création) — le joueur nomme
+toujours la destination exacte. `box_id`/`box_slot` doivent être fournis **ensemble**.
+
 - **Réponse 200 OK** : le `Pokemon` mis à jour
+- **Réponse 422 Unprocessable Content** — `ERROR_POKEMON_INCOMPLETE_BOX_DESTINATION` si un seul de
+  `box_id`/`box_slot` est fourni
+- **Réponse 409 Conflict** — `ERROR_POKEMON_SLOT_OCCUPIED` en cas d'échec de la contrainte d'unicité en
+  base (cas résiduel, l'échange normal ne devrait jamais y mener)
 
 ### `DELETE /pokemon/{uuid}`
 
@@ -437,8 +463,10 @@ Enveloppe générique, dans les deux sens :
 |---|---|---|
 | `JoinServerGroup` | `{ "server_fingerprint": "...", "dimension": "minecraft:overworld" }` | Enregistre la présence du joueur, le regroupe avec les autres joueurs partageant le même `server_fingerprint` + `dimension` |
 | `LeaveServerGroup` | `{}` | Retire la présence du joueur |
-| `PositionUpdate` | `{ "x": 1.0, "y": 2.0, "z": 3.0, "dimension": "minecraft:overworld" }` | Met à jour la position/dimension courante |
+| `PositionUpdate` | `{ "x": 1.0, "y": 2.0, "z": 3.0, "dimension": "minecraft:overworld" }` | Met à jour la position/dimension courante ; si le joueur a un Ghost sorti, diffuse aussi un `GhostEntityMove` au groupe |
 | `Heartbeat` | `{}` | Rafraîchit `last_heartbeat_at` ; déclenche un `HeartbeatAck` |
+| `SendOutGhost` | `{ "pokemon_uuid": "..." }` | Vérifie l'ownership du Pokémon (`ERROR_OWNERSHIP_MISMATCH` sinon) **et qu'il fait partie de l'équipe active** (`ERROR_POKEMON_NOT_IN_TEAM` si `team_slot` est `null` — un Pokémon du PC ne peut pas être sorti, ajouté 2026-09-26), puis l'enregistre comme Ghost actif du joueur et diffuse `GhostEntitySpawn` au groupe |
+| `RecallGhost` | `{}` | Efface le Ghost actif du joueur (no-op s'il n'en avait pas), diffuse `GhostEntityDespawn` au groupe |
 
 ### S2C (serveur → client) implémentés
 
@@ -449,18 +477,19 @@ Enveloppe générique, dans les deux sens :
 | `TradeProposed` | `{ "trade_uuid": "...", "initiator_uuid": "...", "offered_pokemon": "...", "requested_pokemon": "..." }` | Envoyé au destinataire d'un `POST /trades` (best-effort, seulement s'il est connecté) |
 | `TradeAccepted` | `{ "trade_uuid": "..." }` | Envoyé aux deux joueurs après un `POST /trades/{uuid}/accept` réussi |
 | `TradeCancelled` | `{ "trade_uuid": "..." }` | Envoyé aux deux joueurs après un `POST /trades/{uuid}/cancel` |
+| `GhostEntitySpawn` | `{ "player_uuid": "...", "pokemon_uuid": "...", "species": "...", "form": "..."\|null, "is_shiny": bool, "level": n, "position": {"x":..,"y":..,"z":..}\|null }` | Diffusé au groupe (`server_fingerprint`+`dimension`) après un `SendOutGhost` réussi. Inclut les champs de rendu (`species`/`form`/`is_shiny`/`level`) car le client destinataire n'a aucun moyen de récupérer le Pokémon d'un autre joueur via REST (routes gated par ownership) — ce message WS est la seule source possible pour ces données. `position` peut être `null` si le joueur n'a pas encore envoyé de `PositionUpdate`. **Aussi renvoyé en rattrapage** à un joueur qui vient de faire `JoinServerGroup`, pour chaque Ghost déjà sorti parmi les membres de son nouveau groupe |
+| `GhostEntityMove` | `{ "player_uuid": "...", "pokemon_uuid": "...", "position": {...} }` | Diffusé au groupe à chaque `PositionUpdate` du propriétaire, uniquement s'il a un Ghost sorti (pas de message C2S dédié — le Ghost suit son propriétaire, CAD Partie 2 §7) |
+| `GhostEntityDespawn` | `{ "player_uuid": "...", "pokemon_uuid": "..." }` | Diffusé au groupe après un `RecallGhost` explicite, ou automatiquement à la déconnexion (propre ou brutale) d'un joueur qui avait un Ghost sorti |
 
 ### Présence — comportement
 
 - **En mémoire uniquement** (`presence.PresenceService`, `ConcurrentHashMap`), jamais persistée en base, jamais partagée entre plusieurs instances (CAD Partie 3 §H, hors périmètre).
-- **Déconnexion** (fermeture de la session, propre ou brutale) : la présence est retirée automatiquement (`afterConnectionClosed`), équivalent à un `LeaveServerGroup` implicite.
-- **TTL** : un joueur qui n'envoie plus de `Heartbeat` pendant `phantasmon.presence.ttl` (30s par défaut) est considéré déconnecté brutalement — une tâche planifiée (`PresenceTtlSweeper`, toutes les `phantasmon.presence.sweep-interval-ms` = 10s par défaut) retire sa présence et force la fermeture de sa session si elle est encore techniquement ouverte.
+- **Déconnexion** (fermeture de la session, propre ou brutale) : la présence est retirée automatiquement (`afterConnectionClosed`), équivalent à un `LeaveServerGroup` implicite — et si le joueur avait un Ghost sorti, un `GhostEntityDespawn` est diffusé à son ancien groupe avant que sa présence ne soit effacée.
+- **TTL** : un joueur qui n'envoie plus de `Heartbeat` pendant `phantasmon.presence.ttl` (30s par défaut) est considéré déconnecté brutalement — une tâche planifiée (`PresenceTtlSweeper`, toutes les `phantasmon.presence.sweep-interval-ms` = 10s par défaut) retire sa présence et force la fermeture de sa session si elle est encore techniquement ouverte. Cela déclenche `afterConnectionClosed`, donc le despawn du Ghost éventuel est couvert aussi dans ce cas.
 
 ### Pas encore implémenté
 
-`SendOutGhost`, `RecallGhost`, `BattleAction` (C2S) et `GhostEntitySpawn`, `GhostEntityMove`,
-`GhostEntityDespawn`, `BattleState`, `BattleEnded` (S2C) — arrivent avec les domaines Ghost Entity
-(client Phase 7) et battle (Phase 4/9). Voir
+`BattleAction` (C2S) et `BattleState`, `BattleEnded` (S2C) — arrivent avec le domaine battle (Phase 9). Voir
 `Documentation/CAD_Ghost_Pokemon_Partie_2_Architecture_Technique.md` §11 pour leur forme cible.
 
 ---

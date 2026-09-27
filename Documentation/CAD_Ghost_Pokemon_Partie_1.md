@@ -269,16 +269,16 @@ Le Ghost PC ne doit pas être mélangé au PC Cobblemon.
 Le Ghost PC possède :
 
 - 16 boîtes ;
-- 36 emplacements par boîte ;
-- 6 colonnes × 6 lignes.
+- 30 emplacements par boîte (redimensionné depuis 36, 2026-09-27) ;
+- 6 colonnes × 5 lignes.
 
 Capacité totale :
 
 ```text
-16 × 36 = 576 Ghost Pokémon
+16 × 30 = 480 Ghost Pokémon
 ```
 
-Les 576 emplacements correspondent à la capacité de stockage simultanée.
+Les 480 emplacements correspondent à la capacité de stockage simultanée.
 
 Il n'existe pas de limite globale de création de Ghost Pokémon.
 
@@ -1111,7 +1111,7 @@ Fonctionnalités obligatoires :
 - import Showdown ;
 - stockage dans le Ghost PC ;
 - 16 boîtes ;
-- 576 emplacements ;
+- 480 emplacements ;
 - création d'équipes ;
 - équipes de 1 à 6 Pokémon ;
 - équipe active ;

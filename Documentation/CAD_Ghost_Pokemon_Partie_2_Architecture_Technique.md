@@ -428,7 +428,7 @@ GET /players/{uuid}/pc?box=1
 GET /players/{uuid}/pc?box=2
 ```
 
-Chargement à la demande, jamais les 576 emplacements en une fois, conforme à la Partie 1.
+Chargement à la demande, jamais les 480 emplacements en une fois, conforme à la Partie 1.
 
 ---
 

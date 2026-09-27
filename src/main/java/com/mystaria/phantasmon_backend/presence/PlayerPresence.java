@@ -14,5 +14,6 @@ public record PlayerPresence(
 		String serverFingerprint,
 		String dimension,
 		Position position,
-		Instant lastHeartbeatAt) {
+		Instant lastHeartbeatAt,
+		UUID activeGhostPokemonUuid) {
 }

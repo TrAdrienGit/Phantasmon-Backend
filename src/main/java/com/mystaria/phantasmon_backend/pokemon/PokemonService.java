@@ -2,6 +2,7 @@ package com.mystaria.phantasmon_backend.pokemon;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -20,7 +21,7 @@ import lombok.extern.slf4j.Slf4j;
 public class PokemonService {
 
 	private static final int BOX_COUNT = 16;
-	private static final int SLOTS_PER_BOX = 36;
+	private static final int SLOTS_PER_BOX = 30;
 
 	private final PokemonRepository pokemonRepository;
 	private final PokemonLegalityService legalityService;
@@ -82,7 +83,12 @@ public class PokemonService {
 			pokemon.setLevel(request.level().shortValue());
 		}
 		if (request.teamSlot() != null) {
-			pokemon.setTeamSlot(request.teamSlot().shortValue());
+			moveToTeamSlot(ownerUuid, pokemon, request.teamSlot().shortValue());
+		} else if (request.boxId() != null || request.boxSlot() != null) {
+			if (request.boxId() == null || request.boxSlot() == null) {
+				throw new ApiException(HttpStatus.UNPROCESSABLE_CONTENT, "ERROR_POKEMON_INCOMPLETE_BOX_DESTINATION", Map.of());
+			}
+			moveToPcSlot(ownerUuid, pokemon, request.boxId().shortValue(), request.boxSlot().shortValue());
 		}
 
 		try {
@@ -92,6 +98,68 @@ public class PokemonService {
 		}
 
 		return PokemonResponse.from(pokemon);
+	}
+
+	/**
+	 * Moves a Pokémon into a team slot, or {@link #moveToPcSlot} into a PC box
+	 * slot — PC and team are mutually exclusive storage (CAD Partie 1 §12/§17),
+	 * so either move always clears whichever kind of location the Pokémon
+	 * doesn't end up in. Uniform drag&drop semantics across every combination
+	 * (PC→PC, PC→team, team→PC, team→team — Adrien 2026-09-27): an empty
+	 * destination is a plain move; an occupied destination **swaps** the two
+	 * Pokémon's locations, regardless of whether either side is currently in
+	 * the PC or the team. There is no automatic first-free-slot fallback here
+	 * (unlike {@link #create}) — the player always names the exact destination.
+	 */
+	private void moveToTeamSlot(UUID ownerUuid, Pokemon pokemon, short teamSlot) {
+		Optional<Pokemon> occupant = pokemonRepository.findByOwnerUuidAndTeamSlot(ownerUuid, teamSlot)
+				.filter(candidate -> !candidate.getUuid().equals(pokemon.getUuid()));
+		swapOrMove(pokemon, occupant, () -> {
+			pokemon.setTeamSlot(teamSlot);
+			pokemon.setBoxId(null);
+			pokemon.setBoxSlot(null);
+		});
+	}
+
+	private void moveToPcSlot(UUID ownerUuid, Pokemon pokemon, short boxId, short boxSlot) {
+		Optional<Pokemon> occupant = pokemonRepository.findByOwnerUuidAndBoxIdAndBoxSlot(ownerUuid, boxId, boxSlot)
+				.filter(candidate -> !candidate.getUuid().equals(pokemon.getUuid()));
+		swapOrMove(pokemon, occupant, () -> {
+			pokemon.setBoxId(boxId);
+			pokemon.setBoxSlot(boxSlot);
+			pokemon.setTeamSlot(null);
+		});
+	}
+
+	/**
+	 * If {@code occupant} is empty, just applies {@code applyNewLocation}. If
+	 * an occupant is present, the two Pokémon trade locations: {@code pokemon}
+	 * gets its new location ({@code applyNewLocation}), {@code occupant} gets
+	 * {@code pokemon}'s *old* one (whatever mix of team_slot/box_id/box_slot
+	 * that was). {@code pokemon}'s old location is cleared and flushed
+	 * *before* handing it to the occupant — otherwise, for the brief moment
+	 * between the occupant's write and pokemon's own (unflushed) write, two
+	 * rows would share the same slot and trip the unique index (hit as a real
+	 * bug while first writing the team-to-team swap test, 2026-09-27).
+	 */
+	private void swapOrMove(Pokemon pokemon, Optional<Pokemon> occupant, Runnable applyNewLocation) {
+		occupant.ifPresentOrElse(other -> {
+			Short oldTeamSlot = pokemon.getTeamSlot();
+			Short oldBoxId = pokemon.getBoxId();
+			Short oldBoxSlot = pokemon.getBoxSlot();
+
+			pokemon.setTeamSlot(null);
+			pokemon.setBoxId(null);
+			pokemon.setBoxSlot(null);
+			pokemonRepository.saveAndFlush(pokemon);
+
+			other.setTeamSlot(oldTeamSlot);
+			other.setBoxId(oldBoxId);
+			other.setBoxSlot(oldBoxSlot);
+			pokemonRepository.saveAndFlush(other);
+
+			applyNewLocation.run();
+		}, applyNewLocation);
 	}
 
 	@Transactional

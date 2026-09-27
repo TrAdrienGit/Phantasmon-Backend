@@ -22,7 +22,7 @@ public record PokemonCreateRequest(
 		@NotBlank String ability,
 		Boolean isShiny,
 		@Min(1) @Max(16) Integer boxId,
-		@Min(1) @Max(36) Integer boxSlot,
+		@Min(1) @Max(30) Integer boxSlot,
 		@Min(1) @Max(6) Integer teamSlot,
 		@NotBlank String cobblemonDataVersion,
 		@NotNull Map<String, Object> data) {
