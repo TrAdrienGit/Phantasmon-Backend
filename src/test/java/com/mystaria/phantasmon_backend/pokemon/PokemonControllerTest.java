@@ -159,6 +159,31 @@ class PokemonControllerTest {
 	}
 
 	@Test
+	void natureAbilityAndShinyCanBeUpdated() throws Exception {
+		String createResponse = mockMvc.perform(post("/pokemon").header("Authorization", bearerToken)
+						.contentType(MediaType.APPLICATION_JSON).content(validCreateBody(UUID.randomUUID())))
+				.andExpect(status().isCreated())
+				.andReturn().getResponse().getContentAsString();
+		String pokemonUuid = com.jayway.jsonpath.JsonPath.read(createResponse, "$.uuid");
+
+		mockMvc.perform(patch("/pokemon/" + pokemonUuid).header("Authorization", bearerToken)
+						.contentType(MediaType.APPLICATION_JSON)
+						.content("{\"nature\": \"jolly\", \"ability\": \"intimidate\", \"is_shiny\": true}"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.nature").value("jolly"))
+				.andExpect(jsonPath("$.ability").value("intimidate"))
+				.andExpect(jsonPath("$.is_shiny").value(true));
+
+		// A plain omitted field must leave it untouched (partial-update convention).
+		mockMvc.perform(patch("/pokemon/" + pokemonUuid).header("Authorization", bearerToken)
+						.contentType(MediaType.APPLICATION_JSON)
+						.content("{\"level\": 42}"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.nature").value("jolly"))
+				.andExpect(jsonPath("$.is_shiny").value(true));
+	}
+
+	@Test
 	void assigningToTeamClearsPcLocationNoDuplication() throws Exception {
 		String createResponse = mockMvc.perform(post("/pokemon").header("Authorization", bearerToken)
 						.contentType(MediaType.APPLICATION_JSON).content(validCreateBody(UUID.randomUUID())))

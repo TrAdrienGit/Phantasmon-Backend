@@ -23,6 +23,9 @@ import jakarta.validation.constraints.Min;
 public record PokemonUpdateRequest(
 		Map<String, Object> data,
 		@Min(1) @Max(100) Integer level,
+		String nature,
+		String ability,
+		Boolean isShiny,
 		@Min(1) @Max(6) Integer teamSlot,
 		@Min(1) @Max(16) Integer boxId,
 		@Min(1) @Max(30) Integer boxSlot) {

@@ -260,6 +260,14 @@ pour une espèce donnée ; cette résolution reste entièrement côté client.
 { "level": 60, "team_slot": 1 }
 ```
 
+Champs supplémentaires (ajoutés 2026-09-27 pour l'éditeur graphique côté client) : `nature`, `ability`,
+`is_shiny` — tous simplement remplacés si fournis, aucune revalidation particulière (l'ability/species
+consistency reste hors périmètre backend, voir `PokemonLegalityService`).
+
+```json
+{ "nature": "jolly", "ability": "intimidate", "is_shiny": true }
+```
+
 **PC et équipe active sont mutuellement exclusifs** (un Pokémon n'est jamais dans les deux à la fois,
 CAD Partie 1 §12/§17 — corrigé 2026-09-27, un vrai bug de duplication existait avant ce correctif).
 `team_slot` (destination d'équipe) et `box_id`+`box_slot` (destination PC) sont deux façons alternatives

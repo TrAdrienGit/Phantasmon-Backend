@@ -82,6 +82,15 @@ public class PokemonService {
 		if (request.level() != null) {
 			pokemon.setLevel(request.level().shortValue());
 		}
+		if (request.nature() != null) {
+			pokemon.setNature(request.nature());
+		}
+		if (request.ability() != null) {
+			pokemon.setAbility(request.ability());
+		}
+		if (request.isShiny() != null) {
+			pokemon.setShiny(request.isShiny());
+		}
 		if (request.teamSlot() != null) {
 			moveToTeamSlot(ownerUuid, pokemon, request.teamSlot().shortValue());
 		} else if (request.boxId() != null || request.boxSlot() != null) {
