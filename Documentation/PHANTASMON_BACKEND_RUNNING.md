@@ -57,11 +57,27 @@ conteneur, serveur distant), il faut positionner de vraies variables d'environne
 ## 3. Lancer en mode développement
 
 ```bash
-./gradlew bootRun
+./gradlew bootRun --continuous
 ```
 
-Recharge le code à chaud (Spring Boot DevTools est présent). Les migrations Flyway s'appliquent au
-démarrage — les logs affichent `Migrating schema "public" to version "N - ..."` pour chacune.
+Redémarre **automatiquement** dès qu'un fichier source est modifié et sauvegardé — pas besoin d'arrêter/
+relancer à la main. Deux ingrédients nécessaires ensemble (Spring Boot DevTools seul ne suffit pas) :
+
+- **Spring Boot DevTools** (déjà présent, `developmentOnly 'org.springframework.boot:spring-boot-devtools'`
+  dans `build.gradle`) — surveille le classpath compilé et redémarre le contexte Spring (pas toute la JVM)
+  dès qu'une classe y change, en quelques secondes.
+- **Le flag `--continuous`** — sans lui, `./gradlew bootRun` compile une fois puis ne recompile plus jamais
+  tout seul ; DevTools n'a alors rien à détecter, même en laissant le process tourner (c'est la cause la
+  plus probable si le rechargement à chaud semble ne « rien faire »). `--continuous` fait surveiller les
+  fichiers sources par Gradle lui-même et relance la compilation à chaque sauvegarde, ce qui déclenche
+  ensuite le redémarrage DevTools.
+
+Garder ce terminal ouvert pendant le développement ; `Ctrl+C` l'arrête normalement (voir §6). Les
+migrations Flyway s'appliquent au démarrage (et à chaque redémarrage DevTools) — les logs affichent
+`Migrating schema "public" to version "N - ..."` pour chacune.
+
+Si le port 8080 est déjà occupé (ex. une instance précédente encore vivante), le démarrage échoue avec
+`Web server failed to start. Port 8080 was already in use.` — voir §7.
 
 ---
 
