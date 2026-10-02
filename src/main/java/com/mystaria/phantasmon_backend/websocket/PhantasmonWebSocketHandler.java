@@ -16,6 +16,7 @@ import com.mystaria.phantasmon_backend.pokemon.PokemonRepository;
 import com.mystaria.phantasmon_backend.presence.PlayerPresence;
 import com.mystaria.phantasmon_backend.presence.Position;
 import com.mystaria.phantasmon_backend.presence.PresenceService;
+import com.mystaria.phantasmon_backend.trade.LiveTradeService;
 
 import lombok.extern.slf4j.Slf4j;
 import tools.jackson.databind.JsonNode;
@@ -23,7 +24,9 @@ import tools.jackson.databind.ObjectMapper;
 
 /**
  * Dispatches C2S presence and Ghost Entity messages (CAD Partie 2 §7/§8/§11,
- * client Phase 7). Trade WS events live in {@code trade} already; battle WS
+ * client Phase 7). Live trade C2S messages ({@code Trade*}) are only routed
+ * here — their logic lives in {@link LiveTradeService}; the asynchronous
+ * {@code POST /trades} events are pushed from {@code TradeService}. Battle WS
  * events arrive with backend/client Phase 9.
  *
  * <p>Ghost Entity movement deliberately has no dedicated C2S message: a
@@ -38,13 +41,15 @@ public class PhantasmonWebSocketHandler extends TextWebSocketHandler {
 	private final PresenceService presenceService;
 	private final SessionRegistry sessionRegistry;
 	private final PokemonRepository pokemonRepository;
+	private final LiveTradeService liveTradeService;
 	private final ObjectMapper objectMapper;
 
 	public PhantasmonWebSocketHandler(PresenceService presenceService, SessionRegistry sessionRegistry,
-			PokemonRepository pokemonRepository, ObjectMapper objectMapper) {
+			PokemonRepository pokemonRepository, LiveTradeService liveTradeService, ObjectMapper objectMapper) {
 		this.presenceService = presenceService;
 		this.sessionRegistry = sessionRegistry;
 		this.pokemonRepository = pokemonRepository;
+		this.liveTradeService = liveTradeService;
 		this.objectMapper = objectMapper;
 	}
 
@@ -60,6 +65,7 @@ public class PhantasmonWebSocketHandler extends TextWebSocketHandler {
 		UUID playerUuid = playerUuid(session);
 		log.info("WebSocket closed: player {} ({})", playerUuid, status);
 		leaveAndDespawnGhost(playerUuid);
+		liveTradeService.onDisconnect(playerUuid);
 		sessionRegistry.unregister(playerUuid);
 	}
 
@@ -109,6 +115,12 @@ public class PhantasmonWebSocketHandler extends TextWebSocketHandler {
 			}
 			case "SendOutGhost" -> handleSendOutGhost(session, playerUuid, uuidField(incoming, "pokemon_uuid"));
 			case "RecallGhost" -> handleRecallGhost(playerUuid);
+			case "TradeInvite" -> liveTradeService.invite(playerUuid, uuidField(incoming, "target_uuid"));
+			case "TradeInviteResponse" -> liveTradeService.respond(playerUuid, uuidField(incoming, "invite_uuid"),
+					Boolean.TRUE.equals(incoming.data().get("accept")));
+			case "TradeSelectOffer" -> liveTradeService.selectOffer(playerUuid, uuidField(incoming, "pokemon_uuid"));
+			case "TradeSetReady" -> liveTradeService.setReady(playerUuid, Boolean.TRUE.equals(incoming.data().get("ready")));
+			case "TradeLeave" -> liveTradeService.leave(playerUuid);
 			case "Heartbeat" -> {
 				presenceService.heartbeat(playerUuid);
 				send(session, WsMessage.of("HeartbeatAck", Map.of()));
@@ -209,7 +221,7 @@ public class PhantasmonWebSocketHandler extends TextWebSocketHandler {
 	}
 
 	private void send(WebSocketSession session, WsMessage message) throws Exception {
-		session.sendMessage(new TextMessage(objectMapper.writeValueAsString(message)));
+		SessionRegistry.sendTo(session, objectMapper.writeValueAsString(message));
 	}
 
 	private static UUID playerUuid(WebSocketSession session) {

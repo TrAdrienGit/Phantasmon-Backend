@@ -19,6 +19,7 @@ import com.mystaria.phantasmon_backend.pokemon.PokemonRepository;
 import com.mystaria.phantasmon_backend.player.PlayerService;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -199,6 +200,35 @@ class TradeControllerTest {
 						.contentType(MediaType.APPLICATION_JSON).content(body))
 				.andExpect(status().isConflict())
 				.andExpect(jsonPath("$.error_code").value("ERROR_TRADE_SELF"));
+	}
+
+	@Test
+	void aPokemonReceivedInACompletedTradeCanStillBeDeleted() throws Exception {
+		String createResponse = mockMvc.perform(post("/trades").header("Authorization", aliceToken)
+						.contentType(MediaType.APPLICATION_JSON).content(proposeBody(UUID.randomUUID())))
+				.andReturn().getResponse().getContentAsString();
+		String tradeUuid = com.jayway.jsonpath.JsonPath.read(createResponse, "$.uuid");
+		mockMvc.perform(post("/trades/" + tradeUuid + "/accept").header("Authorization", bobToken))
+				.andExpect(status().isOk());
+
+		// Bob now owns Alice's former Pokémon — the COMPLETED trade row must not block its deletion.
+		mockMvc.perform(delete("/pokemon/" + aliceMon.getUuid()).header("Authorization", bobToken))
+				.andExpect(status().isNoContent());
+
+		mockMvc.perform(get("/trades/" + tradeUuid).header("Authorization", aliceToken))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.offered_pokemon").value(aliceMon.getUuid().toString()));
+	}
+
+	@Test
+	void aPokemonInAPendingTradeCannotBeDeleted() throws Exception {
+		mockMvc.perform(post("/trades").header("Authorization", aliceToken)
+						.contentType(MediaType.APPLICATION_JSON).content(proposeBody(UUID.randomUUID())))
+				.andExpect(status().isCreated());
+
+		mockMvc.perform(delete("/pokemon/" + aliceMon.getUuid()).header("Authorization", aliceToken))
+				.andExpect(status().isConflict())
+				.andExpect(jsonPath("$.error_code").value("ERROR_POKEMON_IN_PENDING_TRADE"));
 	}
 
 	@Test

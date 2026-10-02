@@ -43,10 +43,29 @@ public class SessionRegistry {
 			return;
 		}
 		try {
-			session.sendMessage(new TextMessage(objectMapper.writeValueAsString(message)));
-		} catch (IOException ex) {
+			sendTo(session, objectMapper.writeValueAsString(message));
+		} catch (IOException | IllegalStateException ex) {
 			log.warn("Failed to send WebSocket message to {}", playerUuid, ex);
 		}
+	}
+
+	/**
+	 * A raw {@link WebSocketSession} must never be written to by two threads at
+	 * once (Tomcat throws {@code IllegalStateException: TEXT_PARTIAL_WRITING}).
+	 * That happens for real once two players' handler threads both push to the
+	 * same partner session — a live trade does exactly that — so every write
+	 * goes through this one lock-per-session helper, the handler's direct
+	 * replies included.
+	 */
+	public static void sendTo(WebSocketSession session, String payload) throws IOException {
+		synchronized (session) {
+			session.sendMessage(new TextMessage(payload));
+		}
+	}
+
+	public boolean isConnected(UUID playerUuid) {
+		WebSocketSession session = sessions.get(playerUuid);
+		return session != null && session.isOpen();
 	}
 
 	public void close(UUID playerUuid) {

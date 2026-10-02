@@ -111,6 +111,40 @@ public class TradeService {
 		return TradeResponse.from(trade);
 	}
 
+	/**
+	 * Final step of a live trade session ({@link LiveTradeService}), once both
+	 * players flagged themselves ready: there is no PENDING phase here, the
+	 * negotiation already happened in memory over the WebSocket. Ownership and
+	 * team membership are re-verified in DB right now (never trusting what the
+	 * session remembered), then both Pokémon swap owners and team slots in one
+	 * transaction and the trade is recorded as COMPLETED for history. Any
+	 * failure throws before anything is written, so the default rollback is
+	 * exactly what's wanted (unlike {@link #accept}, nothing must persist).
+	 */
+	@Transactional
+	public TradeResponse completeLiveTrade(UUID initiatorUuid, UUID initiatorPokemonUuid,
+			UUID recipientUuid, UUID recipientPokemonUuid) {
+		Pokemon offered = findPokemon(initiatorPokemonUuid);
+		Pokemon requested = findPokemon(recipientPokemonUuid);
+		if (!offered.getOwnerUuid().equals(initiatorUuid) || !requested.getOwnerUuid().equals(recipientUuid)) {
+			throw new ApiException(HttpStatus.CONFLICT, "ERROR_TRADE_OWNERSHIP_CHANGED", Map.of());
+		}
+		if (offered.getTeamSlot() == null || requested.getTeamSlot() == null) {
+			throw new ApiException(HttpStatus.CONFLICT, "ERROR_TRADE_OFFER_NOT_IN_TEAM", Map.of());
+		}
+
+		pokemonService.swapTeamMembersBetweenOwners(offered.getUuid(), requested.getUuid());
+
+		Trade trade = new Trade(UUID.randomUUID(), initiatorUuid, recipientUuid, offered.getUuid(), requested.getUuid());
+		trade.setStatus(TradeStatus.COMPLETED);
+		trade.setResolvedAt(Instant.now());
+		tradeRepository.save(trade);
+
+		log.info("Live trade {} completed: {} gave {} to {} for {}", trade.getUuid(), initiatorUuid,
+				offered.getUuid(), recipientUuid, requested.getUuid());
+		return TradeResponse.from(trade);
+	}
+
 	@Transactional
 	public TradeResponse cancel(UUID callerUuid, UUID tradeUuid) {
 		Trade trade = findTrade(tradeUuid);

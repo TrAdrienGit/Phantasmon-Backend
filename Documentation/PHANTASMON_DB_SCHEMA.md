@@ -37,9 +37,10 @@ players (uuid PK)
    │                    │ N
    │                    │
    │ N          N       │ N
-   ├──────► trades ◄────┘
+   ├──────► trades ◄╌╌╌╌┘
    │        (initiator_uuid FK, recipient_uuid FK → players.uuid)
-   │        (offered_pokemon, requested_pokemon FK → pokemon.uuid)
+   │        (offered_pokemon, requested_pokemon → pokemon.uuid, référence
+   │         historique sans FK depuis V7 — voir §5.5)
    │
    │ N
    └──────► battle_sessions
@@ -64,7 +65,7 @@ erDiagram
     PLAYERS ||--o{ TRADES : initiates
     PLAYERS ||--o{ TRADES : receives
     PLAYERS ||--o{ BATTLE_SESSIONS : "plays (a/b)"
-    POKEMON ||--o{ TRADES : "offered/requested"
+    POKEMON |o..o{ TRADES : "offered/requested (historique, sans FK depuis V7)"
 
     PLAYERS {
         uuid uuid PK
@@ -95,8 +96,8 @@ erDiagram
         uuid uuid PK
         uuid initiator_uuid FK
         uuid recipient_uuid FK
-        uuid offered_pokemon FK
-        uuid requested_pokemon FK
+        uuid offered_pokemon "sans FK (V7)"
+        uuid requested_pokemon "sans FK (V7)"
         varchar status
         timestamptz created_at
         timestamptz resolved_at
@@ -288,8 +289,8 @@ CREATE TABLE trades (
     uuid                UUID PRIMARY KEY,
     initiator_uuid      UUID NOT NULL REFERENCES players(uuid) ON DELETE RESTRICT,
     recipient_uuid      UUID NOT NULL REFERENCES players(uuid) ON DELETE RESTRICT,
-    offered_pokemon     UUID NOT NULL REFERENCES pokemon(uuid) ON DELETE RESTRICT,
-    requested_pokemon   UUID NOT NULL REFERENCES pokemon(uuid) ON DELETE RESTRICT,
+    offered_pokemon     UUID NOT NULL,   -- FK vers pokemon(uuid) retirée par V7 (§5.5)
+    requested_pokemon   UUID NOT NULL,   -- idem
     status              VARCHAR(16) NOT NULL DEFAULT 'PENDING'
                          CHECK (status IN ('PENDING', 'ACCEPTED', 'CANCELLED', 'COMPLETED')),
     created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -311,8 +312,8 @@ CREATE INDEX idx_trades_status ON trades(status) WHERE status = 'PENDING';
 | `uuid` | UUID | PK | |
 | `initiator_uuid` | UUID | NOT NULL, FK → `players.uuid` | Celui qui propose. |
 | `recipient_uuid` | UUID | NOT NULL, FK → `players.uuid` | Celui qui reçoit la proposition. |
-| `offered_pokemon` | UUID | NOT NULL, FK → `pokemon.uuid` | Doit appartenir à `initiator_uuid` au moment de la création — vérifié en service, pas en contrainte SQL (l'ownership change dans le temps). |
-| `requested_pokemon` | UUID | NOT NULL, FK → `pokemon.uuid` | Doit appartenir à `recipient_uuid` au moment de la création — idem. |
+| `offered_pokemon` | UUID | NOT NULL, indexé, **sans FK depuis `V7`** | Doit appartenir à `initiator_uuid` au moment de la création — vérifié en service, pas en contrainte SQL (l'ownership change dans le temps). Reste lisible même si le Pokémon est supprimé plus tard (historique). |
+| `requested_pokemon` | UUID | NOT NULL, indexé, **sans FK depuis `V7`** | Doit appartenir à `recipient_uuid` au moment de la création — idem. |
 | `status` | VARCHAR(16) | NOT NULL, CHECK ∈ {PENDING, ACCEPTED, CANCELLED, COMPLETED}, DEFAULT 'PENDING' | Le CHECK est une addition au SQL du CAD (qui ne posait qu'un commentaire) — garantit l'intégrité même en cas de bug applicatif. Voir §9.2. |
 | `created_at` | TIMESTAMPTZ | NOT NULL DEFAULT now() | |
 | `resolved_at` | TIMESTAMPTZ | nullable | Renseigné à l'acceptation ou l'annulation ; NULL tant que `PENDING`. |
@@ -330,10 +331,18 @@ L'acceptation (`POST /trades/{uuid}/accept`) doit s'exécuter dans **une transac
 Si l'un des deux Pokémon n'appartient plus au joueur attendu → rollback intégral, `status = CANCELLED`.
 Ce comportement est applicatif (`@Transactional`), le schéma ne peut pas l'imposer seul.
 
-### 5.5 Sur le `ON DELETE RESTRICT` des FK `pokemon`
+### 5.5 Colonnes `offered_pokemon`/`requested_pokemon` : historique sans FK (`V7`, 2026-10-02)
 
-Voir §9.4 : la suppression d'un Pokémon impliqué dans un trade `PENDING` est bloquée par la FK.
-C'est une décision explicite de ce document (non tranchée par le CAD), à valider par l'équipe.
+À l'origine (`V3`) ces deux colonnes avaient une FK `ON DELETE RESTRICT` vers `pokemon(uuid)`, pour
+bloquer la suppression d'un Pokémon engagé dans un trade `PENDING` (§9.4). Effet de bord découvert en
+construisant l'écran d'échange : la FK bloquait aussi la suppression de **tout Pokémon ayant déjà été
+échangé**, même longtemps après un trade `COMPLETED`/`CANCELLED` (`DELETE /pokemon/{uuid}` finissait en
+violation de contrainte brute, erreur 500) — et l'échange en direct crée une ligne `COMPLETED` à chaque
+échange. Validé avec Adrien : `V7` retire ces deux FK (les FK vers `players` restent), et ajoute un index
+sur chacune des deux colonnes. Le seul cas qui méritait d'être bloqué — un Pokémon d'un trade **`PENDING`**
+— est désormais vérifié par l'application (`PokemonService.delete`, erreur `ERROR_POKEMON_IN_PENDING_TRADE`,
+409). Les lignes terminées deviennent un historique, même logique que `battle_sessions.team_a`/`team_b`
+(§6.4).
 
 ---
 
@@ -382,8 +391,8 @@ CREATE INDEX idx_battle_player_b ON battle_sessions(player_b);
 
 ### 6.4 Sur l'absence de FK vers `pokemon` pour `team_a`/`team_b`
 
-Contrairement à `trades.offered_pokemon`/`requested_pokemon` (qui pointent vers l'état courant
-d'un Pokémon activement échangé), `team_a`/`team_b` sont des **snapshots historiques** : le CAD
+Comme `trades.offered_pokemon`/`requested_pokemon` depuis `V7` (§5.5), `team_a`/`team_b` sont des
+**snapshots historiques** : le CAD
 Partie 2 §5.1 les type explicitement en JSONB (pas en colonne relationnelle), signe qu'ils ne
 doivent pas suivre les modifications ultérieures du Pokémon. Ce choix est donc conforme au CAD,
 pas une extrapolation de ce document.
@@ -482,7 +491,11 @@ sans case PC assignée), mais recommande qu'au niveau service, tout Pokémon nou
 reçoive une position PC par défaut, sauf placement direct en équipe — à confirmer lors de
 l'implémentation de `POST /pokemon`.
 
-### 9.4 `ON DELETE RESTRICT` sur les FK `pokemon` de `trades`
+### 9.4 `ON DELETE RESTRICT` sur les FK `pokemon` de `trades` (remplacé par `V7`, voir §5.5)
+
+> **Remplacé le 2026-10-02** : ces FK bloquaient aussi la suppression des Pokémon de trades terminés.
+> Elles ont été retirées par `V7` ; la règle ci-dessous (ne pas supprimer un Pokémon d'un trade `PENDING`)
+> est conservée mais appliquée par le code (`ERROR_POKEMON_IN_PENDING_TRADE`). Texte d'origine :
 
 Non spécifié par le CAD. Ce document choisit `RESTRICT` plutôt que `CASCADE` : supprimer un
 Pokémon engagé dans un trade `PENDING` ne doit pas faire disparaître silencieusement le trade —
@@ -509,7 +522,8 @@ src/main/resources/db/migration/
 ├── V3__init_trades.sql
 ├── V4__init_battle_sessions.sql
 ├── V5__init_idempotency_keys.sql
-└── V6__resize_pokemon_box.sql
+├── V6__resize_pokemon_box.sql
+└── V7__trades_pokemon_history_without_fk.sql
 ```
 
 Une table = une migration, dans l'ordre de dépendance des FK (`players` avant `pokemon`,
@@ -520,7 +534,9 @@ passe par une nouvelle migration, jamais par une modification de celles déjà a
 n'avait pas de nom explicite dans `V2` (Postgres en génère un automatiquement,
 `pokemon_box_slot_check`), `V6` le retrouve dynamiquement via `pg_constraint` avant de la
 remplacer par une contrainte nommée (`chk_pokemon_box_slot`) — plus robuste qu'un nom deviné
-en dur si la convention de nommage automatique de Postgres venait à changer.
+en dur si la convention de nommage automatique de Postgres venait à changer. `V7` (2026-10-02)
+applique la même méthode pour retirer les FK `trades → pokemon` de `V3`, elles aussi non nommées
+(recherchées via `pg_constraint` par table cible `pokemon`, §5.5).
 
 ---
 

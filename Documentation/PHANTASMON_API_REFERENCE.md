@@ -299,6 +299,10 @@ toujours la destination exacte. `box_id`/`box_slot` doivent être fournis **ense
 
 - **Auth** : Bearer, même vérification d'ownership
 - **Réponse 204 No Content**
+- **Réponse 409 Conflict** — `ERROR_POKEMON_IN_PENDING_TRADE` si le Pokémon est engagé dans un trade
+  `PENDING` (offert ou demandé) : il faut d'abord l'annuler. Un trade `COMPLETED`/`CANCELLED` ne bloque
+  **plus** la suppression (2026-10-02, migration `V7` : les colonnes Pokémon de `trades` sont devenues un
+  historique sans FK — avant, tout Pokémon ayant déjà été échangé était impossible à supprimer, erreur 500).
 
 ### `POST /pokemon/{uuid}/clone`
 
@@ -373,6 +377,12 @@ notifie les deux joueurs via WebSocket (`TradeAccepted`).
 - **Réponse 200 OK** : tableau de `Trade` (initiés **ou** reçus)
 
 Implémentation : `com.mystaria.phantasmon_backend.trade.{TradeController,TradeService}`.
+
+> Ce flux REST asynchrone (proposer par UUID, accepter plus tard) coexiste avec l'**échange en direct**
+> de l'écran d'échange (2026-10-02), qui passe entièrement par le WebSocket — voir
+> [Échange en direct](#échange-en-direct-écran-déchange) plus bas. Un échange en direct terminé est aussi
+> enregistré dans `trades` (statut `COMPLETED`), donc visible via `GET /trades/{uuid}` et
+> `GET /players/{uuid}/trades`.
 
 ---
 
@@ -475,6 +485,7 @@ Enveloppe générique, dans les deux sens :
 | `Heartbeat` | `{}` | Rafraîchit `last_heartbeat_at` ; déclenche un `HeartbeatAck` |
 | `SendOutGhost` | `{ "pokemon_uuid": "..." }` | Vérifie l'ownership du Pokémon (`ERROR_OWNERSHIP_MISMATCH` sinon) **et qu'il fait partie de l'équipe active** (`ERROR_POKEMON_NOT_IN_TEAM` si `team_slot` est `null` — un Pokémon du PC ne peut pas être sorti, ajouté 2026-09-26), puis l'enregistre comme Ghost actif du joueur et diffuse `GhostEntitySpawn` au groupe |
 | `RecallGhost` | `{}` | Efface le Ghost actif du joueur (no-op s'il n'en avait pas), diffuse `GhostEntityDespawn` au groupe |
+| `TradeInvite`, `TradeInviteResponse`, `TradeSelectOffer`, `TradeSetReady`, `TradeLeave` | voir [Échange en direct](#échange-en-direct-écran-déchange) | |
 
 ### S2C (serveur → client) implémentés
 
@@ -487,7 +498,65 @@ Enveloppe générique, dans les deux sens :
 | `TradeCancelled` | `{ "trade_uuid": "..." }` | Envoyé aux deux joueurs après un `POST /trades/{uuid}/cancel` |
 | `GhostEntitySpawn` | `{ "player_uuid": "...", "pokemon_uuid": "...", "species": "...", "form": "..."\|null, "is_shiny": bool, "level": n, "position": {"x":..,"y":..,"z":..}\|null }` | Diffusé au groupe (`server_fingerprint`+`dimension`) après un `SendOutGhost` réussi. Inclut les champs de rendu (`species`/`form`/`is_shiny`/`level`) car le client destinataire n'a aucun moyen de récupérer le Pokémon d'un autre joueur via REST (routes gated par ownership) — ce message WS est la seule source possible pour ces données. `position` peut être `null` si le joueur n'a pas encore envoyé de `PositionUpdate`. **Aussi renvoyé en rattrapage** à un joueur qui vient de faire `JoinServerGroup`, pour chaque Ghost déjà sorti parmi les membres de son nouveau groupe |
 | `GhostEntityMove` | `{ "player_uuid": "...", "pokemon_uuid": "...", "position": {...} }` | Diffusé au groupe à chaque `PositionUpdate` du propriétaire, uniquement s'il a un Ghost sorti (pas de message C2S dédié — le Ghost suit son propriétaire, CAD Partie 2 §7) |
-| `GhostEntityDespawn` | `{ "player_uuid": "...", "pokemon_uuid": "..." }` | Diffusé au groupe après un `RecallGhost` explicite, ou automatiquement à la déconnexion (propre ou brutale) d'un joueur qui avait un Ghost sorti |
+| `GhostEntityDespawn` | `{ "player_uuid": "...", "pokemon_uuid": "..." }` | Diffusé au groupe après un `RecallGhost` explicite, ou automatiquement à la déconnexion (propre ou brutale) d'un joueur qui avait un Ghost sorti, ou quand ce Ghost vient d'être échangé en direct |
+| `TradeInvite*`, `TradeSession*` | voir [Échange en direct](#échange-en-direct-écran-déchange) | |
+
+### Échange en direct (écran d'échange)
+
+Ajouté le 2026-10-02 pour l'écran d'échange graphique : les deux joueurs voient l'équipe de l'autre,
+choisissent chacun leur offre, se déclarent prêts, et l'échange s'exécute dès que les deux le sont.
+Toute la négociation vit **en mémoire** (`trade.LiveTradeService`, comme la présence — rien en base tant
+que l'échange n'est pas conclu) ; seul l'échange final passe par une transaction SQL
+(`TradeService.completeLiveTrade`). Une session ne concerne que deux joueurs, et un joueur ne peut être
+que dans une seule session à la fois.
+
+Les refus métier ne passent **pas** par le message générique `Error` mais par `TradeSessionError`, pour
+que le client puisse les afficher sur l'écran d'échange lui-même.
+
+#### C2S
+
+| Type | `data` | Effet |
+|---|---|---|
+| `TradeInvite` | `{ "target_uuid": "..." }` | Invite un joueur. Refus (`TradeSessionError`) : `ERROR_TRADE_SELF`, `ERROR_TRADE_ALREADY_IN_SESSION` (l'appelant échange déjà), `ERROR_TRADE_PARTNER_UNAVAILABLE` (cible non connectée au WebSocket), `ERROR_TRADE_PARTNER_BUSY` (cible déjà en échange). Une nouvelle invitation vers la même cible remplace la précédente. |
+| `TradeInviteResponse` | `{ "invite_uuid": "...", "accept": true }` | Accepte ou refuse. Invitation inconnue, destinée à quelqu'un d'autre ou plus vieille que `phantasmon.trade.invite-ttl` (60 s par défaut) → `ERROR_TRADE_INVITE_NOT_FOUND`. Acceptée → `TradeSessionStarted` aux deux ; refusée → `TradeInviteDeclined` à l'inviteur. |
+| `TradeSelectOffer` | `{ "pokemon_uuid": "..." }` | Choisit son offre. Re-vérifie en base : `ERROR_POKEMON_NOT_FOUND`, `ERROR_OWNERSHIP_MISMATCH`, `ERROR_TRADE_OFFER_NOT_IN_TEAM` (seule l'équipe active est échangeable, pas le PC). **Tout changement d'offre remet « prêt » à faux pour les deux joueurs.** |
+| `TradeSetReady` | `{ "ready": true }` | Se déclare prêt (ou retire son accord). `ERROR_TRADE_OFFERS_INCOMPLETE` si l'une des deux offres manque. Quand les deux sont prêts, l'échange s'exécute immédiatement. |
+| `TradeLeave` | `{}` | Quitte (bouton QUITTER) : la session est annulée, le partenaire reçoit `TradeSessionCancelled` (`PARTNER_LEFT`). |
+
+`ERROR_TRADE_NOT_IN_SESSION` pour `TradeSelectOffer`/`TradeSetReady` hors session.
+Une déconnexion WebSocket (propre, brutale ou TTL) annule la session (`PARTNER_DISCONNECTED` pour le
+partenaire) et oublie toutes les invitations impliquant ce joueur.
+
+#### S2C
+
+| Type | `data` | Destinataire |
+|---|---|---|
+| `TradeInviteReceived` | `{ "invite_uuid": "...", "from_uuid": "...", "from_name": "Alice" }` | Joueur invité |
+| `TradeInviteSent` | `{ "invite_uuid": "...", "to_uuid": "...", "to_name": "Bob" }` | Inviteur (confirmation) |
+| `TradeInviteDeclined` | `{ "invite_uuid": "...", "by_uuid": "...", "by_name": "Bob" }` | Inviteur |
+| `TradeSessionStarted` | `{ "session_uuid": "...", "partner_uuid": "...", "partner_name": "Bob", "own_team": [Pokemon...], "partner_team": [Pokemon...] }` | Chacun des deux, de son propre point de vue. Les équipes sont des objets `Pokemon` complets (même schéma que `GET /players/{uuid}/pokemon`) limités à l'**équipe active** (`team_slot` non null) — jamais le PC. C'est la seule façon pour un client de voir les Pokémon d'un autre joueur (routes REST gated par ownership). |
+| `TradeSessionUpdate` | `{ "session_uuid": "...", "own_offer": "..." ou null, "partner_offer": "..." ou null, "own_ready": false, "partner_ready": false }` | Chacun, de son point de vue, après chaque `TradeSelectOffer`/`TradeSetReady` accepté |
+| `TradeSessionCompleted` | `{ "session_uuid": "...", "trade_uuid": "...", "given_pokemon": "...", "received_pokemon": "..." }` | Les deux. `trade_uuid` = la ligne `trades` (`COMPLETED`) créée pour l'historique. |
+| `TradeSessionCancelled` | `{ "session_uuid": "...", "reason": "PARTNER_LEFT" }` | Le partenaire de celui qui part (`PARTNER_LEFT` / `PARTNER_DISCONNECTED`), ou les deux si l'exécution finale échoue (`reason` = le code d'erreur, ex. `ERROR_TRADE_OWNERSHIP_CHANGED`, `ERROR_TRADE_OFFER_NOT_IN_TEAM`) |
+| `TradeSessionError` | `{ "error_code": "ERROR_..." }` | L'auteur d'une action refusée (la session continue) |
+
+Exemple de séquence complète :
+
+```text
+Alice -> TradeInvite {target_uuid: Bob}         Bob <- TradeInviteReceived, Alice <- TradeInviteSent
+Bob   -> TradeInviteResponse {accept: true}     Alice, Bob <- TradeSessionStarted
+Alice -> TradeSelectOffer {pokemon_uuid: A}     Alice, Bob <- TradeSessionUpdate
+Bob   -> TradeSelectOffer {pokemon_uuid: B}     Alice, Bob <- TradeSessionUpdate
+Alice -> TradeSetReady {ready: true}            Alice, Bob <- TradeSessionUpdate
+Bob   -> TradeSetReady {ready: true}            Alice, Bob <- TradeSessionUpdate, puis TradeSessionCompleted
+```
+
+**Exécution** (transaction unique, rien n'est écrit en cas d'échec) : ownership **et** appartenance à
+l'équipe re-vérifiées en base au moment même, puis chaque Pokémon change de propriétaire en prenant
+**l'emplacement d'équipe exact** que l'autre libère (comme un échange Cobblemon — contrairement à
+`POST /trades/{uuid}/accept` qui envoie au PC, ça ne peut jamais échouer sur un PC plein), et une ligne
+`trades` `COMPLETED` est enregistrée. Si l'un des deux Pokémon était sorti en Ghost, il est rappelé :
+`GhostEntityDespawn` diffusé à son ancien groupe + son ancien propriétaire.
 
 ### Présence — comportement
 

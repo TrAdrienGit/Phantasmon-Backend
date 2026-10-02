@@ -174,6 +174,9 @@ public class PokemonService {
 	@Transactional
 	public void delete(UUID ownerUuid, UUID pokemonUuid) {
 		Pokemon pokemon = findOwned(ownerUuid, pokemonUuid);
+		if (pokemonRepository.isEngagedInPendingTrade(pokemonUuid)) {
+			throw new ApiException(HttpStatus.CONFLICT, "ERROR_POKEMON_IN_PENDING_TRADE", Map.of("uuid", pokemonUuid));
+		}
 		pokemonRepository.delete(pokemon);
 		log.info("Pokemon {} deleted by owner {}", pokemonUuid, ownerUuid);
 	}
@@ -212,6 +215,50 @@ public class PokemonService {
 		pokemon.setBoxSlot((short) freeSlot[1]);
 		pokemon.setTeamSlot(null);
 		pokemonRepository.saveAndFlush(pokemon);
+	}
+
+	/**
+	 * Swaps two team members between their owners, each one taking the exact
+	 * team slot the other leaves (live trade screen, Adrien 2026-10-02 — like a
+	 * Cobblemon party trade, so it can never fail on a full PC the way
+	 * {@link #transferOwnership} can). Both must currently be in a team;
+	 * ownership/team checks are the caller's job. Same "vacate, flush, then
+	 * occupy" ordering as {@link #swapOrMove}: both team slots are cleared and
+	 * flushed before either Pokémon claims its new one, so the per-owner
+	 * unique team-slot index never sees two rows on the same slot.
+	 */
+	@Transactional
+	public void swapTeamMembersBetweenOwners(UUID firstPokemonUuid, UUID secondPokemonUuid) {
+		Pokemon first = pokemonRepository.findById(firstPokemonUuid)
+				.orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "ERROR_POKEMON_NOT_FOUND", Map.of("uuid", firstPokemonUuid)));
+		Pokemon second = pokemonRepository.findById(secondPokemonUuid)
+				.orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "ERROR_POKEMON_NOT_FOUND", Map.of("uuid", secondPokemonUuid)));
+		UUID firstOwner = first.getOwnerUuid();
+		UUID secondOwner = second.getOwnerUuid();
+		Short firstSlot = first.getTeamSlot();
+		Short secondSlot = second.getTeamSlot();
+
+		first.setTeamSlot(null);
+		second.setTeamSlot(null);
+		pokemonRepository.saveAndFlush(first);
+		pokemonRepository.saveAndFlush(second);
+
+		first.setOwnerUuid(secondOwner);
+		first.setTeamSlot(secondSlot);
+		first.setBoxId(null);
+		first.setBoxSlot(null);
+		second.setOwnerUuid(firstOwner);
+		second.setTeamSlot(firstSlot);
+		second.setBoxId(null);
+		second.setBoxSlot(null);
+		pokemonRepository.saveAndFlush(first);
+		pokemonRepository.saveAndFlush(second);
+	}
+
+	@Transactional(readOnly = true)
+	public List<PokemonResponse> activeTeam(UUID ownerUuid) {
+		return pokemonRepository.findByOwnerUuidAndTeamSlotIsNotNullOrderByTeamSlot(ownerUuid).stream()
+				.map(PokemonResponse::from).toList();
 	}
 
 	private Pokemon findOwned(UUID ownerUuid, UUID pokemonUuid) {
