@@ -202,6 +202,33 @@ class PhantasmonWebSocketIntegrationTest {
 	}
 
 	@Test
+	void ghostSpawnCarriesTheStoredGenderSoTheModelCanBeGenderSpecific() throws Exception {
+		UUID aliceUuid = UUID.randomUUID();
+		UUID bobUuid = UUID.randomUUID();
+		playerService.recordConnection(aliceUuid, "Alice");
+		playerService.recordConnection(bobUuid, "Bob");
+		Pokemon aliceMon = pokemonRepository.saveAndFlush(new Pokemon(UUID.randomUUID(), aliceUuid, "meowstic", null,
+				(short) 50, "timid", "keen-eye", false, null, null, (short) 1, "1.8.1",
+				Map.of("ivs", Map.of(), "evs", Map.of(), "gender", "F")));
+
+		RecordingHandler aliceHandler = new RecordingHandler();
+		RecordingHandler bobHandler = new RecordingHandler();
+		WebSocketSession aliceSession = joinGroup(aliceUuid, aliceHandler, "fp-ghost-gender");
+		WebSocketSession bobSession = joinGroup(bobUuid, bobHandler, "fp-ghost-gender");
+
+		try {
+			aliceSession.sendMessage(new TextMessage(
+					"{\"type\":\"SendOutGhost\",\"data\":{\"pokemon_uuid\":\"" + aliceMon.getUuid() + "\"}}"));
+
+			String reply = bobHandler.received.poll(5, TimeUnit.SECONDS);
+			assertThat(reply).contains("GhostEntitySpawn").contains("\"gender\":\"F\"");
+		} finally {
+			aliceSession.close();
+			bobSession.close();
+		}
+	}
+
+	@Test
 	void sendOutGhostWithUnownedPokemonIsRejected() throws Exception {
 		UUID aliceUuid = UUID.randomUUID();
 		UUID bobUuid = UUID.randomUUID();

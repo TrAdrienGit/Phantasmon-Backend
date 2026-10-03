@@ -207,7 +207,7 @@ public class PhantasmonWebSocketHandler extends TextWebSocketHandler {
 	 * {@code position} may still be null right after {@code SendOutGhost} if the
 	 * player hasn't sent a {@code PositionUpdate} yet — {@code Map.of} would NPE
 	 * on that, so build the map manually. Includes the Pokémon's rendering-
-	 * relevant identifiers (species/form/shiny/level) because the *receiving*
+	 * relevant identifiers (species/form/shiny/level/gender) because the *receiving*
 	 * client has no way to look up someone else's Pokémon over REST (ownership-
 	 * gated routes only expose the caller's own) — this WS payload is the only
 	 * place that data can come from.
@@ -220,6 +220,9 @@ public class PhantasmonWebSocketHandler extends TextWebSocketHandler {
 		data.put("form", pokemon.getForm());
 		data.put("is_shiny", pokemon.isShiny());
 		data.put("level", pokemon.getLevel());
+		// "M"/"F" as stored by the editor/Showdown import, null when not set — some models differ by gender
+		// (Meowstic, Pikachu...) and the receiving client can't look it up either.
+		data.put("gender", pokemon.getData() == null ? null : pokemon.getData().get("gender"));
 		data.put("position", position);
 		return data;
 	}
