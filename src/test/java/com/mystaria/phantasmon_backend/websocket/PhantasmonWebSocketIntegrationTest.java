@@ -229,6 +229,33 @@ class PhantasmonWebSocketIntegrationTest {
 	}
 
 	@Test
+	void ghostSpawnCarriesTheNicknameForTheGhostIndicator() throws Exception {
+		UUID aliceUuid = UUID.randomUUID();
+		UUID bobUuid = UUID.randomUUID();
+		playerService.recordConnection(aliceUuid, "Alice");
+		playerService.recordConnection(bobUuid, "Bob");
+		Pokemon aliceMon = pokemonRepository.saveAndFlush(new Pokemon(UUID.randomUUID(), aliceUuid, "pikachu", null,
+				(short) 50, "timid", "static", false, null, null, (short) 1, "1.8.1",
+				Map.of("ivs", Map.of(), "evs", Map.of(), "nickname", "Bichou")));
+
+		RecordingHandler aliceHandler = new RecordingHandler();
+		RecordingHandler bobHandler = new RecordingHandler();
+		WebSocketSession aliceSession = joinGroup(aliceUuid, aliceHandler, "fp-ghost-nickname");
+		WebSocketSession bobSession = joinGroup(bobUuid, bobHandler, "fp-ghost-nickname");
+
+		try {
+			aliceSession.sendMessage(new TextMessage(
+					"{\"type\":\"SendOutGhost\",\"data\":{\"pokemon_uuid\":\"" + aliceMon.getUuid() + "\"}}"));
+
+			String reply = bobHandler.received.poll(5, TimeUnit.SECONDS);
+			assertThat(reply).contains("GhostEntitySpawn").contains("\"nickname\":\"Bichou\"");
+		} finally {
+			aliceSession.close();
+			bobSession.close();
+		}
+	}
+
+	@Test
 	void sendOutGhostWithUnownedPokemonIsRejected() throws Exception {
 		UUID aliceUuid = UUID.randomUUID();
 		UUID bobUuid = UUID.randomUUID();

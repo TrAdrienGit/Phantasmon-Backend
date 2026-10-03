@@ -88,8 +88,12 @@ public class PresenceService {
 		return members;
 	}
 
-	/** Removes and returns the UUIDs of every presence whose heartbeat is older than the TTL. */
-	public List<UUID> cleanupExpired() {
+	/**
+	 * UUIDs of every presence whose heartbeat is older than the TTL. Does <b>not</b> remove them: the caller leaves
+	 * through the normal path so the expired player's Ghost is despawned for its group (removing here first used to
+	 * leave nothing for that path to find — BUG-4).
+	 */
+	public List<UUID> findExpired() {
 		Instant threshold = clock.instant().minus(ttl);
 		List<UUID> expired = new ArrayList<>();
 		for (PlayerPresence presence : presences.values()) {
@@ -97,7 +101,6 @@ public class PresenceService {
 				expired.add(presence.playerUuid());
 			}
 		}
-		expired.forEach(presences::remove);
 		return expired;
 	}
 }

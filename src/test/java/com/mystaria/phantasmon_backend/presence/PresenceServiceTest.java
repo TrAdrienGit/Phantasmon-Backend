@@ -90,7 +90,7 @@ class PresenceServiceTest {
 	}
 
 	@Test
-	void cleanupExpiredRemovesOnlyPresencesPastTtl() {
+	void findExpiredListsOnlyPresencesPastTtlWithoutRemovingThem() {
 		Instant start = Instant.now();
 		java.util.concurrent.atomic.AtomicReference<Instant> now = new java.util.concurrent.atomic.AtomicReference<>(start);
 		Clock movableClock = new Clock() {
@@ -118,8 +118,9 @@ class PresenceServiceTest {
 		now.set(start.plus(TTL).plusSeconds(1));
 		service.heartbeat(fresh);
 
-		assertThat(service.cleanupExpired()).containsExactly(stale);
-		assertThat(service.find(stale)).isEmpty();
+		assertThat(service.findExpired()).containsExactly(stale);
+		// Removal is left to the caller's leave path, which needs the presence to despawn the Ghost (BUG-4).
+		assertThat(service.find(stale)).isPresent();
 		assertThat(service.find(fresh)).isPresent();
 	}
 

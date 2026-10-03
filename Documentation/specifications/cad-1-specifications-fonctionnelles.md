@@ -121,7 +121,7 @@ Le changement de propriétaire ne doit pas modifier l'identité interne du Poké
 
 # 5. Indicateur Ghost
 
-> **Note d'implémentation (2026-10-03)** : l'indicateur `[Ghost]` n'est pas encore affiché au-dessus des Ghost sortis dans le monde (voir `project/status.md` §3).
+> **Note d'implémentation (2026-10-03)** : dans le monde, l'indicateur fait partie de l'étiquette de Cobblemon au-dessus du Ghost (`[Ghost] Bichou Niv. 50`), affichée comme pour un Pokémon normal quand on le regarde ; sans surnom, le nom de l'espèce est utilisé.
 
 Les Ghost Pokémon doivent être clairement identifiables.
 

@@ -133,7 +133,7 @@ Comportements à connaître :
 | Comportement | Conséquence |
 |---|---|
 | Une exception non vérifiée qui sort de la méthode → **rollback** | Lever `ApiException` annule tout ce qui a été écrit |
-| `@Transactional(noRollbackFor = ApiException.class)` | Valide quand même : utilisé pour enregistrer le statut `CANCELLED` d'un échange avant de lever l'erreur (et cause suspectée de BUG-5, chapitre 15) |
+| `@Transactional(noRollbackFor = ApiException.class)` | Valide quand même : utilisé pour enregistrer le statut `CANCELLED` d'un échange avant de lever l'erreur. Ne protège pas d'une exception levée dans une méthode `@Transactional` *appelée* : elle a déjà marqué la transaction « rollback-only » (BUG-5, chapitre 15) |
 | Une méthode `@Transactional` appelée depuis une autre **rejoint** la transaction en cours | `TradeService.accept` → `PokemonService.transferOwnership` : un seul commit pour tout |
 | Les entités chargées sont **suivies** : modifier un champ suffit, l'UPDATE est fait au commit | Dans `update`, `pokemon.setLevel(...)` est écrit en base sans appel explicite |
 

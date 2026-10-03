@@ -96,6 +96,7 @@ public class TradeService {
 			throw new ApiException(HttpStatus.CONFLICT, "ERROR_TRADE_OWNERSHIP_CHANGED", Map.of("uuid", tradeUuid));
 		}
 
+		requirePcRoom(trade, offered);
 		pokemonService.transferOwnership(offered.getUuid(), trade.getRecipientUuid());
 		pokemonService.transferOwnership(requested.getUuid(), trade.getInitiatorUuid());
 
@@ -188,6 +189,21 @@ public class TradeService {
 	private Pokemon findPokemon(UUID pokemonUuid) {
 		return pokemonRepository.findById(pokemonUuid)
 				.orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "ERROR_POKEMON_NOT_FOUND", Map.of("uuid", pokemonUuid)));
+	}
+
+	/**
+	 * Both received Pokémon land in the PC, so both sides need room <b>before</b> anything moves (BUG-5): an
+	 * {@code ERROR_POKEMON_PC_FULL} thrown from inside {@link PokemonService#transferOwnership} marks the shared
+	 * transaction rollback-only, and {@code noRollbackFor} then turns it into a 500 (UnexpectedRollbackException).
+	 * The recipient receives first, while still holding its own Pokémon; the initiator receives second, after the
+	 * offered Pokémon has left — freeing its PC slot if it had one. The trade stays PENDING: free a slot, retry.
+	 */
+	private void requirePcRoom(Trade trade, Pokemon offered) {
+		boolean offeredFreesASlot = offered.getBoxId() != null && offered.getBoxSlot() != null;
+		if (!pokemonService.hasFreePcSlot(trade.getRecipientUuid())
+				|| (!offeredFreesASlot && !pokemonService.hasFreePcSlot(trade.getInitiatorUuid()))) {
+			throw new ApiException(HttpStatus.CONFLICT, "ERROR_POKEMON_PC_FULL", Map.of("uuid", trade.getUuid()));
+		}
 	}
 
 	private static void requirePending(Trade trade) {

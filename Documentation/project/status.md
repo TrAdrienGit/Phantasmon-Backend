@@ -46,7 +46,6 @@ Adrien a confirmé le fonctionnement en jeu des phases 1 à 8 le 2026-10-03.
 | Export Showdown vers le presse-papiers | Partie 1 §11 | Ni backend (`GET /pokemon/{uuid}/export`) ni client |
 | Fonctions d'administration (`/admin/*`, rôle admin, inspection) | Partie 1 §37-38, Partie 2 §16 | [D-20](../architecture/decisions.md#d-20--fonctions-dadministration-et-limitation-de-débit-reportées) |
 | Limitation de débit par joueur | Partie 2 §13 | D-20 |
-| Indicateur `[Ghost]` sur le nom du Ghost dans le monde | Partie 1 §5, §22.1 | Non affiché actuellement (BUG-3) |
 | Arrêt des combats en cas de perte du backend (match nul) | Partie 1 §44 | Une déconnexion WebSocket termine le combat en `ABORTED` |
 | Combats Ghost contre Pokémon normal | Partie 1 §31 | Hors MVP |
 | Sauvegardes PostgreSQL en place et test de restauration | Partie 3 §I, Phase 10 | Aucune sauvegarde automatisée |

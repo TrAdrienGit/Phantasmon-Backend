@@ -13,9 +13,7 @@ Identifiants : `BUG-n` (comportement incorrect), `TODO-n` (action à faire), `DE
 
 | ID | Priorité | Dépôt | Description | Piste |
 |---|---|---|---|---|
-| BUG-4 | moyenne | Backend | **Suspecté, à confirmer par un test.** Quand le balayage TTL expire un joueur, `PresenceService.cleanupExpired()` retire sa présence **avant** que la fermeture de session déclenche `afterConnectionClosed` : `leaveAndDespawnGhost` ne trouve plus ni présence ni groupe, donc son Ghost n'est pas retiré chez les autres joueurs. | Faire renvoyer les présences expirées par `cleanupExpired` et diffuser `GhostEntityDespawn` depuis `PresenceTtlSweeper` ; ajouter un test d'intégration WebSocket. |
-| BUG-5 | moyenne | Backend | **Suspecté, à confirmer par un test.** `TradeService.accept` est annoté `@Transactional(noRollbackFor = ApiException.class)` (pour persister le statut `CANCELLED`). Si le PC du **second** destinataire est plein, `transferOwnership` lève `ERROR_POKEMON_PC_FULL` (une `ApiException`) **après** le transfert du premier Pokémon : la transaction est validée quand même, l'échange devient partiel et reste `PENDING`. | Vérifier la place libre des deux côtés avant tout transfert, ou n'exclure du rollback que le cas `ERROR_TRADE_OWNERSHIP_CHANGED`. |
-| BUG-3 | basse | Client | L'indicateur `[Ghost]` (CAD Partie 1 §5, §22.1) n'est pas affiché au-dessus des Ghost sortis. | Nom personnalisé visible sur l'entité, traduit. |
+| — | — | — | Aucun bug connu ouvert (BUG-1 à BUG-5 corrigés le 2026-10-03, voir §5). | — |
 
 ## 2. TODO
 
@@ -32,6 +30,10 @@ Identifiants : `BUG-n` (comportement incorrect), `TODO-n` (action à faire), `DE
 | TODO-9 | basse | Les deux | Corriger les javadocs obsolètes : client `ClientCommonPacketListenerImplMixin` (« seul Mixin du mod », il y en a 7), `PhantasmonKeybinds` (« trois touches », il y en a 4), `BackendHealthPinger` (« backend local en dur ») ; backend `RequestLoggingFilter` et `LogRetentionService` (citent un `logback-spring.xml` qui n'existe pas), `PhantasmonWebSocketHandler` (« Battle WS events arrive with Phase 9 », c'est fait). |
 | TODO-10 | basse | Client | Supprimer les textures inutilisées `textures/gui/sprites/pc/*` (toutes sauf `star.png`) depuis la refonte du PC du 2026-10-02. |
 | TODO-11 | basse | Les deux | Implémenter l'export Showdown vers le presse-papiers (CAD Partie 1 §11). |
+| TODO-12 | haute | Client | Combat Ghost : les Pokémon n'ont pas leurs formes spéciales (le modèle de base s'affiche). |
+| TODO-13 | moyenne | Client | Les Ghost doivent être connus d'office des joueurs : dans Cobblemon, un Pokémon non scanné au Pokédex affiche « ???? » à la place de son nom. |
+| TODO-14 | haute | Les deux | Au lancement d'un combat Ghost, rappeler les Ghost sortis des deux joueurs ; tant que le combat dure, aucun des deux ne peut sortir de Ghost. |
+| TODO-15 | haute | Les deux | Faire un audit de sécurité (client et backend). |
 
 ## 3. Dette technique
 
@@ -62,3 +64,6 @@ Identifiants : `BUG-n` (comportement incorrect), `TODO-n` (action à faire), `DE
 | — | 2026-10-03 | Licence : **GPL 3.0** retenue par Adrien. Documentation et README alignés. |
 | BUG-1 | 2026-10-03 | `fabric.mod.json` : licence passée de `CC0-1.0` à `GPL-3.0-only`. |
 | BUG-2 | 2026-10-03 | `fabric.mod.json` : `"cobblemon": ">=1.8.1"` ajouté dans `depends` (Fabric Loader affiche un message clair si Cobblemon manque). |
+| BUG-3 | 2026-10-03 | Indicateur `[Ghost]` : le Ghost sorti porte le surnom `[Ghost] <surnom ou espèce>`, affiché par l'étiquette native de Cobblemon (avec le niveau) quand on le regarde. `GhostEntitySpawn` transporte `nickname`. |
+| BUG-4 | 2026-10-03 | Confirmé par test. Le balayage TTL ne retire plus la présence lui-même (`PresenceService.findExpired`) : `PhantasmonWebSocketHandler.expire` quitte le groupe comme un `LeaveServerGroup` (le Ghost disparaît chez les autres) puis ferme la session. Test `PresenceTtlSweepIntegrationTest`. |
+| BUG-5 | 2026-10-03 | Confirmé par test, cause différente du soupçon : pas d'échange partiel (le `@Transactional` de `transferOwnership` rendait la transaction rollback-only), mais une erreur 500 (`UnexpectedRollbackException`) au lieu de `ERROR_POKEMON_PC_FULL`. `TradeService.requirePcRoom` vérifie la place des deux côtés avant tout transfert ; l'échange reste `PENDING`. Test `acceptWithTheInitiatorsPcFullFailsCleanlyAndChangesNothing`. |

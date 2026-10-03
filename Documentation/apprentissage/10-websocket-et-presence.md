@@ -178,16 +178,17 @@ tâche planifiée retire les présences silencieuses depuis plus de 30 s et ferm
 // websocket/PresenceTtlSweeper.java
 @Scheduled(fixedRateString = "${phantasmon.presence.sweep-interval-ms}")
 public void sweep() {
-    for (UUID playerUuid : presenceService.cleanupExpired()) {
-        sessionRegistry.close(playerUuid);          // déclenche afterConnectionClosed
+    for (UUID playerUuid : presenceService.findExpired()) {
+        webSocketHandler.expire(playerUuid);        // quitte le groupe (despawn du Ghost), puis ferme la session
     }
 }
 ```
 
 Le temps est lu via un `Clock` injecté : en test, on avance l'horloge à la main au lieu d'attendre 30 s.
 
-Attention, piège d'ordre : `cleanupExpired` retire la présence **avant** que la fermeture déclenche le nettoyage
-qui diffuse la disparition du Ghost ; ce nettoyage ne trouve plus rien (bug suspecté BUG-4, chapitre 15).
+Piège d'ordre, déjà rencontré : l'ancienne version (`cleanupExpired`) retirait la présence **avant** que la
+fermeture déclenche le nettoyage qui diffuse la disparition du Ghost ; ce nettoyage ne trouvait plus rien (BUG-4,
+chapitre 15). `findExpired` ne retire plus rien : le départ passe par le même chemin qu'un `LeaveServerGroup`.
 
 ## 10.8 La fermeture
 

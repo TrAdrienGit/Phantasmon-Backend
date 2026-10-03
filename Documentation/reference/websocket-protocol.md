@@ -55,8 +55,8 @@ de l'adresse saisie pour rejoindre le serveur.
 
 **TTL** : sans `Heartbeat` depuis `phantasmon.presence.ttl` (30 s), la présence est retirée par un balayage toutes
 les `phantasmon.presence.sweep-interval-ms` (10 s) et la session est fermée. Toute fermeture de session (propre,
-brutale ou TTL) équivaut à un `LeaveServerGroup`, annule l'échange en direct et termine le combat en cours. Exception suspectée : après une expiration TTL, le Ghost du joueur n'est probablement pas retiré chez les
-autres (BUG-4, `project/known-issues.md`).
+brutale ou TTL) équivaut à un `LeaveServerGroup`, annule l'échange en direct et termine le combat en cours. Après une expiration TTL, le Ghost du joueur est retiré chez les autres
+(`GhostEntityDespawn`).
 
 ## 3. Ghost
 
@@ -67,12 +67,12 @@ autres (BUG-4, `project/known-issues.md`).
 
 | S2C | `data` | Destinataires |
 |---|---|---|
-| `GhostEntitySpawn` | `{ "player_uuid", "pokemon_uuid", "species", "form" \| null, "is_shiny", "level", "gender": "M" \| "F" \| null, "position": {"x","y","z"} \| null }` | Groupe **et** propriétaire. Également envoyé en rattrapage à un joueur qui rejoint le groupe. |
+| `GhostEntitySpawn` | `{ "player_uuid", "pokemon_uuid", "species", "form" \| null, "is_shiny", "level", "gender": "M" \| "F" \| null, "nickname" \| null, "position": {"x","y","z"} \| null }` | Groupe **et** propriétaire. Également envoyé en rattrapage à un joueur qui rejoint le groupe. |
 | `GhostEntityMove` | `{ "player_uuid", "pokemon_uuid", "position": {"x","y","z"} }` | Groupe et propriétaire, à chaque `PositionUpdate` du propriétaire ayant un Ghost sorti |
 | `GhostEntityDespawn` | `{ "player_uuid", "pokemon_uuid" }` | Groupe et propriétaire : rappel, déconnexion du propriétaire, ou Ghost échangé en direct |
 
 `GhostEntitySpawn` embarque les données de rendu (`species`, `form`, `is_shiny`, `level`, `gender` tel que stocké
-dans `data.gender`) car un client ne peut pas lire les Pokémon d'un autre joueur par REST. `position` vaut `null`
+dans `data.gender`, `nickname` tel que stocké dans `data.nickname`, pour l'indicateur `[Ghost]`) car un client ne peut pas lire les Pokémon d'un autre joueur par REST. `position` vaut `null`
 si le propriétaire n'a encore envoyé aucun `PositionUpdate`.
 
 ## 4. Échange en direct

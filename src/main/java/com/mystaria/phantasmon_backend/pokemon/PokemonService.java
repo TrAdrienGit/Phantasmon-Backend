@@ -270,6 +270,14 @@ public class PokemonService {
 		return pokemon;
 	}
 
+	/** Whether {@code ownerUuid} has at least one free PC slot (never throws, unlike {@link #transferOwnership}). */
+	@Transactional(readOnly = true)
+	public boolean hasFreePcSlot(UUID ownerUuid) {
+		return pokemonRepository.findByOwnerUuid(ownerUuid).stream()
+				.filter(p -> p.getBoxId() != null && p.getBoxSlot() != null)
+				.count() < (long) BOX_COUNT * SLOTS_PER_BOX;
+	}
+
 	private int[] findFreePcSlot(UUID ownerUuid) {
 		Set<String> occupied = pokemonRepository.findByOwnerUuid(ownerUuid).stream()
 				.filter(p -> p.getBoxId() != null && p.getBoxSlot() != null)

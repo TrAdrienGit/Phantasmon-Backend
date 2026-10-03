@@ -19,14 +19,14 @@ production (le `NullPointerException` de `Map.of`, la violation d'index lors d'u
 ```java
 // presence/PresenceServiceTest.java (raccourci)
 @Test
-void cleanupExpiredRemovesOnlyPresencesPastTtl() {
+void findExpiredListsOnlyPresencesPastTtlWithoutRemovingThem() {
     AtomicReference<Instant> now = new AtomicReference<>(start);
     Clock movableClock = …;                                       // horloge contrôlée par le test
     PresenceService service = new PresenceService(movableClock, Duration.ofSeconds(30));
     service.join(stale, "fp", "minecraft:overworld");
     …
     now.set(start.plus(TTL).plusSeconds(1));                      // on « avance le temps »
-    assertThat(service.cleanupExpired()).containsExactly(stale);
+    assertThat(service.findExpired()).containsExactly(stale);
 }
 ```
 

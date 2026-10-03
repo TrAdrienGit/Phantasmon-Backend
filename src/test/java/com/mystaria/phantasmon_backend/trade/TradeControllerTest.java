@@ -139,6 +139,41 @@ class TradeControllerTest {
 	}
 
 	@Test
+	void acceptWithTheInitiatorsPcFullFailsCleanlyAndChangesNothing() throws Exception {
+		// Alice offers a team member (no PC slot to free up) while her 480 PC slots are all taken: the second
+		// transfer (Bob's Pokémon to Alice) has nowhere to go, after the first one already moved Alice's Pokémon.
+		Pokemon aliceTeamMon = pokemonRepository.saveAndFlush(new Pokemon(UUID.randomUUID(), aliceUuid, "eevee", null,
+				(short) 50, "timid", "adaptability", false, null, null, (short) 1, "1.8.1",
+				Map.of("ivs", Map.of(), "evs", Map.of())));
+		pokemonRepository.delete(aliceMon);
+		java.util.List<Pokemon> fillers = new java.util.ArrayList<>();
+		for (int box = 1; box <= 16; box++) {
+			for (int slot = 1; slot <= 30; slot++) {
+				fillers.add(new Pokemon(UUID.randomUUID(), aliceUuid, "rattata", null, (short) 5, "hardy", "guts", false,
+						(short) box, (short) slot, null, "1.8.1", Map.of("ivs", Map.of(), "evs", Map.of())));
+			}
+		}
+		pokemonRepository.saveAllAndFlush(fillers);
+		String body = """
+				{"request_uuid":"%s","recipient_uuid":"%s","offered_pokemon_uuid":"%s","requested_pokemon_uuid":"%s"}
+				""".formatted(UUID.randomUUID(), bobUuid, aliceTeamMon.getUuid(), bobMon.getUuid());
+		String createResponse = mockMvc.perform(post("/trades").header("Authorization", aliceToken)
+						.contentType(MediaType.APPLICATION_JSON).content(body))
+				.andReturn().getResponse().getContentAsString();
+		String tradeUuid = com.jayway.jsonpath.JsonPath.read(createResponse, "$.uuid");
+
+		mockMvc.perform(post("/trades/" + tradeUuid + "/accept").header("Authorization", bobToken))
+				.andExpect(status().isConflict())
+				.andExpect(jsonPath("$.error_code").value("ERROR_POKEMON_PC_FULL"));
+
+		assertThat(pokemonRepository.findById(aliceTeamMon.getUuid()).orElseThrow().getOwnerUuid())
+				.as("no half-done trade").isEqualTo(aliceUuid);
+		assertThat(pokemonRepository.findById(bobMon.getUuid()).orElseThrow().getOwnerUuid()).isEqualTo(bobUuid);
+		mockMvc.perform(get("/trades/" + tradeUuid).header("Authorization", aliceToken))
+				.andExpect(jsonPath("$.status").value("PENDING"));
+	}
+
+	@Test
 	void onlyRecipientCanAccept() throws Exception {
 		String createResponse = mockMvc.perform(post("/trades").header("Authorization", aliceToken)
 						.contentType(MediaType.APPLICATION_JSON).content(proposeBody(UUID.randomUUID())))

@@ -80,6 +80,16 @@ public class PhantasmonWebSocketHandler extends TextWebSocketHandler {
 		sessionRegistry.unregister(playerUuid);
 	}
 
+	/**
+	 * TTL expiry ({@link PresenceTtlSweeper}): leaves the group exactly like a {@code LeaveServerGroup} (Ghost
+	 * despawned for the others), then force-closes the session if it is still open — its
+	 * {@link #afterConnectionClosed} then ends the live trade/battle and finds no presence left, which is a no-op.
+	 */
+	public void expire(UUID playerUuid) {
+		leaveAndDespawnGhost(playerUuid);
+		sessionRegistry.close(playerUuid);
+	}
+
 	/** Leaves the presence group and, if the player had a Ghost out, broadcasts its despawn first (CAD §8: abrupt disconnect must still despawn). */
 	private void leaveAndDespawnGhost(UUID playerUuid) {
 		List<UUID> groupMembers = presenceService.groupMembers(playerUuid);
@@ -223,6 +233,8 @@ public class PhantasmonWebSocketHandler extends TextWebSocketHandler {
 		// "M"/"F" as stored by the editor/Showdown import, null when not set — some models differ by gender
 		// (Meowstic, Pikachu...) and the receiving client can't look it up either.
 		data.put("gender", pokemon.getData() == null ? null : pokemon.getData().get("gender"));
+		// Shown as "[Ghost] <nickname>" above the Ghost (CAD Partie 1 §5); null when the Pokémon has none.
+		data.put("nickname", pokemon.getData() == null ? null : pokemon.getData().get("nickname"));
 		data.put("position", position);
 		return data;
 	}

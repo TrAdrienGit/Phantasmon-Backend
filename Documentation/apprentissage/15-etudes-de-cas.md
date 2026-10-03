@@ -134,35 +134,44 @@ code, présentés comme des analyses.
 
 ---
 
-## Analyse A — Le Ghost d'un joueur expiré (bug suspecté BUG-4)
+## Analyse A — Le Ghost d'un joueur expiré (BUG-4, corrigé le 2026-10-03)
 
-Lisez ensemble `PresenceTtlSweeper.sweep`, `PresenceService.cleanupExpired` et
-`PhantasmonWebSocketHandler.afterConnectionClosed` :
+L'ancienne version : `PresenceTtlSweeper.sweep` appelait `PresenceService.cleanupExpired`, puis fermait la session.
 
-1. `cleanupExpired()` **retire** les présences expirées de la `Map` et renvoie leurs UUID.
-2. `sweep()` ferme ensuite la session de chacun.
+1. `cleanupExpired()` **retirait** les présences expirées de la `Map` et renvoyait leurs UUID.
+2. `sweep()` fermait ensuite la session de chacun.
 3. La fermeture déclenche `afterConnectionClosed` → `leaveAndDespawnGhost`, qui commence par
    `groupMembers(joueur)` puis `leave(joueur)`.
-4. Mais la présence a **déjà** été retirée à l'étape 1 : `groupMembers` renvoie une liste vide et `leave` ne renvoie
-   rien. Aucun `GhostEntityDespawn` n'est envoyé aux autres joueurs.
+4. Mais la présence avait **déjà** été retirée à l'étape 1 : `groupMembers` renvoyait une liste vide et `leave` ne
+   renvoyait rien. Aucun `GhostEntityDespawn` n'était envoyé aux autres joueurs.
 
-L'ancienne référence d'API affirmait que le TTL « déclenche aussi le despawn » : c'était vrai dans l'intention, pas
-dans l'ordre des opérations. Un test d'intégration (« un joueur qui cesse ses heartbeats voit son
-Ghost disparaître chez les autres ») le confirmerait.
+- **Confirmation** : test d'intégration `PresenceTtlSweepIntegrationTest` (TTL d'une seconde, balayage déclenché
+  par le test) : rouge avant la correction.
+- **Correction** : `findExpired()` ne retire plus rien ; `sweep()` appelle `PhantasmonWebSocketHandler.expire`, qui
+  passe par `leaveAndDespawnGhost` (comme un `LeaveServerGroup`) puis ferme la session. Le `afterConnectionClosed`
+  qui suit ne trouve plus de présence : sans effet.
+- **Leçon** : l'intention (« le TTL déclenche aussi le despawn ») était documentée ; seul un test exerçant le vrai
+  chemin pouvait montrer que l'ordre des opérations la contredisait.
 
-## Analyse B — L'échange à moitié fait (bug suspecté BUG-5)
+## Analyse B — L'échange REST et le PC plein (BUG-5, corrigé le 2026-10-03)
 
-Dans `TradeService.accept`, annoté `@Transactional(noRollbackFor = ApiException.class)` :
+Dans `TradeService.accept`, annoté `@Transactional(noRollbackFor = ApiException.class)`, le soupçon était un
+échange à moitié fait : premier transfert gardé, second refusé (`ERROR_POKEMON_PC_FULL`), transaction validée.
 
-1. `transferOwnership(offert → destinataire)` réussit et place le Pokémon dans le PC du destinataire.
-2. `transferOwnership(demandé → initiateur)` appelle `findFreePcSlot` ; si le PC de l'initiateur est plein, une
-   `ApiException` (`ERROR_POKEMON_PC_FULL`) est levée.
-3. Comme toute `ApiException` est exclue du rollback, la transaction est **validée** : le premier transfert est
-   gardé, le second n'a pas eu lieu, l'échange reste `PENDING`.
+Le test (`acceptWithTheInitiatorsPcFullFailsCleanlyAndChangesNothing`) a montré autre chose :
 
-L'annotation visait un seul cas (`ERROR_TRADE_OWNERSHIP_CHANGED`, pour conserver le statut `CANCELLED`). Pistes :
-vérifier la place libre des deux côtés **avant** tout transfert, ou enregistrer le `CANCELLED` dans une transaction
-séparée et laisser le rollback par défaut.
+1. `transferOwnership` est lui-même `@Transactional` (sans `noRollbackFor`) et appelé à travers le proxy Spring :
+   quand il lève `ERROR_POKEMON_PC_FULL`, il marque la transaction partagée **rollback-only**.
+2. `accept` laisse passer l'exception et, à cause de `noRollbackFor`, tente de **valider**.
+3. La transaction étant rollback-only, Spring annule tout et lève `UnexpectedRollbackException`, qui remplace
+   l'erreur d'origine : aucune donnée corrompue, mais une **erreur 500** au lieu d'un 409 lisible.
+
+- **Correction** : `requirePcRoom` vérifie la place **avant** tout transfert (`PokemonService.hasFreePcSlot`) :
+  le destinataire reçoit en premier, avec son propre Pokémon encore là ; l'initiateur reçoit en second, après le
+  départ du Pokémon offert, qui libère son emplacement s'il était dans le PC. L'échange reste `PENDING`.
+- **Leçon** : `noRollbackFor` ne s'applique qu'aux exceptions de la méthode annotée ; une méthode transactionnelle
+  appelée a déjà pris sa décision. Et un bug « suspecté » se confirme par un test avant d'être corrigé : la cause
+  réelle n'était pas celle prévue.
 
 ## Ce que ces cas ont en commun
 

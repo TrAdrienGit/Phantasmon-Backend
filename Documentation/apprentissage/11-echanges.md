@@ -50,10 +50,12 @@ Trois idées :
 2. **Tout ou rien** : les deux transferts sont dans la même transaction ; `transferOwnership` (annoté
    `@Transactional`) rejoint la transaction en cours.
 3. **`noRollbackFor`** : normalement, lever une exception annule tout, y compris le passage à `CANCELLED` qu'on veut
-   garder. `noRollbackFor = ApiException.class` force la validation. Revers de la médaille : **toute**
-   `ApiException` est alors validée, y compris un « PC plein » levé après le premier transfert, ce qui laisserait un
-   échange à moitié fait (bug suspecté BUG-5, chapitre 15). Leçon : une exception à la règle du rollback doit être
-   aussi étroite que possible.
+   garder. `noRollbackFor = ApiException.class` force la validation. Revers de la médaille : un « PC plein » levé
+   **dans** `transferOwnership` (méthode `@Transactional` appelée) marque déjà la transaction « rollback-only » ;
+   au commit, Spring lève `UnexpectedRollbackException` et le joueur recevait une erreur 500 (BUG-5, chapitre 15).
+   D'où `requirePcRoom` : la place est vérifiée des deux côtés **avant** tout transfert. Leçon : une exception à la
+   règle du rollback doit être aussi étroite que possible, et ne vaut que pour les exceptions levées par la méthode
+   elle-même.
 
 REST et WebSocket se combinent : la requête REST modifie la base, puis `SessionRegistry` prévient les joueurs
 connectés (`TradeProposed`, `TradeAccepted`, `TradeCancelled`).
