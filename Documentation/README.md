@@ -9,6 +9,7 @@ exclusivement par le mod client [Phantasmon-Client](https://github.com/TrAdrienG
 
 | Je veux… | Lire |
 |---|---|
+| Apprendre à construire un backend comme celui-ci (parcours pédagogique) | [`apprentissage/`](apprentissage/README.md) |
 | Comprendre le projet en 5 minutes | [`architecture/system-overview.md`](architecture/system-overview.md) |
 | Lancer le backend sur ma machine | [`guides/running.md`](guides/running.md) |
 | Appeler l'API | [`reference/rest-api.md`](reference/rest-api.md), [`reference/websocket-protocol.md`](reference/websocket-protocol.md) |
@@ -20,6 +21,7 @@ exclusivement par le mod client [Phantasmon-Client](https://github.com/TrAdrienG
 ```text
 Documentation/
 ├── README.md                       ce fichier
+├── apprentissage/                  parcours pédagogique : tout le backend expliqué, chapitres 1 à 16
 ├── architecture/
 │   ├── system-overview.md          vue d'ensemble du système (miroir)
 │   ├── backend-architecture.md     paquets, requêtes, WebSocket, état mémoire, transactions, logs

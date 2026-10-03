@@ -106,7 +106,8 @@ assumée, CAD Partie 3 §H) :
 | `LiveBattleService` | Invitations (60 s), combats en cours (hôte, invité, chrono 90 s) | Un verrou global (méthodes `synchronized`) |
 
 `PresenceTtlSweeper` s'exécute toutes les 10 s et retire les présences sans heartbeat depuis 30 s, en fermant la
-session WebSocket correspondante si elle est encore ouverte.
+session WebSocket correspondante si elle est encore ouverte (le Ghost du joueur expiré n'est probablement pas
+retiré chez les autres : BUG-4).
 
 Règles de diffusion à retenir :
 
@@ -120,7 +121,7 @@ Règles de diffusion à retenir :
 | Opération | Garanties |
 |---|---|
 | Déplacement PC/équipe (`PATCH`) | Déplacement ou échange avec l'occupant ; l'ancienne place est libérée et flushée avant d'être réattribuée, pour ne jamais violer les index uniques `uq_pokemon_pc_slot` / `uq_pokemon_team_slot`. |
-| Acceptation d'un échange REST | Une transaction : propriété des deux Pokémon revérifiée, propriétaires échangés, chaque Pokémon placé au premier emplacement libre du PC de son nouveau propriétaire. Si la propriété a changé : échange `CANCELLED` (persisté) et aucun transfert. |
+| Acceptation d'un échange REST | Une transaction : propriété des deux Pokémon revérifiée, propriétaires échangés, chaque Pokémon placé au premier emplacement libre du PC de son nouveau propriétaire. Si la propriété a changé : échange `CANCELLED` (persisté grâce à `noRollbackFor`) et aucun transfert. Effet de bord suspecté de ce `noRollbackFor` : BUG-5. |
 | Échange en direct | `TradeService.completeLiveTrade` : une transaction ; propriété **et** présence dans l'équipe revérifiées ; chaque Pokémon prend l'emplacement d'équipe de l'autre ; ligne `trades` `COMPLETED` ; Ghost échangé rappelé. |
 | Suppression | Refusée si le Pokémon est engagé dans un échange `PENDING` (`ERROR_POKEMON_IN_PENDING_TRADE`). |
 | Combat en direct | Ligne `battle_sessions` `ACTIVE` créée au démarrage (`player_a` = `host_uuid` = hôte), puis `FINISHED` ou `ABORTED`. |

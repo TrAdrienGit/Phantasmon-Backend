@@ -306,7 +306,7 @@ libre du PC de son nouveau propriétaire, statut `COMPLETED`. Notifie les deux j
 | 404 | `ERROR_TRADE_NOT_FOUND` | Échange inexistant |
 | 409 | `ERROR_TRADE_INVALID_STATE` | L'échange n'est plus `PENDING` |
 | 409 | `ERROR_TRADE_OWNERSHIP_CHANGED` | Un des Pokémon a changé de propriétaire : l'échange passe `CANCELLED`, aucun transfert |
-| 409 | `ERROR_POKEMON_PC_FULL` | Le PC d'un des deux joueurs est plein : la transaction est annulée |
+| 409 | `ERROR_POKEMON_PC_FULL` | Le PC d'un des deux joueurs est plein. Attention : un transfert déjà effectué n'est pas annulé (bug suspecté BUG-5, `project/known-issues.md`) |
 
 ### `POST /trades/{uuid}/cancel`
 

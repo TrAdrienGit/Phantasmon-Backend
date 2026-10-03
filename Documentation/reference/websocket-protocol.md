@@ -55,7 +55,8 @@ de l'adresse saisie pour rejoindre le serveur.
 
 **TTL** : sans `Heartbeat` depuis `phantasmon.presence.ttl` (30 s), la présence est retirée par un balayage toutes
 les `phantasmon.presence.sweep-interval-ms` (10 s) et la session est fermée. Toute fermeture de session (propre,
-brutale ou TTL) équivaut à un `LeaveServerGroup`, annule l'échange en direct et termine le combat en cours.
+brutale ou TTL) équivaut à un `LeaveServerGroup`, annule l'échange en direct et termine le combat en cours. Exception suspectée : après une expiration TTL, le Ghost du joueur n'est probablement pas retiré chez les
+autres (BUG-4, `project/known-issues.md`).
 
 ## 3. Ghost
 

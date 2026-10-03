@@ -13,8 +13,8 @@ Identifiants : `BUG-n` (comportement incorrect), `TODO-n` (action à faire), `DE
 
 | ID | Priorité | Dépôt | Description | Piste |
 |---|---|---|---|---|
-| BUG-1 | moyenne | Client | `fabric.mod.json` déclare `"license": "CC0-1.0"` alors que la licence du projet est la **GPL 3.0** (fichiers `LICENSE`). | Remplacer par `"GPL-3.0-only"` (ou `GPL-3.0-or-later` selon l'intention). |
-| BUG-2 | basse | Client | Cobblemon n'est pas déclaré dans `depends` de `fabric.mod.json` : sans Cobblemon, le jeu plante au lieu d'afficher un message clair de Fabric Loader. | Ajouter `"cobblemon": ">=1.8.1"` dans `depends`. |
+| BUG-4 | moyenne | Backend | **Suspecté, à confirmer par un test.** Quand le balayage TTL expire un joueur, `PresenceService.cleanupExpired()` retire sa présence **avant** que la fermeture de session déclenche `afterConnectionClosed` : `leaveAndDespawnGhost` ne trouve plus ni présence ni groupe, donc son Ghost n'est pas retiré chez les autres joueurs. | Faire renvoyer les présences expirées par `cleanupExpired` et diffuser `GhostEntityDespawn` depuis `PresenceTtlSweeper` ; ajouter un test d'intégration WebSocket. |
+| BUG-5 | moyenne | Backend | **Suspecté, à confirmer par un test.** `TradeService.accept` est annoté `@Transactional(noRollbackFor = ApiException.class)` (pour persister le statut `CANCELLED`). Si le PC du **second** destinataire est plein, `transferOwnership` lève `ERROR_POKEMON_PC_FULL` (une `ApiException`) **après** le transfert du premier Pokémon : la transaction est validée quand même, l'échange devient partiel et reste `PENDING`. | Vérifier la place libre des deux côtés avant tout transfert, ou n'exclure du rollback que le cas `ERROR_TRADE_OWNERSHIP_CHANGED`. |
 | BUG-3 | basse | Client | L'indicateur `[Ghost]` (CAD Partie 1 §5, §22.1) n'est pas affiché au-dessus des Ghost sortis. | Nom personnalisé visible sur l'entité, traduit. |
 
 ## 2. TODO
@@ -29,7 +29,7 @@ Identifiants : `BUG-n` (comportement incorrect), `TODO-n` (action à faire), `DE
 | TODO-6 | haute | Machine de dev | Restreindre le PostgreSQL natif à `localhost` (il écoute sur `0.0.0.0:5432`). |
 | TODO-7 | moyenne | Machine serveur | Rétablir l'accès SSH (`production-server`) : les déploiements du client retombent sur l'instance locale « Cobblemon 2 ». |
 | TODO-8 | moyenne | Les deux | Mettre à jour les commentaires de code qui citent les anciens noms de documentation (`PHANTASMON_DB_SCHEMA.md`, `PHANTASMON_API_REFERENCE.md`, `PHANTASMON_BACKEND_RUNNING.md`, `CONTEXT_CURSOR_BACKEND.md`, `phantasmon-backend-openapi.yaml`, `SERVER_AGENT_BRIEFING.md`, `Documentation/ecran_echange/`). Fichiers : backend `JwtService`, `BattleSession`, `CreateBattleRequest`, `ApiException`, `IdempotencyKey`, `Player`, `PlayerService`, `Pokemon`, `PokemonLegalityService`, `PlayerPresence`, `LiveTradeService`, `ProposeTradeRequest`, `application.properties`, `docker-compose.yml`, `.env.template` ; client `PhantasmonCanvasScreen`, `scripts/deploy-to-prod-server.sh` (local). **Ne jamais modifier `V7__trades_pokemon_history_without_fk.sql`** (migration appliquée : la somme de contrôle Flyway casserait). Correspondance des noms : `project/development-journal.md` (dépôt Client). |
-| TODO-9 | basse | Client | Corriger les javadocs obsolètes : `ClientCommonPacketListenerImplMixin` (« seul Mixin du mod », il y en a 7), `PhantasmonKeybinds` (« trois touches », il y en a 4), `BackendHealthPinger` (« backend local en dur »). |
+| TODO-9 | basse | Les deux | Corriger les javadocs obsolètes : client `ClientCommonPacketListenerImplMixin` (« seul Mixin du mod », il y en a 7), `PhantasmonKeybinds` (« trois touches », il y en a 4), `BackendHealthPinger` (« backend local en dur ») ; backend `RequestLoggingFilter` et `LogRetentionService` (citent un `logback-spring.xml` qui n'existe pas), `PhantasmonWebSocketHandler` (« Battle WS events arrive with Phase 9 », c'est fait). |
 | TODO-10 | basse | Client | Supprimer les textures inutilisées `textures/gui/sprites/pc/*` (toutes sauf `star.png`) depuis la refonte du PC du 2026-10-02. |
 | TODO-11 | basse | Les deux | Implémenter l'export Showdown vers le presse-papiers (CAD Partie 1 §11). |
 
@@ -59,4 +59,6 @@ Identifiants : `BUG-n` (comportement incorrect), `TODO-n` (action à faire), `DE
 
 | ID | Date | Résolution |
 |---|---|---|
-| — | 2026-10-03 | Licence : **GPL 3.0** retenue par Adrien. Documentation et README alignés ; reste `fabric.mod.json` (BUG-1). |
+| — | 2026-10-03 | Licence : **GPL 3.0** retenue par Adrien. Documentation et README alignés. |
+| BUG-1 | 2026-10-03 | `fabric.mod.json` : licence passée de `CC0-1.0` à `GPL-3.0-only`. |
+| BUG-2 | 2026-10-03 | `fabric.mod.json` : `"cobblemon": ">=1.8.1"` ajouté dans `depends` (Fabric Loader affiche un message clair si Cobblemon manque). |
