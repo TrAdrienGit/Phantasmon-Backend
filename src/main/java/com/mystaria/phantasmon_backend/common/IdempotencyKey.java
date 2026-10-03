@@ -19,7 +19,7 @@ import lombok.NoArgsConstructor;
 
 /**
  * Anti-duplication record for sensitive POSTs (CAD Partie 2 §12,
- * PHANTASMON_DB_SCHEMA.md §7). Deliberately has no FK to {@code players} —
+ * reference/database-schema.md §7). Deliberately has no FK to {@code players} —
  * a technical dedup log, not business-relational data.
  */
 @Entity

@@ -15,13 +15,15 @@ import lombok.extern.slf4j.Slf4j;
 /**
  * Logs every REST call (method, path, resulting status, duration). This is
  * the "toutes les opérations... via l'API" half of CAD Partie 2 §17's
- * logging requirement; WebSocket events get the same treatment once the
- * {@code websocket} domain exists (there is nothing to instrument yet).
+ * logging requirement; WebSocket events are logged where they are handled
+ * ({@code PhantasmonWebSocketHandler}, {@code LiveTradeService},
+ * {@code LiveBattleService}...).
  *
  * <p>This filter always logs through SLF4J regardless of the
  * {@code phantasmon.logging.enabled} toggle — whether that ends up in the
- * per-session file is decided once, centrally, by {@code logback-spring.xml},
- * not repeated here.
+ * per-session file is decided once, centrally, by
+ * {@link SessionLogFileEnvironmentPostProcessor} (Spring Boot's
+ * {@code logging.file.name}), not repeated here.
  */
 @Component
 @Slf4j

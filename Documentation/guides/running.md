@@ -87,6 +87,9 @@ docker compose exec -T postgres sh -c 'pg_restore -U "$POSTGRES_USER" -d "$POSTG
 
 Ne jamais commiter un fichier `.dump` : il contient les données réelles des joueurs.
 
+Sauvegardes régulières (base native ou conteneur, détection automatique) : `scripts/backup-database.ps1`, voir
+[`deployment.md`](deployment.md) §3.
+
 ## 6. Vérifier
 
 ```bash

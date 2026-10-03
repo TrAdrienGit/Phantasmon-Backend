@@ -22,7 +22,7 @@ classes/
 spring.log
 HELP.md
 
-# === Phantasmon file logs (one per session, see PHANTASMON_BACKEND_RUNNING.md) ===
+# === Phantasmon file logs (one per session, see Documentation/guides/running.md §7) ===
 /log/
 
 # === IDE ===
@@ -67,3 +67,8 @@ docker-compose.override.yml
 *~
 *.swp
 *.swo
+
+# === Database backups (real player data, see scripts/backup-database.ps1) ===
+/backups/
+*.dump
+*.dump.partial

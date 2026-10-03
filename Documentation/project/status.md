@@ -48,7 +48,7 @@ Adrien a confirmé le fonctionnement en jeu des phases 1 à 8 le 2026-10-03.
 | Limitation de débit par joueur | Partie 2 §13 | D-20 |
 | Arrêt des combats en cas de perte du backend (match nul) | Partie 1 §44 | Une déconnexion WebSocket termine le combat en `ABORTED` |
 | Combats Ghost contre Pokémon normal | Partie 1 §31 | Hors MVP |
-| Sauvegardes PostgreSQL en place et test de restauration | Partie 3 §I, Phase 10 | Aucune sauvegarde automatisée |
+| Sauvegardes PostgreSQL planifiées | Partie 3 §I, Phase 10 | Scripts de sauvegarde et de test de restauration prêts et testés ; planification à faire (TODO-16) ; pas d'archivage WAL (LIM-8) |
 | Publication Modrinth / CurseForge | Partie 3 §J, Phase 10 | Lien de téléchargement factice dans le client (TODO-3) |
 
 ## 4. Bugs connus, TODO et dette technique

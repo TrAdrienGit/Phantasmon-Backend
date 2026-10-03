@@ -5,7 +5,7 @@ import java.util.UUID;
 
 /**
  * Ephemeral, in-memory-only record of a connected Ghost Client (CAD Partie 2
- * §4, Partie 3 §F, PHANTASMON_DB_SCHEMA.md §8 — deliberately **not** a SQL
+ * §4, Partie 3 §F, reference/database-schema.md §8 — deliberately **not** a SQL
  * table). Immutable; {@link PresenceService} replaces the map entry wholesale
  * on each update rather than mutating shared state.
  */

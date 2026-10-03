@@ -20,7 +20,7 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 /**
- * A Ghost Pokémon (CAD Partie 1 §3, PHANTASMON_DB_SCHEMA.md §4). Only
+ * A Ghost Pokémon (CAD Partie 1 §3, reference/database-schema.md §4). Only
  * Cobblemon **identifiers** are stored (species/form/ability/moves as plain
  * strings) — never base stats, models, or animations, which stay resolved
  * client-side.

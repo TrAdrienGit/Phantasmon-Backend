@@ -21,7 +21,7 @@ import io.jsonwebtoken.security.Keys;
  * Issues and validates the short-lived access token / longer-lived refresh
  * token pair produced by {@code POST /auth/session} (CAD Partie 2 §3.2). Both
  * are self-contained signed JWTs; there is no server-side revocation store in
- * V1 (not part of {@code PHANTASMON_DB_SCHEMA.md}).
+ * V1 (no table for it in {@code Documentation/reference/database-schema.md}; decision D-16).
  */
 @Component
 public class JwtService {

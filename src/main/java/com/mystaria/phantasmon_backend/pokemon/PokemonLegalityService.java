@@ -10,13 +10,13 @@ import com.mystaria.phantasmon_backend.common.ApiException;
 /**
  * Enforces IV/EV legality on the {@code data} JSONB payload of a Pokémon,
  * called explicitly on create/update/import — never only via a Bean
- * Validation annotation (CONTEXT_CURSOR_BACKEND.md rule 2).
+ * Validation annotation (agents/backend-agent-context.md rule 2).
  *
  * <p><b>Scope limitation, deliberate</b>: moveset/ability-vs-species
  * consistency (CAD Partie 3 §B) is <em>not</em> checked here. That check
  * needs real Cobblemon species/ability/move data, which only exists on the
  * client (this backend has zero Minecraft/Fabric dependency by design — see
- * PHANTASMON_DB_SCHEMA.md §4.3 on `ability`). Only structurally-checkable
+ * reference/database-schema.md §4 on `ability`). Only structurally-checkable
  * rules (IV/EV ranges) are enforced server-side in V1.
  */
 @Service

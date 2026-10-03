@@ -27,8 +27,9 @@ import tools.jackson.databind.ObjectMapper;
  * Dispatches C2S presence and Ghost Entity messages (CAD Partie 2 §7/§8/§11,
  * client Phase 7). Live trade C2S messages ({@code Trade*}) are only routed
  * here — their logic lives in {@link LiveTradeService}; the asynchronous
- * {@code POST /trades} events are pushed from {@code TradeService}. Battle WS
- * events arrive with backend/client Phase 9.
+ * {@code POST /trades} events are pushed from {@code TradeService}. Ghost
+ * battle C2S messages ({@code Battle*}) are routed the same way to
+ * {@link LiveBattleService}.
  *
  * <p>Ghost Entity movement deliberately has no dedicated C2S message: a
  * player's ghost follows its owner (CAD §7), so a {@code GhostEntityMove} is

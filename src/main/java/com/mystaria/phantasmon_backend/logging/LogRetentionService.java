@@ -20,7 +20,7 @@ import lombok.extern.slf4j.Slf4j;
 
 /**
  * Keeps the {@code log/} directory (one file per backend session, see
- * {@code logback-spring.xml}) under a total size cap: when it grows past the
+ * {@link SessionLogFileEnvironmentPostProcessor}) under a total size cap: when it grows past the
  * cap, the oldest session files are deleted first. Runs once at startup and
  * then periodically, so a single very long session is also covered.
  *

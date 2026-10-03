@@ -11,7 +11,7 @@ import lombok.extern.slf4j.Slf4j;
 
 /**
  * Player identity lifecycle: created on first successful connection, refreshed
- * on every subsequent one (CAD Partie 4 Phase 1, PHANTASMON_DB_SCHEMA.md §3).
+ * on every subsequent one (CAD Partie 4 Phase 1, reference/database-schema.md §3).
  */
 @Service
 @Slf4j

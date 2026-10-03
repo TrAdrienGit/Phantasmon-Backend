@@ -22,7 +22,7 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 /**
- * A Ghost vs Ghost battle session (CAD Partie 2 §9, PHANTASMON_DB_SCHEMA.md §6).
+ * A Ghost vs Ghost battle session (CAD Partie 2 §9, reference/database-schema.md §6).
  * {@code teamA}/{@code teamB} are JSONB snapshots of the pokemon uuids involved
  * at battle start — no SQL FK, since they must survive the pokemon being
  * edited/deleted later. V1 stores structure + result guardrails only; the

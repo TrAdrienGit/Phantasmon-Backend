@@ -65,6 +65,13 @@ curl http://localhost:8080/health       # {"status":"UP","database":"UP"}
 
 The service listens on port 8080. Full launch guide, PostgreSQL in Docker and troubleshooting: [`Documentation/guides/running.md`](./Documentation/guides/running.md). All settings: [`configuration.md`](./Documentation/reference/configuration.md).
 
+## Backups
+
+`scripts/backup-database.ps1` dumps the database (native PostgreSQL or the `phantasmon-postgres` container, detected
+automatically) into `backups/` with 14-day daily / 3-month weekly rotation; `scripts/test-restore.ps1` proves a dump
+restores, in a throwaway container. Details and scheduling: `Documentation/guides/deployment.md` §3. Dumps hold real
+player data and are gitignored.
+
 ## Project structure
 
 ```text

@@ -14,7 +14,7 @@ import jakarta.validation.constraints.Min;
  * (destination PC slot) are alternative ways to say "move this Pokémon here"
  * — whichever one is given, the Pokémon ends up with only that kind of
  * location, the other cleared. A plain {@code null} on all three means "don't
- * move it" (partial-update convention). Uniform drag&drop semantics
+ * move it" (partial-update convention). Uniform drag-and-drop semantics
  * (Adrien 2026-09-27) apply regardless of which combination of PC/team is
  * involved: an empty destination is a plain move, an occupied one **swaps**
  * the two Pokémon's locations — there is no automatic first-free-slot

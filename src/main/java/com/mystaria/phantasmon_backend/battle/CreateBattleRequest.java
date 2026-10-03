@@ -8,7 +8,7 @@ import jakarta.validation.constraints.NotNull;
 
 /**
  * Matches {@code POST /battles}. {@code request_uuid} is required per
- * CONTEXT_CURSOR_BACKEND.md rule 3 (idempotent sensitive POSTs) even though
+ * agents/backend-agent-context.md rule 3 (idempotent sensitive POSTs) even though
  * the OpenAPI draft omits it for this endpoint — same precedent as
  * {@code ProposeTradeRequest}. {@code team} is the initiator's own team
  * (ownership re-verified server-side); the opponent's team is never taken

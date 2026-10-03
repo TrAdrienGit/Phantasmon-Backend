@@ -10,7 +10,7 @@
 # Host port: BDD_DOCKER_PORT (default 5433) so it never collides with a native PostgreSQL on 5432.
 # To make the backend use this container, set BDD_PORT to that same value in .env. The port is only
 # published on 127.0.0.1 — the database is never reachable from the network, only the backend on this
-# machine talks to it (PHANTASMON_BACKEND_RUNNING.md §8).
+# machine talks to it (Documentation/guides/running.md §5).
 #
 # Migrations (Flyway) run when the backend starts, exactly as against a native install.
 services:

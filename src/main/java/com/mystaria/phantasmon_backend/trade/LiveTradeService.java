@@ -31,7 +31,7 @@ import lombok.extern.slf4j.Slf4j;
  * over the presence WebSocket (C2S {@code TradeInvite}/{@code
  * TradeInviteResponse}/{@code TradeSelectOffer}/{@code TradeSetReady}/{@code
  * TradeLeave}, dispatched by {@code PhantasmonWebSocketHandler}) — see
- * {@code PHANTASMON_API_REFERENCE.md} for the exact payloads.
+ * {@code Documentation/reference/websocket-protocol.md} §4 for the exact payloads.
  *
  * <p>Complements, does not replace, the asynchronous {@code POST /trades}
  * propose/accept flow. In-memory only (like presence, single backend

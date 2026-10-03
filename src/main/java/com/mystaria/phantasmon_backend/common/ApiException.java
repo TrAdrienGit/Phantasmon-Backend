@@ -7,7 +7,7 @@ import org.springframework.http.HttpStatus;
 /**
  * A business-rule failure that must surface to the client as a structured
  * {@code {"error_code": ..., "details": {...}}} response, never raw text
- * (CAD Partie 3 §L, CONTEXT_CURSOR_BACKEND.md rule 4).
+ * (CAD Partie 3 §L, agents/backend-agent-context.md rule 4).
  */
 public class ApiException extends RuntimeException {
 

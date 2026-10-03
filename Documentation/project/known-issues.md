@@ -21,17 +21,13 @@ Identifiants : `BUG-n` (comportement incorrect), `TODO-n` (action à faire), `DE
 |---|---|---|---|
 | TODO-2 | haute | Client | Retirer `/phantasmon debug fingerprint` quand un vrai serveur dédié remplacera les tests « Ouvrir au LAN » (décision D-18). |
 | TODO-3 | haute | Client | Remplacer les métadonnées factices : `homepage` / `sources` de `fabric.mod.json` (`github.com/your-account/…`), lien de mise à jour `https://modrinth.com/mod/phantasmon` (`AuthService`). |
-| TODO-5 | haute | Backend | Mettre en place les sauvegardes PostgreSQL et tester une restauration (CAD Partie 3 §I, Phase 10). |
-| TODO-6 | haute | Machine de dev | Restreindre le PostgreSQL natif à `localhost` (il écoute sur `0.0.0.0:5432`). |
 | TODO-7 | moyenne | Machine serveur | Rétablir l'accès SSH (`production-server`) : les déploiements du client retombent sur l'instance locale « Cobblemon 2 ». |
-| TODO-8 | moyenne | Les deux | Mettre à jour les commentaires de code qui citent les anciens noms de documentation (`PHANTASMON_DB_SCHEMA.md`, `PHANTASMON_API_REFERENCE.md`, `PHANTASMON_BACKEND_RUNNING.md`, `CONTEXT_CURSOR_BACKEND.md`, `phantasmon-backend-openapi.yaml`, `SERVER_AGENT_BRIEFING.md`, `Documentation/ecran_echange/`). Fichiers : backend `JwtService`, `BattleSession`, `CreateBattleRequest`, `ApiException`, `IdempotencyKey`, `Player`, `PlayerService`, `Pokemon`, `PokemonLegalityService`, `PlayerPresence`, `LiveTradeService`, `ProposeTradeRequest`, `application.properties`, `docker-compose.yml`, `.env.template` ; client `PhantasmonCanvasScreen`, `scripts/deploy-to-prod-server.sh` (local). **Ne jamais modifier `V7__trades_pokemon_history_without_fk.sql`** (migration appliquée : la somme de contrôle Flyway casserait). Correspondance des noms : `project/development-journal.md` (dépôt Client). |
-| TODO-9 | basse | Les deux | Corriger les javadocs obsolètes : client `ClientCommonPacketListenerImplMixin` (« seul Mixin du mod », il y en a 7), `PhantasmonKeybinds` (« trois touches », il y en a 4), `BackendHealthPinger` (« backend local en dur ») ; backend `RequestLoggingFilter` et `LogRetentionService` (citent un `logback-spring.xml` qui n'existe pas), `PhantasmonWebSocketHandler` (« Battle WS events arrive with Phase 9 », c'est fait). |
-| TODO-10 | basse | Client | Supprimer les textures inutilisées `textures/gui/sprites/pc/*` (toutes sauf `star.png`) depuis la refonte du PC du 2026-10-02. |
 | TODO-11 | basse | Les deux | Implémenter l'export Showdown vers le presse-papiers (CAD Partie 1 §11). |
 | TODO-12 | haute | Client | Combat Ghost : les Pokémon n'ont pas leurs formes spéciales (le modèle de base s'affiche). |
 | TODO-13 | moyenne | Client | Les Ghost doivent être connus d'office des joueurs : dans Cobblemon, un Pokémon non scanné au Pokédex affiche « ???? » à la place de son nom. |
 | TODO-14 | haute | Les deux | Au lancement d'un combat Ghost, rappeler les Ghost sortis des deux joueurs ; tant que le combat dure, aucun des deux ne peut sortir de Ghost. |
 | TODO-15 | haute | Les deux | Faire un audit de sécurité (client et backend). |
+| TODO-16 | haute | Machine qui héberge la base | Planifier `scripts/backup-database.ps1` (tâche Windows quotidienne, `guides/deployment.md` §3.2) vers un autre disque. |
 
 ## 3. Dette technique
 
@@ -54,6 +50,7 @@ Identifiants : `BUG-n` (comportement incorrect), `TODO-n` (action à faire), `DE
 | LIM-5 | Instance backend unique : présence, échanges en direct et combats en cours sont en mémoire et perdus au redémarrage. |
 | LIM-6 | Derrière un proxy (Velocity/BungeeCord), deux serveurs partageant la même adresse seraient regroupés (empreinte de serveur). |
 | LIM-7 | L'échange asynchrone par commandes exige l'UUID Mojang de l'autre joueur (l'échange en direct évite ce problème). |
+| LIM-8 | Pas d'archivage WAL : la restauration revient à la dernière sauvegarde (jusqu'à 24 h de pertes avec une sauvegarde quotidienne). |
 
 ## 5. Résolu
 
@@ -67,3 +64,8 @@ Identifiants : `BUG-n` (comportement incorrect), `TODO-n` (action à faire), `DE
 | BUG-5 | 2026-10-03 | Confirmé par test, cause différente du soupçon : pas d'échange partiel (le `@Transactional` de `transferOwnership` rendait la transaction rollback-only), mais une erreur 500 (`UnexpectedRollbackException`) au lieu de `ERROR_POKEMON_PC_FULL`. `TradeService.requirePcRoom` vérifie la place des deux côtés avant tout transfert ; l'échange reste `PENDING`. Test `acceptWithTheInitiatorsPcFullFailsCleanlyAndChangesNothing`. |
 | TODO-1 | 2026-10-03 | URL du backend configurable : `backend_url` dans `config/phantasmon.json` (créé au premier lancement, défaut = machine de dev, lu au lancement). Test `BackendUrlFileTest`. |
 | TODO-4 | 2026-10-03 | Version unique **0.1.0** : client (`gradle.properties`), backend (`build.gradle`, jar `phantasmon-backend-0.1.0.jar`), `phantasmon.version.current` / `min-supported`. 1.0.0 est réservé à la première publication. |
+| TODO-5 | 2026-10-03 | Sauvegardes : `scripts/backup-database.ps1` (base native ou conteneur Docker, détection automatique ; rotation 14 jours / hebdomadaire 92 jours) et `scripts/test-restore.ps1` (restauration dans un conteneur jetable), testés sur les deux sources. Reste la planification (TODO-16) ; WAL non fait (LIM-8). |
+| TODO-6 | 2026-10-03 | PostgreSQL natif de la machine de dev : `listen_addresses = 'localhost'` (fait par Adrien, copie `postgresql.conf.bak-2026-10-03`). Vérifié : écoute sur `127.0.0.1` et `::1` seulement, port 5432 injoignable via Tailscale, backend `/health` UP. |
+| TODO-8 | 2026-10-03 | Commentaires de code et de configuration pointent vers les nouveaux documents (19 références, sections vérifiées). Seule exception, volontaire : `V7__trades_pokemon_history_without_fk.sql` garde `PHANTASMON_DB_SCHEMA.md §6` (migration appliquée, somme de contrôle Flyway) ; c'est `reference/database-schema.md` §6. |
+| TODO-9 | 2026-10-03 | Javadocs corrigées : `ClientCommonPacketListenerImplMixin` (premier des 7 Mixins), `PhantasmonKeybinds` (4 touches : P, O, G, B), `BackendHealthPinger` (URL de `config/phantasmon.json`), `RequestLoggingFilter` / `LogRetentionService` (`SessionLogFileEnvironmentPostProcessor`, pas de `logback-spring.xml`), `PhantasmonWebSocketHandler` (messages `Battle*` routés vers `LiveBattleService`). En plus : `&` brut dans `PokemonUpdateRequest` qui faisait échouer `./gradlew javadoc`. |
+| TODO-10 | 2026-10-03 | 20 fichiers supprimés de `textures/gui/sprites/pc/` (10 sprites nine-slice de l'ancien PC + leurs `.mcmeta`), aucune référence dans le code ; seul `star.png` reste (`PhantasmonCanvasScreen.SPRITE_STAR`). Récupérables par git. |
