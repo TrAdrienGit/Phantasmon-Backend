@@ -17,6 +17,7 @@ autonome (jar). Il ne couvre pas l'hébergement final (choix d'infrastructure no
     premier démarrage — il n'y a rien à exécuter manuellement en SQL.
 - **Docker** n'est nécessaire **que** pour la suite de tests (`./gradlew test`, via Testcontainers). Il
   n'est **pas** requis pour simplement lancer l'application.
+  (Docker peut aussi héberger PostgreSQL lui-même à la place d'une installation native : voir §10.)
 
 ---
 
@@ -195,3 +196,46 @@ mécanisme natif de Spring Boot qui décide d'attacher ou non un appender fichie
 `logback-spring.xml` personnalisé (`<if>` conditionnel) s'est révélé peu fiable à cause du double passage
 d'initialisation de Logback avec Spring (`<springProperty>` non résolu assez tôt) — voir la mémoire du
 projet pour le détail si cette zone doit être retouchée un jour.
+
+---
+
+## 10. PostgreSQL en conteneur (docker compose)
+
+Alternative à l'installation native de PostgreSQL : `docker-compose.yml` à la racine du projet lance
+PostgreSQL 18 (même version majeure que l'installation native de dev) dans un conteneur. Il lit le **même
+`.env`** que le backend (`BDD_USER`, `BDD_PASSWORD`, `BDD_NAME`) : un seul jeu d'identifiants.
+
+```bash
+docker compose up -d          # démarre (base vide au premier lancement)
+docker compose ps             # doit afficher "healthy"
+docker compose down           # arrête, les données restent (volume nommé phantasmon-pgdata)
+docker compose down -v        # arrête ET supprime les données
+```
+
+- **Port** : publié uniquement sur `127.0.0.1`, par défaut **5433** (`BDD_DOCKER_PORT`) pour ne jamais
+  entrer en collision avec un PostgreSQL natif sur 5432. La base n'est donc pas joignable depuis le réseau,
+  seul le backend de la même machine lui parle.
+- **Faire utiliser le conteneur au backend** : dans `.env`, mettre `BDD_PORT=5433` (la valeur de
+  `BDD_DOCKER_PORT`), le reste ne change pas. Les migrations Flyway s'appliquent au démarrage du backend,
+  comme avec une installation native. Pour revenir au natif : remettre `BDD_PORT=5432`.
+- **Vérifié le 2026-10-03** : conteneur sain, backend lancé contre lui sur le port 5433 → les 8 migrations
+  appliquées (version v8) et `GET /health` répond `{"status":"UP","database":"UP"}`. Rien n'a touché à
+  l'installation native ni à ses données.
+- **Reprendre les données de l'installation native** (optionnel, jamais fait automatiquement). Copie
+  seulement : la base native n'est pas modifiée. Démarrer le conteneur *avant* le backend (le backend créerait
+  le schéma lui-même ; la restauration le remplace avec `--clean`), puis :
+
+```bash
+# PGPASSWORD = mot de passe de BDD_USER ; <user>/<db> = BDD_USER / BDD_NAME
+pg_dump -h localhost -p 5432 -U <user> -Fc <db> > phantasmon.dump
+docker compose exec -T postgres sh -c 'pg_restore -U "$POSTGRES_USER" -d "$POSTGRES_DB" --no-owner --clean --if-exists' < phantasmon.dump
+```
+
+  Ne pas committer le fichier `.dump` (il contient les vraies données des joueurs).
+- **Constat de sécurité sur l'installation native de dev** : elle écoute sur `0.0.0.0:5432` (toutes les
+  interfaces), contrairement à la recommandation du §8 / du briefing serveur (PostgreSQL limité à
+  `localhost`). Sans conséquence tant que la machine n'est pas exposée, mais à corriger
+  (`listen_addresses = 'localhost'` dans `postgresql.conf`, ou pare-feu) avant tout usage « prod ». Le
+  conteneur, lui, n'est publié que sur `127.0.0.1`.
+- Sur la machine serveur (Windows 10) : même fichier ; nécessite Docker Desktop + WSL2.
+
