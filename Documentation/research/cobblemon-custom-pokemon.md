@@ -6,6 +6,11 @@ nature: notes reformulées, pas une copie du tutoriel original
 
 # Notes — Création d'un Pokémon custom sous Cobblemon
 
+> Note de recherche (2026-09-23), document identique dans les deux dépôts. Elle explique pourquoi le backend
+> peut se contenter d'identifiants texte : Cobblemon résout tout (stats, modèle, animations) à partir du nom de
+> l'espèce. Les conventions d'identifiants réellement utilisées sont décrites dans
+> `Phantasmon-Client/Documentation/architecture/showdown-import.md`.
+
 Résumé technique du processus officiel de création d'une espèce custom ("fakemon"), utile comme référence pour comprendre le format d'identifiants que le backend Phantasmon doit référencer (cf. CAD Partie 2 §6 — pas de duplication des données Cobblemon).
 
 ## Principe général

@@ -6,7 +6,7 @@
 
 The backend has no dependency on Minecraft or any game server — it only talks to the client mod. Every sensitive rule is enforced here, never trusted from the client: ownership (re-checked on every mutation), Pokémon legality, idempotent creation, atomic trades, battle-result guardrails. It stores Cobblemon **identifiers only** (species, moves, ability, item…); stats, models and animations are resolved by each client from its own Cobblemon install.
 
-Design documents and reference docs live in [`Documentation/`](./Documentation).
+Full documentation (architecture, API and WebSocket references, database schema, guides, specifications, project status) lives in [`Documentation/`](./Documentation/README.md), in French.
 
 ## What it does
 
@@ -17,11 +17,12 @@ Design documents and reference docs live in [`Documentation/`](./Documentation).
 | **Presence & Ghosts** | WebSocket `/ws?token=…`: players grouped by server fingerprint + dimension, heartbeat with TTL cleanup, Ghost spawn/move/despawn relayed to the group (owner included). In memory only. |
 | **Live trades** | Invitation → both players see each other's team → offers → both ready → one transaction swaps owners and team slots, recorded in `trades`. In-memory negotiation over the WebSocket. |
 | **Async trades** | `POST /trades`, accept/cancel, history — offer now, accept later. |
-| **Battles** | Battle sessions and result guardrails (the battle itself will run on a host client — Phase 9). |
+| **Live battles** | Invitation → the backend picks the **host** (alternating between the same two players) → the host client runs Cobblemon's own battle engine → the backend relays its encoded packets to the guest and the guest's choices back, handles the optional 90 s turn timer and records the result in `battle_sessions`. |
+| **Battle sessions (REST)** | `POST /battles`, result submission with guardrails — kept, not used by the live flow. |
 | **Version** | `GET /version` handshake (current / minimum supported client version). |
 | **Ops** | `GET /health` (DB check), one log file per run under `log/` with 5 GiB retention. |
 
-Every error is structured — `{"error_code": "ERROR_...", "details": {...}}` — and translated by the client. Exact endpoints, WebSocket messages and example payloads: [`Documentation/PHANTASMON_API_REFERENCE.md`](./Documentation/PHANTASMON_API_REFERENCE.md).
+Every error is structured — `{"error_code": "ERROR_...", "details": {...}}` — and translated by the client. Exact endpoints and payloads: [`rest-api.md`](./Documentation/reference/rest-api.md) ([OpenAPI](./Documentation/reference/openapi.yaml)); WebSocket messages: [`websocket-protocol.md`](./Documentation/reference/websocket-protocol.md); error codes: [`error-codes.md`](./Documentation/reference/error-codes.md).
 
 ## Tech stack
 
@@ -37,7 +38,7 @@ Every error is structured — `{"error_code": "ERROR_...", "details": {...}}` �
 ## Requirements
 
 - JDK 21
-- PostgreSQL (a local install works; the app creates its schema through Flyway)
+- PostgreSQL (a local install, or the provided `docker-compose.yml`; the app creates its schema through Flyway)
 - Docker, only to run the test suite (Testcontainers)
 
 ## Configuration
@@ -49,6 +50,7 @@ Read from environment variables, or from a `.env` file at the project root in de
 | `BDD_HOST`, `BDD_PORT`, `BDD_NAME`, `BDD_USER`, `BDD_PASSWORD` | PostgreSQL connection |
 | `JWT_SECRET` | HMAC key for access/refresh tokens |
 | `LOGGING_ENABLED` | Per-run log files under `log/` (default `true`) |
+| `BDD_DOCKER_PORT` | Host port of the optional PostgreSQL container (default `5433`, `docker-compose.yml` only) |
 
 Other tunables (token lifetimes, presence TTL, trade invitation TTL, versions) are in `src/main/resources/application.properties`.
 
@@ -61,7 +63,7 @@ java -jar build/libs/phantasmon-backend-0.0.1-SNAPSHOT.jar
 curl http://localhost:8080/health       # {"status":"UP","database":"UP"}
 ```
 
-The service listens on port 8080. Full launch guide and troubleshooting: [`Documentation/PHANTASMON_BACKEND_RUNNING.md`](./Documentation/PHANTASMON_BACKEND_RUNNING.md).
+The service listens on port 8080. Full launch guide, PostgreSQL in Docker and troubleshooting: [`Documentation/guides/running.md`](./Documentation/guides/running.md). All settings: [`configuration.md`](./Documentation/reference/configuration.md).
 
 ## Project structure
 
@@ -71,7 +73,7 @@ src/main/java/com/mystaria/phantasmon_backend/
 ├── player/      # player identity (Mojang UUID, last username)
 ├── pokemon/     # CRUD, legality, team/PC slots
 ├── trade/       # async trades + live trade sessions
-├── battle/      # battle sessions, result guardrails
+├── battle/      # live battles (invite, host, relay, timer) + REST sessions
 ├── presence/    # in-memory presence, grouping, TTL
 ├── websocket/   # handshake auth, message dispatch, session registry
 ├── version/     # client version handshake
@@ -79,10 +81,10 @@ src/main/java/com/mystaria/phantasmon_backend/
 ├── logging/     # per-run log files, retention, request logging
 ├── common/      # structured errors, idempotency, clock
 └── config/      # .env loading
-src/main/resources/db/migration/   # Flyway V1…V7
+src/main/resources/db/migration/   # Flyway V1…V8
 ```
 
-Database schema and its ER diagram: [`Documentation/PHANTASMON_DB_SCHEMA.md`](./Documentation/PHANTASMON_DB_SCHEMA.md).
+Database schema, ER diagram and migration history: [`Documentation/reference/database-schema.md`](./Documentation/reference/database-schema.md).
 
 ## Tests
 
@@ -90,8 +92,8 @@ Database schema and its ER diagram: [`Documentation/PHANTASMON_DB_SCHEMA.md`](./
 ./gradlew test
 ```
 
-110+ tests, written test-first. Integration tests boot the real application against a PostgreSQL Testcontainer (JSONB behaves differently from H2), and WebSocket features are tested with a real embedded server and a real WebSocket client.
+About 125 tests, written test-first. Integration tests boot the real application against a PostgreSQL Testcontainer (JSONB behaves differently from H2), and WebSocket features are tested with a real embedded server and a real WebSocket client.
 
 ## License
 
-CC0 1.0 Universal — see [`LICENSE`](./LICENSE).
+GNU General Public License v3.0 — see [`LICENSE`](./LICENSE).

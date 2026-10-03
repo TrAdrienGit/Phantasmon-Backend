@@ -1,5 +1,12 @@
 # CAD Phantasmon — Partie 4 : Plan de développement
 
+> **Statut du document** : plan de développement d'origine. Les phases 0 à 9 sont terminées (cœur de la phase 9
+> le 2026-10-03), la phase 10 n'a pas commencé. Avancement détaillé : [`project/status.md`](../project/status.md).
+> Document identique dans les dépôts Backend et Client (`Documentation/specifications/`).
+>
+> Le dépôt `phantasmon-docs` cité ci-dessous n'a jamais été créé : la documentation vit dans le dossier
+> `Documentation/` de chaque dépôt.
+
 Ce plan séquence le développement en phases. Principe directeur : **le backend d'abord**, parce qu'il est source de vérité, plus facile à couvrir en TDD (logique pure, pas de dépendance Minecraft), et que le client ne peut de toute façon rien afficher sans lui. Le combat (le point le plus incertain de l'architecture, CAD Partie 2 §9) est volontairement traité en dernier.
 
 Chaque phase liste : objectif, livrables, definition of done (DoD).
@@ -8,10 +15,15 @@ Chaque phase liste : objectif, livrables, definition of done (DoD).
 
 ## Phase 0 — Fondations (avant code métier)
 
+> **Note d'implémentation (2026-10-03)** : terminée. Paquets réels : `auth, player, pokemon, trade, battle, presence, websocket, version, health, logging, common, config` (pas de paquet `admin`). `docker-compose.yml` ajouté le 2026-10-03 (alternative à l'installation native).
+
 **Objectif** : lever les prérequis identifiés avant d'écrire la première feature.
 
 - Repos créés (`phantasmon-client`, `phantasmon-backend`, `phantasmon-docs`), `.gitignore` en place.
-- Licence GPL 3.0 déposée dans chaque repo (`LICENSE`).
+- Licence déposée dans chaque repo (`LICENSE`).
+
+> **Note (2026-10-03)** : licence retenue : **GPL 3.0** (fichiers `LICENSE`). Les deux copies de ce plan divergeaient (GPL 3.0 / CC0 1.0) ; il reste à corriger `fabric.mod.json` (voir `project/known-issues.md`, BUG-1).
+
 - Audit rapide de l'API publique Cobblemon (`CobblemonEvents` et équivalents) pour identifier ce qui est stable vs interne — notes à garder dans `phantasmon-docs`.
 - Squelette Spring Boot généré (auth, pokemon, trade, battle, presence, websocket, version, admin, common — voir `CONTEXT_CURSOR_BACKEND.md`).
 - Squelette Fabric généré via le template officiel (1.21.1, client-only).
@@ -24,6 +36,8 @@ Chaque phase liste : objectif, livrables, definition of done (DoD).
 ---
 
 ## Phase 1 — Backend : identité & Pokémon (cœur du système)
+
+> **Note d'implémentation (2026-10-03)** : terminée. Légalité limitée aux IV/EV (décision D-02).
 
 **Objectif** : rendre le backend capable de gérer un joueur et ses Pokémon, en autonomie, testé.
 
@@ -42,6 +56,8 @@ Chaque phase liste : objectif, livrables, definition of done (DoD).
 
 ## Phase 2 — Backend : présence & WebSocket
 
+> **Note d'implémentation (2026-10-03)** : terminée.
+
 **Objectif** : poser l'infrastructure temps réel, sans encore de logique Ghost Entity dessus.
 
 - `PlayerPresence` en mémoire, groupement `server_fingerprint` + `dimension` (§4 Partie 2).
@@ -56,6 +72,8 @@ Chaque phase liste : objectif, livrables, definition of done (DoD).
 
 ## Phase 3 — Backend : Trade
 
+> **Note d'implémentation (2026-10-03)** : terminée.
+
 **Objectif** : premier flux "métier complet" au-dessus des fondations (bon test de la robustesse de Phase 1-2).
 
 - Table `trades`, endpoints `propose/accept/cancel` (§D Partie 3).
@@ -68,6 +86,8 @@ Chaque phase liste : objectif, livrables, definition of done (DoD).
 
 ## Phase 4 — Backend : Battle (structure seulement, pas l'arbitrage)
 
+> **Note d'implémentation (2026-10-03)** : terminée. Il n'y a rien à « restaurer » : le combat se joue sur des copies jetables, le Ghost n'est jamais modifié.
+
 **Objectif** : poser la donnée et les endpoints de session de combat, sans encore le modèle "client hôte" (qui nécessite le client, Phase 8).
 
 - `battle_sessions`, `POST /battles`, `POST /battles/{uuid}/result`.
@@ -79,6 +99,8 @@ Chaque phase liste : objectif, livrables, definition of done (DoD).
 ---
 
 ## Phase 5 — Client : squelette + auth + connexion
+
+> **Note d'implémentation (2026-10-03)** : terminée et validée en jeu. Connexion automatique à l'entrée dans un monde, `/phantasmon login` en secours.
 
 **Objectif** : premier lien réel entre le mod et le backend.
 
@@ -93,6 +115,8 @@ Chaque phase liste : objectif, livrables, definition of done (DoD).
 
 ## Phase 6 — Client : Pokémon (PC, équipe, création/édition)
 
+> **Note d'implémentation (2026-10-03)** : terminée : PC graphique, éditeur complet, import Showdown. L'export Showdown n'est pas fait.
+
 **Objectif** : rendre le système utilisable sans encore le volet visuel Ghost Entity.
 
 - UI de création/édition de Pokémon, appelant le backend (Phase 1).
@@ -106,6 +130,8 @@ Chaque phase liste : objectif, livrables, definition of done (DoD).
 
 ## Phase 7 — Client : Ghost Entity (rendu, spawn/despawn, mouvement)
 
+> **Note d'implémentation (2026-10-03)** : terminée et validée à deux comptes.
+
 **Objectif** : la fonctionnalité la plus visible du mod.
 
 - Rendu client-only réutilisant modèles/animations Cobblemon (§7 Partie 2).
@@ -118,6 +144,8 @@ Chaque phase liste : objectif, livrables, definition of done (DoD).
 
 ## Phase 8 — Client : Trade UI
 
+> **Note d'implémentation (2026-10-03)** : terminée : écran d'échange en direct validé à deux comptes, commandes d'échange asynchrone conservées.
+
 **Objectif** : brancher l'UI sur le backend de la Phase 3.
 
 - Proposition/acceptation/annulation depuis le jeu.
@@ -128,6 +156,8 @@ Chaque phase liste : objectif, livrables, definition of done (DoD).
 ---
 
 ## Phase 9 — Client + Backend : Combat Ghost
+
+> **Note d'implémentation (2026-10-03)** : cœur terminé et validé à deux comptes le 2026-10-03 (hôte sur serveur intégré et hôte client pur, animations d'attaque comprises). Alternance de l'hôte implémentée.
 
 **Objectif** : la phase la plus complexe, volontairement en dernier — tout le reste du système doit déjà être stable.
 
@@ -140,6 +170,8 @@ Chaque phase liste : objectif, livrables, definition of done (DoD).
 ---
 
 ## Phase 10 — Durcissement & publication
+
+> **Note d'implémentation (2026-10-03)** : non commencée.
 
 **Objectif** : passage en conditions réelles.
 

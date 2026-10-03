@@ -1,5 +1,12 @@
 # CAD Ghost Pokémon — Partie 2 : Architecture technique
 
+> **Statut du document** : architecture technique de référence (« pas de mod serveur, pair-à-pair via backend »),
+> toujours valide dans ses principes. Les détails d'implémentation ont évolué : les notes datées signalent les
+> écarts. Document identique dans les dépôts Backend et Client (`Documentation/specifications/`).
+>
+> Architecture réelle : [`architecture/system-overview.md`](../architecture/system-overview.md) ; contrats réels :
+> `reference/` du dépôt Backend ; décisions : [`architecture/decisions.md`](../architecture/decisions.md).
+
 ## 0. Principe directeur
 
 Ce document formalise les choix techniques validés en échange avec le porteur du projet. Le principe central qui structure toute l'architecture est le suivant :
@@ -22,6 +29,8 @@ Ce choix a des implications profondes sur la synchronisation des entités, l'aut
 ---
 
 ## 1. Stack technique retenue
+
+> **Note d'implémentation (2026-10-03)** : le backend utilise **Spring Boot 4.1.1** (pas 3.x, décision D-17). Le mod utilise les mappings Mojang officiels et Fabric Loom ; Gradle nécessite un JDK 25 pour s'exécuter, le code cible Java 21.
 
 | Composant | Choix |
 |---|---|
@@ -96,6 +105,8 @@ On réutilise le mécanisme standard d'authentification Minecraft (celui utilis�
 
 ### 3.2 Ce que ça implique
 
+> **Note d'implémentation (2026-10-03)** : jetons implémentés : access token 20 min, refresh token 7 jours avec rotation, renouvelé automatiquement par le client. Pas de révocation côté backend (décision D-16).
+
 - Fonctionne uniquement pour les comptes Minecraft premium (online-mode). Les comptes offline/cracked ne pourront pas être authentifiés de façon fiable — **à assumer explicitement comme prérequis du projet**.
 - Le token JWT devient la seule preuve d'identité acceptée par le backend pour toute opération sensible.
 - Rotation : token court (ex. 15–30 min) + refresh token stocké côté client, invalidable côté backend en cas de compromission.
@@ -103,6 +114,8 @@ On réutilise le mécanisme standard d'authentification Minecraft (celui utilis�
 ---
 
 ## 4. Sessions de jeu & regroupement des joueurs
+
+> **Note d'implémentation (2026-10-03)** : implémenté : `server_fingerprint` = SHA-256 de l'adresse du serveur, ou `"singleplayer"` en monde local ; position envoyée chaque seconde. Pour les tests « Ouvrir au LAN », une surcharge de l'empreinte existe (`/phantasmon debug fingerprint`, décision D-18).
 
 Puisque le backend ne sait pas nativement "quel serveur Minecraft" héberge quels joueurs, il faut un mécanisme explicite pour regrouper les joueurs qui doivent se voir mutuellement.
 
@@ -126,6 +139,8 @@ Cela reproduit fonctionnellement la notion de "même serveur" sans jamais avoir 
 ## 5. Base de données — PostgreSQL
 
 ### 5.1 Modèle hybride retenu
+
+> **Note d'implémentation (2026-10-03)** : SQL illustratif. Le schéma réel (contraintes, index, migrations V1 à V8) est décrit dans `reference/database-schema.md` du dépôt Backend.
 
 Colonnes classiques pour tout ce qui est interrogé, filtré, indexé ou impliqué dans des contraintes d'intégrité. JSONB pour tout ce qui est spécifique/variable (stats calculées, IVs/EVs, objets, historique).
 
@@ -187,6 +202,8 @@ CREATE TABLE idempotency_keys (
 
 ### 5.2 Contenu du champ `data` (JSONB) pour un Pokémon
 
+> **Note d'implémentation (2026-10-03)** : contenu réel : `nickname`, `gender` (`M`/`F`), `teraType`, `ivs`, `evs`, `moves` (identifiants Cobblemon sans séparateur, ex. `aquatail`), `heldItem` (ex. `assault_vest`), `friendship` (seulement si l'import Showdown contient `Happiness:`). Les clés `heldItem` et `teraType` sont en camelCase. `origin` n'est pas utilisé.
+
 ```json
 {
   "ivs": { "hp": 31, "atk": 12, "def": 20, "spa": 31, "spd": 25, "spe": 18 },
@@ -205,6 +222,8 @@ CREATE TABLE idempotency_keys (
 Confirmé : le backend ne stocke **que des identifiants** (espèce, forme, capacité, attaques, objets) sous forme de chaînes stables (les identifiants internes Cobblemon), jamais les données de jeu elles-mêmes (stats de base, animations, effets). Le mod résout ces identifiants localement à l'aide des données Cobblemon présentes chez le joueur.
 
 ### 6.1 `cobblemon_data_version`
+
+> **Note d'implémentation (2026-10-03)** : la version est stockée sur chaque Pokémon, mais la comparaison avec la version locale n'est pas encore exploitée par le client. Une espèce introuvable empêche simplement l'affichage du Ghost (avertissement dans le log), sans modifier les données.
 
 Chaque Pokémon stocke la version Cobblemon avec laquelle il a été créé/modifié pour la dernière fois (`cobblemon_data_version` en colonne, voir §5.1).
 
@@ -225,6 +244,8 @@ Aucune migration automatique agressive en V1 : on log l'incompatibilité et on b
 ---
 
 ## 7. Ghost Entity — rendu 100% client
+
+> **Note d'implémentation (2026-10-03)** : implémenté avec la classe `PokemonEntity` de Cobblemon, ajoutée directement au `ClientLevel` local (sans IA, invulnérable, sans physique de poussée). Le suivi et la balade sont calculés par chaque client (décision D-11).
 
 Conséquence directe de l'absence de mod serveur : un Ghost Pokémon **n'existe jamais** en tant qu'entité Minecraft réelle (aucun ID d'entité serveur, aucun packet vanilla d'entité). C'est un objet purement visuel et local à chaque client Ghost.
 
@@ -256,6 +277,8 @@ Chaque Ghost Client concerné (dont Bob, s'il a l'addon) :
 
 ## 8. Cycle de vie de la Ghost Entity
 
+> **Note d'implémentation (2026-10-03)** : implémenté : rappel automatique au changement de dimension, à la mort et à la déconnexion ; le backend retire aussi le Ghost à la fermeture de la connexion ou après 30 s sans heartbeat. Seul un Pokémon de l'équipe peut sortir (décision D-10).
+
 ```text
 Envoi
 Client → Backend : SendOutGhost
@@ -284,6 +307,8 @@ C'est la conséquence la plus lourde du choix "pas de mod serveur". Sans mod ser
 
 ### 9.1 Option retenue pour la V1
 
+> **Note d'implémentation (2026-10-03)** : implémenté (Phase 9, 2026-10-03) avec la pile de combat serveur de Cobblemon exécutée sur le client hôte et l'interface de combat native de Cobblemon. Le backend relaie les paquets Cobblemon encodés et ne reçoit pas les actions pour audit (décision D-05).
+
 **Client hôte autoritaire + validation best-effort du backend** :
 
 ```text
@@ -306,6 +331,8 @@ Fin de combat
 
 ### 9.2 Limitation assumée et à valider explicitement
 
+> **Note d'implémentation (2026-10-03)** : garde-fous implémentés : seul l'hôte rapporte le résultat, vainqueur parmi les participants (ou nul), session encore active, alternance de l'hôte entre deux mêmes joueurs (`battle_sessions.host_uuid`). Pas de contrôle des dégâts.
+
 Ce modèle fait du client hôte une autorité de fait sur le déroulement du combat — un joueur malveillant contrôlant son propre client pourrait théoriquement fausser un résultat de combat qu'il héberge. En V1, on l'accepte comme limitation connue (le système Ghost n'étant pas positionné comme compétitif/classé au sens strict). Des garde-fous minimaux seront tout de même mis en place :
 
 - le backend vérifie la cohérence globale du résultat (ex. pas plus de dégâts qu'un coup critique max théorique, pas de Pokémon invalide dans l'équipe envoyée) ;
@@ -317,6 +344,8 @@ Ce modèle fait du client hôte une autorité de fait sur le déroulement du com
 ---
 
 ## 10. API REST
+
+> **Note d'implémentation (2026-10-03)** : API réelle : `reference/rest-api.md` (dépôt Backend). Ajouts : `POST /auth/refresh`, `GET /version`, échanges (`/trades`). Non implémentés : `/players/{uuid}/team`, `/pokemon/import-showdown`, `/pokemon/{uuid}/export`, `/admin/*` (décisions D-09, D-20).
 
 ```http
 # Authentification
@@ -355,6 +384,8 @@ Toutes les routes (hors `/auth/session` et `/health`) exigent un JWT valide. Tou
 ---
 
 ## 11. WebSocket — canaux et événements
+
+> **Note d'implémentation (2026-10-03)** : protocole réel : `reference/websocket-protocol.md` (dépôt Backend). `RecallGhost` ne prend pas de paramètre (un seul Ghost sorti par joueur) ; `BattleAction`/`BattleState`/`BattleEnded(result)` sont remplacés par l'invitation de combat, `BattlePacket`, `BattleChoice` et `BattleEnded` ; s'y ajoutent les messages d'échange en direct.
 
 ```text
 Connexion : wss://backend/ws?token={jwt}
@@ -398,6 +429,8 @@ originale stockée              Stocke la réponse sous request_uuid = X
 
 ## 13. Sécurité
 
+> **Note d'implémentation (2026-10-03)** : la limitation de débit et le rôle administrateur ne sont pas implémentés (décision D-20).
+
 - Toute requête sensible passe par le JWT émis en §3, jamais par une déclaration brute du client.
 - Le backend est la seule source de vérité sur l'ownership : `Ce pokemon_uuid appartient-il à ce player_uuid authentifié ?` est vérifié systématiquement avant modification/suppression/échange/combat.
 - Rate limiting par joueur sur les endpoints sensibles (création, échange, combat) pour limiter l'abus depuis un client modifié.
@@ -406,6 +439,8 @@ originale stockée              Stocke la réponse sous request_uuid = X
 ---
 
 ## 14. Cache
+
+> **Note d'implémentation (2026-10-03)** : pas de cache : le PC recharge la liste complète des Pokémon du joueur après chaque action.
 
 Cache mémoire côté **Ghost Client**, pas côté serveur Minecraft (puisqu'il n'existe pas) :
 
@@ -422,6 +457,8 @@ Le cache n'est pas une priorité de la V1 (confirmé) : chaque lecture peut inte
 ---
 
 ## 15. Ghost PC — pagination
+
+> **Note d'implémentation (2026-10-03)** : l'endpoint paginé existe, mais l'écran PC charge en une fois tous les Pokémon du joueur (480 au maximum) et filtre localement.
 
 ```http
 GET /players/{uuid}/pc?box=1
@@ -448,6 +485,8 @@ Aucune route admin n'est accessible sans JWT à rôle élevé. Aucune logique ad
 
 ## 17. Logs
 
+> **Note d'implémentation (2026-10-03)** : implémenté : un fichier texte par démarrage du backend, rétention plafonnée à 5 Gio, journalisation de chaque requête REST et des événements WebSocket importants. Pas de format JSON structuré.
+
 Confirmé : logging maximal en V1 (au-delà du strict minimum technique prévu en Partie 1 §30), couvrant :
 
 - toutes les opérations CRUD Pokémon (avec request_uuid, player_uuid, horodatage) ;
@@ -461,6 +500,8 @@ Niveau de détail à affiner en Partie 3 (rotation, rétention, format structur�
 ---
 
 ## 18. Heartbeat / disponibilité backend
+
+> **Note d'implémentation (2026-10-03)** : heartbeat WebSocket chaque seconde, TTL de 30 s côté backend. À l'entrée dans un monde, le client ne se connecte que si `GET /health` répond `UP` (silencieusement sinon). Une perte de connexion pendant un combat le termine en `ABORTED`.
 
 ```text
 Ghost Client ⇄ Ghost Backend : ping périodique (WebSocket Heartbeat / HeartbeatAck)
@@ -518,6 +559,8 @@ Deux groupes de serveurs différents → aucune fuite d'événements entre group
 ---
 
 ## 20. Points restant ouverts pour la Partie 3
+
+> **Note d'implémentation (2026-10-03)** : points 1 (modèle « client hôte » retenu et implémenté), 3 (DTO, voir `reference/`) et 5 (rétention des logs) traités ; points 2 (proxy) et 4 (hébergement) toujours ouverts.
 
 1. **Combat Ghost** : valider définitivement le modèle "client hôte + garde-fous" (§9) ou explorer une alternative pour la V1.
 2. **Fingerprint de groupement serveur** derrière un proxy (Velocity/BungeeCord) — à affiner si le projet cible ce cas.

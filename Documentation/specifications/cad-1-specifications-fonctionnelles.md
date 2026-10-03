@@ -1,4 +1,16 @@
 # CAD — Cahier des Charges Fonctionnel
+
+> **Statut du document** : spécification fonctionnelle d'origine (V1.0), conservée comme **référence de
+> l'intention produit**. Elle n'est pas réécrite au fil du développement : les notes d'implémentation datées
+> signalent les écarts. Document identique dans les dépôts Backend et Client (`Documentation/specifications/`).
+>
+> - L'**architecture** décrite ici (« Ghost Server Addon », adaptateur côté serveur Minecraft) est **obsolète** :
+>   elle est remplacée par l'architecture sans mod serveur de la [Partie 2](cad-2-architecture-technique.md)
+>   (décision D-01).
+> - Sur la légalité des Pokémon, la [Partie 3](cad-3-complements.md) §B prime sur le §7.1 ci-dessous.
+> - État réel du projet : [`project/status.md`](../project/status.md) ; écarts justifiés :
+>   [`architecture/decisions.md`](../architecture/decisions.md).
+
 ## Ghost Pokémon — Partie 1 : Spécifications fonctionnelles
 
 **Version :** 1.0  
@@ -26,6 +38,8 @@ L'objectif est de fournir une expérience aussi proche que possible d'un Pokémo
 ---
 
 # 2. Philosophie générale
+
+> **Note d'implémentation (2026-10-03)** : le schéma ci-dessous (« Ghost Server Addon », « Ghost Layer / Adapter » sur le serveur Minecraft) est obsolète. Aucun code ne tourne côté serveur Minecraft ; les clients parlent directement au backend (Partie 2 §0, décision D-01).
 
 Le système Ghost doit fonctionner comme une **couche indépendante au-dessus de Cobblemon**.
 
@@ -107,6 +121,8 @@ Le changement de propriétaire ne doit pas modifier l'identité interne du Poké
 
 # 5. Indicateur Ghost
 
+> **Note d'implémentation (2026-10-03)** : l'indicateur `[Ghost]` n'est pas encore affiché au-dessus des Ghost sortis dans le monde (voir `project/status.md` §3).
+
 Les Ghost Pokémon doivent être clairement identifiables.
 
 Un indicateur `[Ghost]` doit être affiché avec le Pokémon.
@@ -161,6 +177,8 @@ La personnalisation doit notamment permettre de modifier :
 - autres données pertinentes exposées par le modèle Ghost.
 
 ## 7.1 Combinaisons impossibles
+
+> **Note d'implémentation (2026-10-03)** : remplacé par la Partie 3 §B. Le backend refuse les IV/EV hors règles (IV 0-31, EV 0-252, total ≤ 510) ; la cohérence talent/attaques/objet avec l'espèce est assurée par l'éditeur du client, pas par le backend (décision D-02).
 
 La V1 n'impose pas de validation compétitive stricte.
 
@@ -223,6 +241,8 @@ La création doit être disponible pour tous les joueurs équipés de l'addon.
 
 # 10. Import d'équipe
 
+> **Note d'implémentation (2026-10-03)** : implémenté côté client : le texte Showdown est lu depuis le presse-papiers (bouton IMPORTER du PC ou `/phantasmon pokemon import`), analysé localement, puis chaque Pokémon est créé par `POST /pokemon` dans la première case libre du PC.
+
 L'import d'équipes Showdown doit être supporté.
 
 La V1 doit au minimum permettre un import par commande.
@@ -242,6 +262,8 @@ Une interface graphique pourra être ajoutée ultérieurement.
 ---
 
 # 11. Export
+
+> **Note d'implémentation (2026-10-03)** : non implémenté (ni backend, ni client).
 
 Les Ghost Pokémon doivent pouvoir être exportés au format Showdown.
 
@@ -266,6 +288,8 @@ Le Ghost PC ne doit pas être mélangé au PC Cobblemon.
 
 ## 12.1 Capacité
 
+> **Note d'implémentation (2026-10-03)** : implémenté tel quel : 16 boîtes de 6×5 (migration `V6`, 2026-09-27).
+
 Le Ghost PC possède :
 
 - 16 boîtes ;
@@ -285,6 +309,8 @@ Il n'existe pas de limite globale de création de Ghost Pokémon.
 ---
 
 # 13. Accès au Ghost PC
+
+> **Note d'implémentation (2026-10-03)** : solution de remplacement retenue : touche **P** (modifiable) ou `/phantasmon pc`. Un bloc dans le monde nécessiterait du contenu côté serveur (décision D-12).
 
 Le fonctionnement privilégié est l'utilisation d'un véritable bloc de type PC Pokémon dans le monde.
 
@@ -314,6 +340,8 @@ Le Ghost PC sert à :
 
 # 15. Équipes
 
+> **Note d'implémentation (2026-10-03)** : une seule équipe active de 6 emplacements par joueur (`pokemon.team_slot`) ; pas d'équipes multiples nommées (décision D-03). Un Pokémon est soit dans le PC, soit dans l'équipe (décision D-04).
+
 Le système doit permettre la création de plusieurs équipes.
 
 Une équipe peut contenir :
@@ -341,6 +369,8 @@ Le joueur doit pouvoir modifier librement ses équipes.
 ---
 
 # 16. Stockage des équipes
+
+> **Note d'implémentation (2026-10-03)** : l'équipe n'est pas une entité séparée : c'est l'emplacement `team_slot` porté par chaque Pokémon. Il n'y a donc jamais de référence invalide.
 
 Une équipe ne doit pas dupliquer les données des Pokémon.
 
@@ -441,6 +471,8 @@ La suppression doit également gérer les références existantes dans les équi
 ---
 
 # 21. Présence dans le monde
+
+> **Note d'implémentation (2026-10-03)** : implémenté : touche **O** ou `/phantasmon sendout` fait sortir (ou rappelle) le Pokémon en emplacement 1 de l'équipe, avec les animations de Poké Ball de Cobblemon. Le Ghost suit son propriétaire, se promène quand celui-ci est immobile, et disparaît au rappel, à la mort, au changement de dimension ou à la déconnexion.
 
 Les Ghost Pokémon peuvent être envoyés dans le monde.
 
@@ -583,6 +615,8 @@ Le projet ne doit pas recréer un moteur Pokémon complet.
 
 # 27. Intégration au moteur Cobblemon
 
+> **Note d'implémentation (2026-10-03)** : le rôle de l'« adaptateur » est tenu par le client hôte du combat : `GhostBattlePokemonFactory` construit un `Pokemon` Cobblemon jetable à partir des données du Ghost, et la pile de combat serveur de Cobblemon (Showdown) tourne sur ce client (décision D-05).
+
 Le principe est :
 
 ```text
@@ -621,6 +655,8 @@ La validation stricte des équipes n'est pas obligatoire en V1.
 ---
 
 # 29. Demande de combat
+
+> **Note d'implémentation (2026-10-03)** : implémenté : entrée « Combat Ghost » dans la roue d'interaction de Cobblemon (touche **R** sur un joueur), touche **B** en visant un joueur, ou `/phantasmon battle invite <joueur>` ; l'invité accepte ou refuse par des boutons dans le chat.
 
 Le joueur doit pouvoir proposer un combat Ghost à un autre joueur.
 
@@ -740,6 +776,8 @@ Un Pokémon normal ne peut pas être placé directement dans le Ghost PC.
 
 # 35. Conversion Pokémon normal → Ghost
 
+> **Note d'implémentation (2026-10-03)** : écartée par la Partie 3 §A.2 (« Pas de conversion inverse »).
+
 La conversion d'un Pokémon Cobblemon normal en Ghost est prévue.
 
 Cette conversion pourra permettre de transformer les données du Pokémon normal en données Ghost.
@@ -750,6 +788,8 @@ Les détails techniques de la conversion devront être définis dans l'architect
 
 # 36. Conversion Ghost → Pokémon normal
 
+> **Note d'implémentation (2026-10-03)** : procédure manuelle d'administrateur avec les commandes de spawn natives de Cobblemon, sans code Phantasmon (Partie 3 §A.2).
+
 La conversion inverse est possible uniquement pour les administrateurs / joueurs OP.
 
 Elle constitue une fonction administrative.
@@ -759,6 +799,8 @@ Un joueur normal ne doit pas pouvoir convertir librement un Ghost en Pokémon Co
 ---
 
 # 37. Administration
+
+> **Note d'implémentation (2026-10-03)** : non implémentée en V1 (décision D-20).
 
 Le système possède une interface d'administration.
 
@@ -853,6 +895,8 @@ Le backend est indépendant du serveur Minecraft.
 
 # 41. Base de données
 
+> **Note d'implémentation (2026-10-03)** : le schéma « Minecraft Server → API » est obsolète : ce sont les clients qui appellent l'API.
+
 Le backend s'appuie sur une base de données persistante.
 
 La base contient les données Ghost.
@@ -875,6 +919,8 @@ Database
 ---
 
 # 42. Autorité des données
+
+> **Note d'implémentation (2026-10-03)** : dans l'architecture retenue, c'est le **client** (jamais cru sur parole) qui fait ces demandes au backend, pas le serveur Minecraft.
 
 Le backend est l'autorité finale pour les données Ghost.
 
@@ -908,6 +954,8 @@ Le serveur ne doit pas être bloqué par l'indisponibilité du backend Ghost.
 ---
 
 # 44. Perte du backend pendant un combat
+
+> **Note d'implémentation (2026-10-03)** : une déconnexion WebSocket d'un joueur termine le combat en `ABORTED`, sans vainqueur (`PARTNER_DISCONNECTED`). L'état permanent des Ghost n'est jamais modifié par un combat (il se joue sur des copies jetables).
 
 Si le backend devient indisponible pendant un combat Ghost :
 
@@ -945,6 +993,8 @@ Si le backend Ghost tombe :
 ---
 
 # 46. Architecture logique cible
+
+> **Note d'implémentation (2026-10-03)** : obsolète, voir `architecture/system-overview.md`.
 
 Architecture fonctionnelle :
 
@@ -1062,6 +1112,8 @@ Ghost PC
 ```
 
 ## 49.2 Modification
+
+> **Note d'implémentation (2026-10-03)** : pas de « Serveur Ghost » : le client envoie directement la modification au backend (`PATCH /pokemon/{uuid}`).
 
 ```text
 Joueur
@@ -1202,6 +1254,8 @@ Une panne du système Ghost ne doit pas rendre le serveur Cobblemon inutilisable
 ---
 
 # 53. Résumé fonctionnel
+
+> **Note d'implémentation (2026-10-03)** : la branche « Minecraft Addon → Ghost Layer → Cobblemon » correspond désormais au seul mod client.
 
 Le projet peut être résumé comme suit :
 

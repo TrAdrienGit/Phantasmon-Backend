@@ -1,5 +1,9 @@
 # CAD Ghost Pokémon — Partie 3 : Compléments d'architecture
 
+> **Statut du document** : compléments d'architecture, toujours valides. Prime sur la Partie 1 en cas de
+> contradiction (notamment sur la légalité). Les notes datées signalent les écarts d'implémentation. Document
+> identique dans les dépôts Backend et Client (`Documentation/specifications/`).
+
 Cette partie répond aux trous identifiés après relecture des Parties 1 et 2, et complète l'architecture en conséquence. Elle ne remet pas en cause les choix déjà validés (peer-to-peer via backend, PostgreSQL, REST+WebSocket, pas de mod serveur) : elle les précise là où ils étaient encore flous.
 
 ---
@@ -38,6 +42,8 @@ Règles de validation retenues, alignées sur les règles réelles des jeux Pok�
 
 ### B.1 Implémentation
 
+> **Note d'implémentation (2026-10-03)** : le backend ne vérifie que les IV et EV. La cohérence attaques/talent avec l'espèce exige les données Cobblemon, que seul le client possède : l'éditeur ne propose que les talents de l'espèce, les objets de combat et des attaques distinctes (décision D-02). Pas d'endpoint `import-showdown` : l'import passe par `POST /pokemon`.
+
 Un service de validation métier (`PokemonLegalityService`) est ajouté côté **backend**, appelé systématiquement à la création et à la modification (`POST /pokemon`, `PATCH /pokemon/{uuid}`, `POST /pokemon/import-showdown`) :
 
 ```text
@@ -68,6 +74,8 @@ Confirmé : tout joueur possédant l'addon a accès complet à la création et l
 ---
 
 ## D. Échange (trade) entre joueurs
+
+> **Note d'implémentation (2026-10-03)** : ce flux asynchrone est implémenté tel quel, avec en plus `request_uuid` (idempotence). Un **échange en direct** par WebSocket a été ajouté et sert de mode principal (décision D-06). Les FK vers `pokemon` ont été retirées par la migration `V7` (décision D-07). À l'acceptation, chaque Pokémon reçu va dans la première case libre du PC de son nouveau propriétaire.
 
 Spécification du flux, atomique, avec proposition/acceptation, annulation possible sans timeout.
 
@@ -138,6 +146,8 @@ S2C
 
 ## E. Handshake de version Client ↔ Backend
 
+> **Note d'implémentation (2026-10-03)** : implémenté par `GET /version`, appelé avant chaque connexion. Il n'y a pas de contrôle de version à l'ouverture du WebSocket. Le message de refus propose un lien de téléchargement (factice tant que le mod n'est pas publié).
+
 Ajouté dès la V1, sur le modèle du versionnement déjà prévu pour les données Cobblemon (Partie 2 §6).
 
 ```text
@@ -167,6 +177,8 @@ Appelé par le client avant même l'authentification (§3 Partie 2), pour évite
 ---
 
 ## F. Nettoyage des sessions orphelines (crash client)
+
+> **Note d'implémentation (2026-10-03)** : implémenté : TTL 30 s, balayage toutes les 10 s, fermeture de la session WebSocket. Un joueur n'a qu'**un** Ghost sorti à la fois (`active_ghost_pokemon_uuid`), pas une liste.
 
 Ajout d'un TTL de présence côté backend pour compléter le Heartbeat déjà prévu (Partie 2 §18).
 
@@ -200,6 +212,8 @@ Confirmé : pas de validation de plausibilité des positions envoyées par le cl
 
 ## H. Scalabilité multi-instance backend — hors scope
 
+> **Note d'implémentation (2026-10-03)** : inchangé : la présence, les échanges en direct et les combats en cours sont en mémoire d'une instance unique.
+
 Confirmé hors scope pour le moment. L'architecture reste sur une **instance unique** du Ghost Backend, avec état de présence (`PlayerPresence`) et routage WebSocket en mémoire locale (Partie 2 §4), sans Redis ni bus de messages partagé.
 
 *Point à garder en tête si le besoin apparaît plus tard* : le jour où une deuxième instance backend serait nécessaire, il faudra externaliser `PlayerPresence` et le routage WebSocket (ex. Redis pub/sub) — mais aucune action n'est requise dans l'implémentation actuelle. Le code du service de présence sera simplement écrit de façon à limiter le couplage direct à l'état mémoire local, pour ne pas fermer la porte à cette évolution.
@@ -211,6 +225,8 @@ Confirmé hors scope pour le moment. L'architecture reste sur une **instance uni
 Confirmé : tout est persisté en base, donc une stratégie de sauvegarde est nécessaire dès la V1 (le backend étant l'unique source de vérité, une perte de base = perte définitive et irréversible des données de tous les joueurs).
 
 ### I.1 Recommandation
+
+> **Note d'implémentation (2026-10-03)** : aucune sauvegarde automatisée n'est en place à ce jour (Phase 10). Voir `guides/deployment.md` (dépôt Backend).
 
 ```text
 Sauvegarde complète (pg_dump ou snapshot infra) : quotidienne
@@ -227,6 +243,8 @@ Le choix de l'infrastructure exacte (managed PostgreSQL avec backup automatique 
 
 ## J. Distribution du Ghost Client
 
+> **Note d'implémentation (2026-10-03)** : pas encore publié (Phase 10).
+
 Confirmé : publication sur **Modrinth** et **CurseForge**, les deux plateformes standards de l'écosystème Fabric/Cobblemon.
 
 ### J.1 Conséquence — mises à jour
@@ -242,6 +260,8 @@ Confirmé comme accepté. Le flux `joinServer`/`hasJoined` (Partie 2 §3) reste 
 ---
 
 ## L. Internationalisation — FR et EN obligatoires dès la V1
+
+> **Note d'implémentation (2026-10-03)** : implémenté : `fr_fr.json` et `en_us.json` (~224 clés), table `BackendErrorMessages` qui traduit chaque `error_code`.
 
 Ajout à l'architecture du Ghost Client : toutes les chaînes affichées (UI, messages d'erreur, notifications de trade, avertissements de version) passent par un système de traduction standard Fabric (`lang/fr_fr.json`, `lang/en_us.json`), aucune chaîne en dur dans le code.
 
