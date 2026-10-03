@@ -44,7 +44,7 @@ players (uuid PK)
    │
    │ N
    └──────► battle_sessions
-            (player_a, player_b FK → players.uuid)
+            (player_a, player_b, host_uuid FK → players.uuid)
             (team_a, team_b : JSONB — snapshot de pokemon_uuid, pas de FK SQL)
 
 idempotency_keys (request_uuid PK, player_uuid — pas de FK stricte, voir §7)
@@ -65,6 +65,7 @@ erDiagram
     PLAYERS ||--o{ TRADES : initiates
     PLAYERS ||--o{ TRADES : receives
     PLAYERS ||--o{ BATTLE_SESSIONS : "plays (a/b)"
+    PLAYERS |o--o{ BATTLE_SESSIONS : "hosts (V8)"
     POKEMON |o..o{ TRADES : "offered/requested (historique, sans FK depuis V7)"
 
     PLAYERS {
@@ -107,6 +108,7 @@ erDiagram
         uuid uuid PK
         uuid player_a FK
         uuid player_b FK
+        uuid host_uuid FK "nullable, V8"
         jsonb team_a
         jsonb team_b
         varchar status
@@ -374,6 +376,10 @@ CREATE TABLE battle_sessions (
 
 CREATE INDEX idx_battle_player_a ON battle_sessions(player_a);
 CREATE INDEX idx_battle_player_b ON battle_sessions(player_b);
+
+-- V8 (2026-10-03) : combats en direct, client hôte
+ALTER TABLE battle_sessions ADD COLUMN host_uuid UUID REFERENCES players(uuid) ON DELETE RESTRICT;
+CREATE INDEX idx_battle_host ON battle_sessions(host_uuid);
 ```
 
 ### 6.3 Colonnes
@@ -382,6 +388,7 @@ CREATE INDEX idx_battle_player_b ON battle_sessions(player_b);
 |---|---|---|---|
 | `uuid` | UUID | PK | |
 | `player_a` / `player_b` | UUID | NOT NULL, FK → `players.uuid` | `player_a` = initiateur par convention applicative (utile pour l'alternance de l'hôte, CAD Partie 3 §D.2 /Partie 2 §9.2). |
+| `host_uuid` | UUID | nullable, FK → `players.uuid`, indexé (`V8`) | Client qui a fait tourner le moteur de combat. Renseigné pour les combats en direct (WebSocket, Phase 9), où `player_a` = l'hôte ; NULL pour les sessions créées par `POST /battles`. Sert à l'alternance de l'hôte entre deux mêmes joueurs. |
 | `team_a` / `team_b` | JSONB | NOT NULL | Snapshot des `pokemon_uuid` engagés au moment du combat — **pas** de FK SQL vers `pokemon`, car un snapshot doit rester lisible même si le Pokémon est modifié/supprimé après coup (historique d'audit). Volontairement pas de contrainte référentielle ici. |
 | `status` | VARCHAR(16) | NOT NULL, CHECK ∈ {PENDING, ACTIVE, FINISHED, ABORTED} | CHECK ajouté par ce document, cf. §9.2. |
 | `result` | JSONB | nullable | NULL tant que le combat n'est pas terminé. Contenu : vainqueur, log de combat (voir `POST /battles/{uuid}/result` dans l'OpenAPI). |
@@ -523,7 +530,8 @@ src/main/resources/db/migration/
 ├── V4__init_battle_sessions.sql
 ├── V5__init_idempotency_keys.sql
 ├── V6__resize_pokemon_box.sql
-└── V7__trades_pokemon_history_without_fk.sql
+├── V7__trades_pokemon_history_without_fk.sql
+└── V8__battle_sessions_host.sql
 ```
 
 Une table = une migration, dans l'ordre de dépendance des FK (`players` avant `pokemon`,

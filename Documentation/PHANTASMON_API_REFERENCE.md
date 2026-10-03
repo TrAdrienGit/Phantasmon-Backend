@@ -500,6 +500,7 @@ Enveloppe générique, dans les deux sens :
 | `GhostEntityMove` | `{ "player_uuid": "...", "pokemon_uuid": "...", "position": {...} }` | Diffusé au groupe à chaque `PositionUpdate` du propriétaire, uniquement s'il a un Ghost sorti (pas de message C2S dédié — le Ghost suit son propriétaire, CAD Partie 2 §7) |
 | `GhostEntityDespawn` | `{ "player_uuid": "...", "pokemon_uuid": "..." }` | Diffusé au groupe après un `RecallGhost` explicite, ou automatiquement à la déconnexion (propre ou brutale) d'un joueur qui avait un Ghost sorti, ou quand ce Ghost vient d'être échangé en direct |
 | `TradeInvite*`, `TradeSession*` | voir [Échange en direct](#échange-en-direct-écran-déchange) | |
+| `BattleInvite*`, `BattleSession*`, `BattlePacket`, `BattleChoice`, `BattleTimerEnabled`, `BattleEnded` | voir [Combat en direct](#combat-en-direct-combat-ghost-phase-9) | |
 
 ### Échange en direct (écran d'échange)
 
@@ -558,6 +559,49 @@ l'équipe re-vérifiées en base au moment même, puis chaque Pokémon change de
 `trades` `COMPLETED` est enregistrée. Si l'un des deux Pokémon était sorti en Ghost, il est rappelé :
 `GhostEntityDespawn` diffusé à son ancien groupe + son ancien propriétaire.
 
+### Combat en direct (combat Ghost, Phase 9)
+
+Ajouté le 2026-10-03. Architecture « client hôte » (CAD Partie 2 §9) : le client **hôte** fait tourner le
+moteur de combat de Cobblemon (Showdown) localement ; le backend ne simule rien. Il gère l'invitation,
+désigne l'hôte, relaie les paquets Cobblemon de l'hôte vers l'invité et les choix de l'invité vers l'hôte,
+arbitre le chrono et enregistre le résultat dans `battle_sessions` (ligne `ACTIVE` créée au démarrage,
+`host_uuid` renseigné, voir le schéma DB §6). L'état du combat vit en mémoire (`battle.LiveBattleService`).
+
+**Hôte** : celui qui n'a pas hébergé le combat précédent de la paire ; l'inviteur pour leur tout premier
+combat (alternance CAD Partie 3 §D.2). En base, `player_a` = l'hôte.
+
+Les refus métier passent par `BattleSessionError` (pas par `Error`).
+
+#### C2S
+
+| Type | `data` | Effet |
+|---|---|---|
+| `BattleInvite` | `{ "target_uuid": "..." }` | Invite un joueur. Refus : `ERROR_BATTLE_SELF`, `ERROR_BATTLE_ALREADY_IN_BATTLE`, `ERROR_BATTLE_PARTNER_UNAVAILABLE` (cible non connectée au WebSocket), `ERROR_BATTLE_PARTNER_BUSY`. Une nouvelle invitation vers la même cible remplace la précédente. |
+| `BattleInviteResponse` | `{ "invite_uuid": "...", "accept": true }` | Accepte ou refuse. Invitation inconnue/expirée (`phantasmon.battle.invite-ttl`, 60 s) → `ERROR_BATTLE_INVITE_NOT_FOUND`. Si l'un des deux n'a aucun Pokémon en équipe → `ERROR_BATTLE_EMPTY_TEAM` aux deux. Acceptée → `BattleSessionStarted` aux deux ; refusée → `BattleInviteDeclined` à l'inviteur. |
+| `BattlePacket` | `{ "battle_uuid": "...", "id": "cobblemon:...", "payload": "<base64>" }` | **Hôte uniquement** (sinon `ERROR_BATTLE_NOT_HOST`). Un paquet réseau S2C Cobblemon encodé par son propre codec ; relayé tel quel à l'invité. Taille max d'un message WebSocket : 1 Mio. |
+| `BattleChoice` | `{ "battle_uuid": "...", "id": "cobblemon:battle_select_actions", "payload": "<base64>" }` | **Invité uniquement** (sinon `ERROR_BATTLE_NOT_GUEST`). Le `BattleSelectActionsPacket` de l'invité, relayé tel quel à l'hôte. |
+| `BattleTimerEnable` | `{ "battle_uuid": "..." }` | Active le chrono (90 s par tour) pour les deux joueurs. Une seule fois ; impossible à désactiver ensuite (comme Showdown). Ignoré s'il est déjà actif. L'hôte l'applique : à expiration, action automatique. |
+| `BattleResult` | `{ "battle_uuid": "...", "winner_uuid": "..." ou null }` | **Hôte uniquement**. `winner_uuid` doit être l'un des deux joueurs, ou null pour un nul (sinon `ERROR_BATTLE_INVALID_RESULT`). Termine le combat (`FINISHED`). |
+| `BattleLeave` | `{ "battle_uuid": "..." }` | Abandon : l'autre joueur gagne (`reason` = `FORFEIT`). |
+
+`ERROR_BATTLE_NOT_IN_BATTLE` pour une action de combat hors combat (ou mauvais `battle_uuid`).
+Une déconnexion WebSocket pendant un combat le termine en `ABORTED`, sans vainqueur
+(`reason` = `PARTNER_DISCONNECTED`), et oublie les invitations du joueur.
+
+#### S2C
+
+| Type | `data` | Destinataire |
+|---|---|---|
+| `BattleInviteReceived` | `{ "invite_uuid": "...", "from_uuid": "...", "from_name": "Alice" }` | Joueur invité |
+| `BattleInviteSent` | `{ "invite_uuid": "...", "to_uuid": "...", "to_name": "Bob" }` | Inviteur |
+| `BattleInviteDeclined` | `{ "invite_uuid": "...", "by_uuid": "...", "by_name": "Bob" }` | Inviteur |
+| `BattleSessionStarted` | `{ "battle_uuid": "...", "role": "HOST" ou "GUEST", "opponent_uuid": "...", "opponent_name": "...", "own_team": [Pokemon...], "opponent_team": [Pokemon...] }` | Les deux. `opponent_team` n'est envoyé **qu'à l'hôte** (il en a besoin pour construire le combat) ; l'invité ne reçoit que `own_team`. Équipes = objets `Pokemon` complets de l'équipe active. |
+| `BattlePacket` | même forme que le C2S | Invité |
+| `BattleChoice` | même forme que le C2S | Hôte |
+| `BattleTimerEnabled` | `{ "battle_uuid": "...", "by_uuid": "...", "by_name": "...", "seconds": 90 }` | Les deux |
+| `BattleEnded` | `{ "battle_uuid": "...", "winner_uuid": "..." ou null, "reason": "FINISHED" / "FORFEIT" / "PARTNER_DISCONNECTED" }` | Les deux. Également stocké dans `battle_sessions.result` (`winner_uuid` en chaîne, `reason`). |
+| `BattleSessionError` | `{ "error_code": "ERROR_BATTLE_..." }` | L'auteur de l'action refusée |
+
 ### Présence — comportement
 
 - **En mémoire uniquement** (`presence.PresenceService`, `ConcurrentHashMap`), jamais persistée en base, jamais partagée entre plusieurs instances (CAD Partie 3 §H, hors périmètre).
@@ -566,8 +610,9 @@ l'équipe re-vérifiées en base au moment même, puis chaque Pokémon change de
 
 ### Pas encore implémenté
 
-`BattleAction` (C2S) et `BattleState`, `BattleEnded` (S2C) — arrivent avec le domaine battle (Phase 9). Voir
-`Documentation/CAD_Ghost_Pokemon_Partie_2_Architecture_Technique.md` §11 pour leur forme cible.
+`BattleAction` (C2S) et `BattleState` (S2C) de la forme cible du CAD (Partie 2 §11) : remplacés par le relais
+de paquets Cobblemon (`BattlePacket`/`BattleChoice`, voir [Combat en direct](#combat-en-direct-combat-ghost-phase-9)),
+le client hôte faisant tourner le vrai moteur de Cobblemon.
 
 ---
 

@@ -61,6 +61,10 @@ public class BattleSession {
 	@Column
 	private Map<String, Object> result;
 
+	/** Player whose client ran the battle engine (live battles, V8); {@code null} for REST-created sessions. */
+	@Column(name = "host_uuid")
+	private UUID hostUuid;
+
 	@Column(name = "created_at", nullable = false, updatable = false)
 	private Instant createdAt;
 
@@ -75,6 +79,13 @@ public class BattleSession {
 		this.teamA = teamA;
 		this.teamB = teamB;
 		this.status = BattleStatus.ACTIVE;
+	}
+
+	/** Live battle (Phase 9): player A is always the host. */
+	public static BattleSession hosted(UUID uuid, UUID hostUuid, UUID guestUuid, List<UUID> hostTeam, List<UUID> guestTeam) {
+		BattleSession session = new BattleSession(uuid, hostUuid, guestUuid, hostTeam, guestTeam);
+		session.hostUuid = hostUuid;
+		return session;
 	}
 
 	@PrePersist

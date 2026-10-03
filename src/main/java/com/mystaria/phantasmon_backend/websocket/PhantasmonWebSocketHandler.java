@@ -16,6 +16,7 @@ import com.mystaria.phantasmon_backend.pokemon.PokemonRepository;
 import com.mystaria.phantasmon_backend.presence.PlayerPresence;
 import com.mystaria.phantasmon_backend.presence.Position;
 import com.mystaria.phantasmon_backend.presence.PresenceService;
+import com.mystaria.phantasmon_backend.battle.LiveBattleService;
 import com.mystaria.phantasmon_backend.trade.LiveTradeService;
 
 import lombok.extern.slf4j.Slf4j;
@@ -38,18 +39,23 @@ import tools.jackson.databind.ObjectMapper;
 @Slf4j
 public class PhantasmonWebSocketHandler extends TextWebSocketHandler {
 
+	private static final int MAX_MESSAGE_BYTES = 1024 * 1024;
+
 	private final PresenceService presenceService;
 	private final SessionRegistry sessionRegistry;
 	private final PokemonRepository pokemonRepository;
 	private final LiveTradeService liveTradeService;
+	private final LiveBattleService liveBattleService;
 	private final ObjectMapper objectMapper;
 
 	public PhantasmonWebSocketHandler(PresenceService presenceService, SessionRegistry sessionRegistry,
-			PokemonRepository pokemonRepository, LiveTradeService liveTradeService, ObjectMapper objectMapper) {
+			PokemonRepository pokemonRepository, LiveTradeService liveTradeService, LiveBattleService liveBattleService,
+			ObjectMapper objectMapper) {
 		this.presenceService = presenceService;
 		this.sessionRegistry = sessionRegistry;
 		this.pokemonRepository = pokemonRepository;
 		this.liveTradeService = liveTradeService;
+		this.liveBattleService = liveBattleService;
 		this.objectMapper = objectMapper;
 	}
 
@@ -57,6 +63,10 @@ public class PhantasmonWebSocketHandler extends TextWebSocketHandler {
 	public void afterConnectionEstablished(WebSocketSession session) {
 		UUID playerUuid = playerUuid(session);
 		log.info("WebSocket connected: player {}", playerUuid);
+		// Tomcat's default 8 KiB message buffer would close the connection on a bigger frame; a live battle relays
+		// whole encoded Cobblemon packets (a team packet carries six full Pokémon), so allow up to 1 MiB.
+		session.setTextMessageSizeLimit(MAX_MESSAGE_BYTES);
+		session.setBinaryMessageSizeLimit(MAX_MESSAGE_BYTES);
 		sessionRegistry.register(playerUuid, session);
 	}
 
@@ -66,6 +76,7 @@ public class PhantasmonWebSocketHandler extends TextWebSocketHandler {
 		log.info("WebSocket closed: player {} ({})", playerUuid, status);
 		leaveAndDespawnGhost(playerUuid);
 		liveTradeService.onDisconnect(playerUuid);
+		liveBattleService.onDisconnect(playerUuid);
 		sessionRegistry.unregister(playerUuid);
 	}
 
@@ -121,6 +132,15 @@ public class PhantasmonWebSocketHandler extends TextWebSocketHandler {
 			case "TradeSelectOffer" -> liveTradeService.selectOffer(playerUuid, uuidField(incoming, "pokemon_uuid"));
 			case "TradeSetReady" -> liveTradeService.setReady(playerUuid, Boolean.TRUE.equals(incoming.data().get("ready")));
 			case "TradeLeave" -> liveTradeService.leave(playerUuid);
+			case "BattleInvite" -> liveBattleService.invite(playerUuid, uuidField(incoming, "target_uuid"));
+			case "BattleInviteResponse" -> liveBattleService.respond(playerUuid, uuidField(incoming, "invite_uuid"),
+					Boolean.TRUE.equals(incoming.data().get("accept")));
+			case "BattlePacket" -> liveBattleService.relayPacket(playerUuid, uuidField(incoming, "battle_uuid"), incoming.data());
+			case "BattleChoice" -> liveBattleService.relayChoice(playerUuid, uuidField(incoming, "battle_uuid"), incoming.data());
+			case "BattleTimerEnable" -> liveBattleService.enableTimer(playerUuid, uuidField(incoming, "battle_uuid"));
+			case "BattleResult" -> liveBattleService.reportResult(playerUuid, uuidField(incoming, "battle_uuid"),
+					uuidField(incoming, "winner_uuid"));
+			case "BattleLeave" -> liveBattleService.leave(playerUuid, uuidField(incoming, "battle_uuid"));
 			case "Heartbeat" -> {
 				presenceService.heartbeat(playerUuid);
 				send(session, WsMessage.of("HeartbeatAck", Map.of()));
