@@ -11,8 +11,8 @@
 | Machine de développement (Windows) | `100.116.43.32` | Fait tourner **le** backend utilisé par les tests (port 8080) et PostgreSQL natif ; client Minecraft `MystAria_` |
 | « production-server » (ancien portable, Windows 10, i7-10750H, 16 Go) | `100.106.248.73` | Second client de test (`TheMashen`). Possède les dépôts et un backend installé comme service NSSM, **volontairement non utilisé** : les deux clients doivent partager un seul backend. Joignable en SSH par l'alias `production-server` (actuellement injoignable). |
 
-Le client pointe en dur sur `http://100.116.43.32:8080` (`BackendConfig.BASE_URL`). Changer de backend impose de
-recompiler le client.
+Le client vise `backend_url` de `config/phantasmon.json` (défaut `http://100.116.43.32:8080`). Changer de backend :
+modifier ce fichier dans chaque instance, puis relancer le jeu ; aucune recompilation.
 
 ## 2. Procédure de déploiement
 
@@ -27,7 +27,7 @@ recompiler le client.
 
 ```bash
 ./gradlew bootJar
-java -jar build/libs/phantasmon-backend-0.0.1-SNAPSHOT.jar
+java -jar build/libs/phantasmon-backend-0.1.0.jar
 ```
 
 - Jamais `bootRun` en production (mode développement).

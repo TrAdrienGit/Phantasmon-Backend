@@ -50,7 +50,6 @@ Adrien a confirmé le fonctionnement en jeu des phases 1 à 8 le 2026-10-03.
 | Combats Ghost contre Pokémon normal | Partie 1 §31 | Hors MVP |
 | Sauvegardes PostgreSQL en place et test de restauration | Partie 3 §I, Phase 10 | Aucune sauvegarde automatisée |
 | Publication Modrinth / CurseForge | Partie 3 §J, Phase 10 | Lien de téléchargement factice dans le client (TODO-3) |
-| URL du backend configurable | — | Constante en dur (TODO-1) |
 
 ## 4. Bugs connus, TODO et dette technique
 

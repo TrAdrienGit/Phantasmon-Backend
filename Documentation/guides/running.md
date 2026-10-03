@@ -47,7 +47,7 @@ Sous PowerShell : `.\gradlew.bat bootRun --continuous`.
 
 ```bash
 ./gradlew bootJar
-java -jar build/libs/phantasmon-backend-0.0.1-SNAPSHOT.jar
+java -jar build/libs/phantasmon-backend-0.1.0.jar
 ```
 
 Utiliser le jar **sans** suffixe `-plain` (le `-plain.jar` ne contient pas les dépendances). Hors du répertoire du
@@ -57,7 +57,7 @@ projet, aucun `.env` n'est lu : passer de vraies variables d'environnement.
 $env:BDD_USER = "phantasmon_agent"
 $env:BDD_PASSWORD = "..."
 $env:JWT_SECRET = "..."
-java -jar phantasmon-backend-0.0.1-SNAPSHOT.jar
+java -jar phantasmon-backend-0.1.0.jar
 ```
 
 Ce mode a été vérifié sans `.env` présent, avec uniquement des variables d'environnement.

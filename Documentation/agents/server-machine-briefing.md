@@ -55,8 +55,8 @@ Double rôle prévu :
 - Rétablir l'accès SSH depuis la machine de dev (service `sshd`, pare-feu, Tailscale).
 - Faire tourner le backend **en production** sur cette machine si Adrien le décide : suivre
   [`guides/deployment.md`](../guides/deployment.md) (jar packagé, variables d'environnement système, service
-  NSSM, PostgreSQL limité à `localhost`, pare-feu minimal). Le client devra alors être recompilé avec la nouvelle
-  URL (`BackendConfig.BASE_URL`).
+  NSSM, PostgreSQL limité à `localhost`, pare-feu minimal). Les clients devront alors viser la nouvelle
+  URL (`backend_url` dans `config/phantasmon.json` de chaque instance, sans recompilation).
 - Mettre en place les sauvegardes PostgreSQL (même guide, §3).
 
 Ne pas trancher seul l'hébergement définitif ni la méthode de déploiement automatisé : présenter les options à

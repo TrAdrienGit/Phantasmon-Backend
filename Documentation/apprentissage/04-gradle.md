@@ -27,7 +27,7 @@ plugins {
 }
 
 group = 'com.mystaria'
-version = '0.0.1-SNAPSHOT'                                 // apparaît dans le nom du jar
+version = '0.1.0'                                 // apparaît dans le nom du jar
 
 java {
     toolchain { languageVersion = JavaLanguageVersion.of(21) }   // compiler pour Java 21
@@ -82,7 +82,7 @@ le plugin de gestion des dépendances fournit leurs versions (d'où l'absence de
 ./gradlew test             # les tests seulement
 ./gradlew bootRun          # lance l'application (développement)
 ./gradlew bootRun --continuous   # recompile à chaque sauvegarde (avec DevTools : redémarrage automatique)
-./gradlew bootJar          # build/libs/phantasmon-backend-0.0.1-SNAPSHOT.jar, exécutable avec java -jar
+./gradlew bootJar          # build/libs/phantasmon-backend-0.1.0.jar, exécutable avec java -jar
 ```
 
 Le dossier `build/` contient tout ce que Gradle produit (classes, jar, rapports de test) ; il n'est jamais commité.

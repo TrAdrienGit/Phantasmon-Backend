@@ -53,7 +53,7 @@ heures. Le port HTTP est celui de Spring Boot par défaut (8080), modifiable ave
 Toute propriété peut être surchargée au lancement, sans modifier le fichier :
 
 ```bash
-java -jar build/libs/phantasmon-backend-0.0.1-SNAPSHOT.jar --phantasmon.jwt.access-ttl=PT3M --server.port=8081
+java -jar build/libs/phantasmon-backend-0.1.0.jar --phantasmon.jwt.access-ttl=PT3M --server.port=8081
 ```
 
 Exemples utiles pour les tests manuels : raccourcir `phantasmon.jwt.access-ttl` (garder au moins `PT3M`, le client

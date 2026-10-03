@@ -59,7 +59,7 @@ Other tunables (token lifetimes, presence TTL, trade invitation TTL, versions) a
 ```bash
 ./gradlew bootRun                       # development
 ./gradlew bootJar                       # packaged jar in build/libs/
-java -jar build/libs/phantasmon-backend-0.0.1-SNAPSHOT.jar
+java -jar build/libs/phantasmon-backend-0.1.0.jar
 curl http://localhost:8080/health       # {"status":"UP","database":"UP"}
 ```
 

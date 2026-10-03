@@ -19,10 +19,8 @@ Identifiants : `BUG-n` (comportement incorrect), `TODO-n` (action à faire), `DE
 
 | ID | Priorité | Dépôt | Action |
 |---|---|---|---|
-| TODO-1 | haute | Client | Rendre l'URL du backend configurable (aujourd'hui `BackendConfig.BASE_URL = http://100.116.43.32:8080`, IP Tailscale de la machine de dev). |
 | TODO-2 | haute | Client | Retirer `/phantasmon debug fingerprint` quand un vrai serveur dédié remplacera les tests « Ouvrir au LAN » (décision D-18). |
 | TODO-3 | haute | Client | Remplacer les métadonnées factices : `homepage` / `sources` de `fabric.mod.json` (`github.com/your-account/…`), lien de mise à jour `https://modrinth.com/mod/phantasmon` (`AuthService`). |
-| TODO-4 | haute | Les deux | Aligner les numéros de version : client `1.0.0` (`gradle.properties`), backend `phantasmon.version.current` / `min-supported` = `0.1.0`, jar backend `0.0.1-SNAPSHOT`. |
 | TODO-5 | haute | Backend | Mettre en place les sauvegardes PostgreSQL et tester une restauration (CAD Partie 3 §I, Phase 10). |
 | TODO-6 | haute | Machine de dev | Restreindre le PostgreSQL natif à `localhost` (il écoute sur `0.0.0.0:5432`). |
 | TODO-7 | moyenne | Machine serveur | Rétablir l'accès SSH (`production-server`) : les déploiements du client retombent sur l'instance locale « Cobblemon 2 ». |
@@ -67,3 +65,5 @@ Identifiants : `BUG-n` (comportement incorrect), `TODO-n` (action à faire), `DE
 | BUG-3 | 2026-10-03 | Indicateur `[Ghost]` : le Ghost sorti porte le surnom `[Ghost] <surnom ou espèce>`, affiché par l'étiquette native de Cobblemon (avec le niveau) quand on le regarde. `GhostEntitySpawn` transporte `nickname`. |
 | BUG-4 | 2026-10-03 | Confirmé par test. Le balayage TTL ne retire plus la présence lui-même (`PresenceService.findExpired`) : `PhantasmonWebSocketHandler.expire` quitte le groupe comme un `LeaveServerGroup` (le Ghost disparaît chez les autres) puis ferme la session. Test `PresenceTtlSweepIntegrationTest`. |
 | BUG-5 | 2026-10-03 | Confirmé par test, cause différente du soupçon : pas d'échange partiel (le `@Transactional` de `transferOwnership` rendait la transaction rollback-only), mais une erreur 500 (`UnexpectedRollbackException`) au lieu de `ERROR_POKEMON_PC_FULL`. `TradeService.requirePcRoom` vérifie la place des deux côtés avant tout transfert ; l'échange reste `PENDING`. Test `acceptWithTheInitiatorsPcFullFailsCleanlyAndChangesNothing`. |
+| TODO-1 | 2026-10-03 | URL du backend configurable : `backend_url` dans `config/phantasmon.json` (créé au premier lancement, défaut = machine de dev, lu au lancement). Test `BackendUrlFileTest`. |
+| TODO-4 | 2026-10-03 | Version unique **0.1.0** : client (`gradle.properties`), backend (`build.gradle`, jar `phantasmon-backend-0.1.0.jar`), `phantasmon.version.current` / `min-supported`. 1.0.0 est réservé à la première publication. |
