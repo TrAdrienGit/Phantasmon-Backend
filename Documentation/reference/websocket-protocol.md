@@ -62,14 +62,14 @@ brutale ou TTL) équivaut à un `LeaveServerGroup`, annule l'échange en direct 
 
 | C2S | `data` | Effet |
 |---|---|---|
-| `SendOutGhost` | `{ "pokemon_uuid": "…" }` | Vérifie en base que le Pokémon existe (`ERROR_POKEMON_NOT_FOUND`), appartient au joueur (`ERROR_OWNERSHIP_MISMATCH`) et est dans son **équipe active** (`ERROR_POKEMON_NOT_IN_TEAM`). Puis l'enregistre comme Ghost actif et diffuse `GhostEntitySpawn`. Refus via `Error`. |
+| `SendOutGhost` | `{ "pokemon_uuid": "…" }` | Vérifie en base que le Pokémon existe (`ERROR_POKEMON_NOT_FOUND`), appartient au joueur (`ERROR_OWNERSHIP_MISMATCH`) et est dans son **équipe active** (`ERROR_POKEMON_NOT_IN_TEAM`), et que le joueur n'est pas en combat Ghost (`ERROR_GHOST_IN_BATTLE`). Puis l'enregistre comme Ghost actif et diffuse `GhostEntitySpawn`. Refus via `Error`. |
 | `RecallGhost` | `{}` | Efface le Ghost actif (sans effet s'il n'y en a pas) et diffuse `GhostEntityDespawn` |
 
 | S2C | `data` | Destinataires |
 |---|---|---|
 | `GhostEntitySpawn` | `{ "player_uuid", "pokemon_uuid", "species", "form" \| null, "is_shiny", "level", "gender": "M" \| "F" \| null, "nickname" \| null, "position": {"x","y","z"} \| null }` | Groupe **et** propriétaire. Également envoyé en rattrapage à un joueur qui rejoint le groupe. |
 | `GhostEntityMove` | `{ "player_uuid", "pokemon_uuid", "position": {"x","y","z"} }` | Groupe et propriétaire, à chaque `PositionUpdate` du propriétaire ayant un Ghost sorti |
-| `GhostEntityDespawn` | `{ "player_uuid", "pokemon_uuid" }` | Groupe et propriétaire : rappel, déconnexion du propriétaire, ou Ghost échangé en direct |
+| `GhostEntityDespawn` | `{ "player_uuid", "pokemon_uuid" }` | Groupe et propriétaire : rappel, déconnexion du propriétaire, Ghost échangé en direct, ou début d'un combat Ghost (Ghost des deux joueurs) |
 
 `GhostEntitySpawn` embarque les données de rendu (`species`, `form`, `is_shiny`, `level`, `gender` tel que stocké
 dans `data.gender`, `nickname` tel que stocké dans `data.nickname`, pour l'indicateur `[Ghost]`) car un client ne peut pas lire les Pokémon d'un autre joueur par REST. `position` vaut `null`
@@ -150,7 +150,7 @@ Action de combat hors combat ou avec un mauvais `battle_uuid` : `ERROR_BATTLE_NO
 | `BattleInviteReceived` | `{ "invite_uuid", "from_uuid", "from_name" }` | Invité |
 | `BattleInviteSent` | `{ "invite_uuid", "to_uuid", "to_name" }` | Inviteur |
 | `BattleInviteDeclined` | `{ "invite_uuid", "by_uuid", "by_name" }` | Inviteur |
-| `BattleSessionStarted` | `{ "battle_uuid", "role": "HOST" \| "GUEST", "opponent_uuid", "opponent_name", "own_team": [Pokemon…], "opponent_team": [Pokemon…] }` | Les deux. `opponent_team` n'est envoyé **qu'à l'hôte**. |
+| `BattleSessionStarted` | `{ "battle_uuid", "role": "HOST" \| "GUEST", "opponent_uuid", "opponent_name", "own_team": [Pokemon…], "opponent_team": [Pokemon…] }` | Les deux. `opponent_team` n'est envoyé **qu'à l'hôte**. Suivi d'un `GhostEntityDespawn` pour chaque joueur qui avait un Ghost sorti ; jusqu'à la fin du combat, `SendOutGhost` répond `ERROR_GHOST_IN_BATTLE`. |
 | `BattlePacket` | comme en C2S | Invité |
 | `BattleChoice` | comme en C2S | Hôte |
 | `BattleTimerEnabled` | `{ "battle_uuid", "by_uuid", "by_name", "seconds": 90 }` | Les deux |

@@ -48,6 +48,7 @@ Canaux : **REST**, **WS** (`Error`), **WS-T** (`TradeSessionError` ou `reason` d
 | `ERROR_POKEMON_INCOMPLETE_BOX_DESTINATION` | 422 | REST | Un seul de `box_id` / `box_slot` fourni | `phantasmon.pokemon.error.incomplete_box_destination` |
 | `ERROR_POKEMON_IN_PENDING_TRADE` | 409 | REST | Suppression d'un Pokémon engagé dans un échange `PENDING` | `phantasmon.pokemon.error.in_pending_trade` |
 | `ERROR_POKEMON_NOT_IN_TEAM` | — | WS | `SendOutGhost` sur un Pokémon du PC | `phantasmon.ghost.error.not_in_team` |
+| `ERROR_GHOST_IN_BATTLE` | — | WS | `SendOutGhost` pendant un combat Ghost | `phantasmon.ghost.error.in_battle` |
 
 ## Échanges
 

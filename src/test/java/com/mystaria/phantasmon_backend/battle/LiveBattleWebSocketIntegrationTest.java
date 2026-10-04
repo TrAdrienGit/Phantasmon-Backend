@@ -152,6 +152,55 @@ class LiveBattleWebSocketIntegrationTest {
 		return await(inviterHandler, "BattleSessionStarted");
 	}
 
+	private static void joinGroup(WebSocketSession session, String fingerprint) throws Exception {
+		send(session, "JoinServerGroup", "{\"server_fingerprint\":\"" + fingerprint + "\",\"dimension\":\"minecraft:overworld\"}");
+		Thread.sleep(300);
+	}
+
+	@Test
+	void startingABattleRecallsBothPlayersGhosts() throws Exception {
+		Pokemon aliceMon = teamMember(aliceUuid, "pikachu", 1);
+		Pokemon bobMon = teamMember(bobUuid, "charmander", 1);
+		String group = "fp-battle-recall-" + UUID.randomUUID();
+		joinGroup(aliceSession, group);
+		joinGroup(bobSession, group);
+		send(aliceSession, "SendOutGhost", "{\"pokemon_uuid\":\"" + aliceMon.getUuid() + "\"}");
+		send(bobSession, "SendOutGhost", "{\"pokemon_uuid\":\"" + bobMon.getUuid() + "\"}");
+		Thread.sleep(300);
+
+		startBattle(aliceSession, alice, bobUuid, bobSession, bob);
+
+		// Each player sees both Ghosts go: their own and the opponent's (same group).
+		java.util.Set<String> seenByAlice = new java.util.HashSet<>();
+		seenByAlice.add(await(alice, "GhostEntityDespawn").get("pokemon_uuid").asString());
+		seenByAlice.add(await(alice, "GhostEntityDespawn").get("pokemon_uuid").asString());
+		assertThat(seenByAlice).containsExactlyInAnyOrder(aliceMon.getUuid().toString(), bobMon.getUuid().toString());
+		java.util.Set<String> seenByBob = new java.util.HashSet<>();
+		seenByBob.add(await(bob, "GhostEntityDespawn").get("pokemon_uuid").asString());
+		seenByBob.add(await(bob, "GhostEntityDespawn").get("pokemon_uuid").asString());
+		assertThat(seenByBob).containsExactlyInAnyOrder(aliceMon.getUuid().toString(), bobMon.getUuid().toString());
+	}
+
+	@Test
+	void noGhostCanBeSentOutWhileTheBattleLasts() throws Exception {
+		Pokemon aliceMon = teamMember(aliceUuid, "pikachu", 1);
+		teamMember(bobUuid, "charmander", 1);
+		String group = "fp-battle-block-" + UUID.randomUUID();
+		joinGroup(aliceSession, group);
+		joinGroup(bobSession, group);
+		String battle = startBattle(aliceSession, alice, bobUuid, bobSession, bob).get("battle_uuid").asString();
+
+		send(aliceSession, "SendOutGhost", "{\"pokemon_uuid\":\"" + aliceMon.getUuid() + "\"}");
+		assertThat(await(alice, "Error").get("error_code").asString()).isEqualTo("ERROR_GHOST_IN_BATTLE");
+		assertNothing(bob, "GhostEntitySpawn");
+
+		send(aliceSession, "BattleLeave", "{\"battle_uuid\":\"" + battle + "\"}");
+		await(alice, "BattleEnded");
+		send(aliceSession, "SendOutGhost", "{\"pokemon_uuid\":\"" + aliceMon.getUuid() + "\"}");
+		assertThat(await(bob, "GhostEntitySpawn").get("pokemon_uuid").asString())
+				.as("once the battle is over, Ghosts can go out again").isEqualTo(aliceMon.getUuid().toString());
+	}
+
 	@Test
 	void inviteReachesTheTarget() throws Exception {
 		send(aliceSession, "BattleInvite", "{\"target_uuid\":\"" + bobUuid + "\"}");

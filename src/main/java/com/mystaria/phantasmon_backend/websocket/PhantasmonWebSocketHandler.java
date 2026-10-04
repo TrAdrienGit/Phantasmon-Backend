@@ -47,16 +47,18 @@ public class PhantasmonWebSocketHandler extends TextWebSocketHandler {
 	private final PokemonRepository pokemonRepository;
 	private final LiveTradeService liveTradeService;
 	private final LiveBattleService liveBattleService;
+	private final GhostRecall ghostRecall;
 	private final ObjectMapper objectMapper;
 
 	public PhantasmonWebSocketHandler(PresenceService presenceService, SessionRegistry sessionRegistry,
 			PokemonRepository pokemonRepository, LiveTradeService liveTradeService, LiveBattleService liveBattleService,
-			ObjectMapper objectMapper) {
+			GhostRecall ghostRecall, ObjectMapper objectMapper) {
 		this.presenceService = presenceService;
 		this.sessionRegistry = sessionRegistry;
 		this.pokemonRepository = pokemonRepository;
 		this.liveTradeService = liveTradeService;
 		this.liveBattleService = liveBattleService;
+		this.ghostRecall = ghostRecall;
 		this.objectMapper = objectMapper;
 	}
 
@@ -179,24 +181,23 @@ public class PhantasmonWebSocketHandler extends TextWebSocketHandler {
 			return;
 		}
 
-		presenceService.sendOutGhost(playerUuid, pokemonUuid);
-		Position position = presenceService.find(playerUuid).map(PlayerPresence::position).orElse(null);
-		List<UUID> groupMembers = presenceService.groupMembers(playerUuid);
-		log.info("Player {} sent out Ghost {} ({}) — broadcasting to {} group member(s) + self",
-				playerUuid, pokemonUuid, pokemon.getSpecies(), groupMembers.size());
-		broadcastToGroupAndSelf(playerUuid, WsMessage.of("GhostEntitySpawn",
-				ghostSpawnData(playerUuid, pokemon, position)));
+		boolean sentOut = liveBattleService.ifNotInBattle(playerUuid, () -> {
+			presenceService.sendOutGhost(playerUuid, pokemonUuid);
+			Position position = presenceService.find(playerUuid).map(PlayerPresence::position).orElse(null);
+			List<UUID> groupMembers = presenceService.groupMembers(playerUuid);
+			log.info("Player {} sent out Ghost {} ({}) — broadcasting to {} group member(s) + self",
+					playerUuid, pokemonUuid, pokemon.getSpecies(), groupMembers.size());
+			broadcastToGroupAndSelf(playerUuid, WsMessage.of("GhostEntitySpawn",
+					ghostSpawnData(playerUuid, pokemon, position)));
+		});
+		if (!sentOut) {
+			// Ghosts stay in for the whole battle (TODO-14).
+			send(session, WsMessage.error("ERROR_GHOST_IN_BATTLE", Map.of("uuid", pokemonUuid)));
+		}
 	}
 
 	private void handleRecallGhost(UUID playerUuid) {
-		presenceService.find(playerUuid)
-				.map(PlayerPresence::activeGhostPokemonUuid)
-				.ifPresent(activeGhostUuid -> {
-					presenceService.recallGhost(playerUuid);
-					log.info("Player {} recalled Ghost {}", playerUuid, activeGhostUuid);
-					broadcastToGroupAndSelf(playerUuid, WsMessage.of("GhostEntityDespawn",
-							Map.of("player_uuid", playerUuid, "pokemon_uuid", activeGhostUuid)));
-				});
+		ghostRecall.recall(playerUuid, "RecallGhost");
 	}
 
 	/** A player who just joined a group must be told about Ghosts already out among their new group members. */

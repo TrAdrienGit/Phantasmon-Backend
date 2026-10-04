@@ -22,9 +22,7 @@ Identifiants : `BUG-n` (comportement incorrect), `TODO-n` (action à faire), `DE
 | TODO-2 | haute | Client | Retirer `/phantasmon debug fingerprint` quand un vrai serveur dédié remplacera les tests « Ouvrir au LAN » (décision D-18). |
 | TODO-3 | haute | Client | Remplacer les métadonnées factices : `homepage` / `sources` de `fabric.mod.json` (`github.com/your-account/…`), lien de mise à jour `https://modrinth.com/mod/phantasmon` (`AuthService`). |
 | TODO-7 | moyenne | Machine serveur | Rétablir l'accès SSH (`production-server`) : les déploiements du client retombent sur l'instance locale « Cobblemon 2 ». |
-| TODO-12 | haute | Client | Combat Ghost : les Pokémon n'ont pas leurs formes spéciales (le modèle de base s'affiche). |
 | TODO-13 | moyenne | Client | Les Ghost doivent être connus d'office des joueurs : dans Cobblemon, un Pokémon non scanné au Pokédex affiche « ???? » à la place de son nom. |
-| TODO-14 | haute | Les deux | Au lancement d'un combat Ghost, rappeler les Ghost sortis des deux joueurs ; tant que le combat dure, aucun des deux ne peut sortir de Ghost. |
 | TODO-15 | haute | Les deux | Faire un audit de sécurité (client et backend). |
 | TODO-16 | haute | Machine qui héberge la base | Planifier `scripts/backup-database.ps1` (tâche Windows quotidienne, `guides/deployment.md` §3.2) vers un autre disque. |
 
@@ -69,3 +67,5 @@ Identifiants : `BUG-n` (comportement incorrect), `TODO-n` (action à faire), `DE
 | TODO-9 | 2026-10-03 | Javadocs corrigées : `ClientCommonPacketListenerImplMixin` (premier des 7 Mixins), `PhantasmonKeybinds` (4 touches : P, O, G, B), `BackendHealthPinger` (URL de `config/phantasmon.json`), `RequestLoggingFilter` / `LogRetentionService` (`SessionLogFileEnvironmentPostProcessor`, pas de `logback-spring.xml`), `PhantasmonWebSocketHandler` (messages `Battle*` routés vers `LiveBattleService`). En plus : `&` brut dans `PokemonUpdateRequest` qui faisait échouer `./gradlew javadoc`. |
 | TODO-10 | 2026-10-03 | 20 fichiers supprimés de `textures/gui/sprites/pc/` (10 sprites nine-slice de l'ancien PC + leurs `.mcmeta`), aucune référence dans le code ; seul `star.png` reste (`PhantasmonCanvasScreen.SPRITE_STAR`). Récupérables par git. |
 | TODO-11 | 2026-10-03 | Export Showdown côté client : boutons EXPORTER du PC (équipe) et de l'éditeur (Pokémon affiché), `/phantasmon pokemon export [uuid]` ; noms anglais de Cobblemon ; `Hidden Power [Type]` géré à l'export et à l'import. Aller-retour couvert par `ShowdownExporterTest`. |
+| TODO-12 | 2026-10-04 | Formes spéciales en combat : `BattleVisuals` écrit les aspects reçus dans `PokemonEntity.ASPECTS` (comme les Ghost dans le monde) ; `GhostBattlePokemonFactory` force les aspects de forme en dernier, avec chromatique et sexe. |
+| TODO-14 | 2026-10-04 | Au démarrage d'un combat Ghost, le backend rappelle les Ghost des deux joueurs (`GhostEntityDespawn` à leur groupe) ; jusqu'à la fin, `SendOutGhost` répond `ERROR_GHOST_IN_BATTLE` (vérifié sous le verrou du combat). Rappel factorisé dans `GhostRecall` (aussi utilisé par `RecallGhost` et l'échange en direct). Tests `startingABattleRecallsBothPlayersGhosts`, `noGhostCanBeSentOutWhileTheBattleLasts`. |

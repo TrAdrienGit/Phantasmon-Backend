@@ -31,7 +31,7 @@ Organisation **par domaine** (pas par couche technique). Racine : `com.mystaria.
 | `trade` | Échanges REST asynchrones et échanges en direct (mémoire + transaction finale) | `TradeController`, `TradeService`, `LiveTradeService`, `LiveTradeSession` |
 | `battle` | Sessions de combat REST et combats en direct (invitation, hôte, relais, chrono, résultat) | `BattleController`, `BattleService`, `LiveBattleService`, `BattleSession` |
 | `presence` | Présence en mémoire, regroupement par empreinte + dimension, Ghost actif | `PresenceService`, `PlayerPresence`, `Position` |
-| `websocket` | Authentification du handshake, dispatch des messages, registre des sessions, balayage TTL | `PhantasmonWebSocketHandler`, `JwtHandshakeInterceptor`, `SessionRegistry`, `PresenceTtlSweeper`, `WsMessage` |
+| `websocket` | Authentification du handshake, dispatch des messages, registre des sessions, balayage TTL | `PhantasmonWebSocketHandler`, `JwtHandshakeInterceptor`, `SessionRegistry`, `PresenceTtlSweeper`, `GhostRecall`, `WsMessage` |
 | `version` | Handshake de version client | `VersionController` |
 | `health` | Sonde `GET /health` (test réel de la base) | `HealthController` |
 | `logging` | Un fichier de log par démarrage, rétention 5 Gio, log de chaque requête REST | `SessionLogFileEnvironmentPostProcessor`, `LogRetentionService`, `RequestLoggingFilter` |
@@ -115,6 +115,10 @@ Règles de diffusion à retenir :
   `broadcastToGroupAndSelf` pour que le propriétaire voie aussi son propre Ghost.
 - À l'arrivée dans un groupe (`JoinServerGroup`), le joueur reçoit un `GhostEntitySpawn` pour chaque Ghost déjà
   sorti dans ce groupe.
+- Tout rappel passe par `GhostRecall` (même public que la sortie) : `RecallGhost`, Ghost donné dans un échange en
+  direct, début d'un combat Ghost (les deux joueurs). Pendant un combat, `SendOutGhost` est vérifié et appliqué sous
+  le verrou de `LiveBattleService` (`ifNotInBattle`) : aucune sortie ne peut se glisser entre le rappel du début et
+  l'enregistrement du combat.
 
 ## 7. Transactions métier sensibles
 

@@ -17,7 +17,7 @@ import com.mystaria.phantasmon_backend.player.PlayerService;
 import com.mystaria.phantasmon_backend.pokemon.Pokemon;
 import com.mystaria.phantasmon_backend.pokemon.PokemonRepository;
 import com.mystaria.phantasmon_backend.pokemon.PokemonService;
-import com.mystaria.phantasmon_backend.presence.PresenceService;
+import com.mystaria.phantasmon_backend.websocket.GhostRecall;
 import com.mystaria.phantasmon_backend.websocket.SessionRegistry;
 import com.mystaria.phantasmon_backend.websocket.WsMessage;
 
@@ -53,20 +53,21 @@ public class LiveTradeService {
 	private final PokemonService pokemonService;
 	private final PokemonRepository pokemonRepository;
 	private final PlayerService playerService;
-	private final PresenceService presenceService;
 	private final SessionRegistry sessionRegistry;
+	private final GhostRecall ghostRecall;
 	private final Clock clock;
 	private final Duration inviteTtl;
 
 	public LiveTradeService(TradeService tradeService, PokemonService pokemonService, PokemonRepository pokemonRepository,
-			PlayerService playerService, PresenceService presenceService, SessionRegistry sessionRegistry, Clock clock,
+			PlayerService playerService, SessionRegistry sessionRegistry, GhostRecall ghostRecall,
+			Clock clock,
 			@Value("${phantasmon.trade.invite-ttl:PT60S}") Duration inviteTtl) {
 		this.tradeService = tradeService;
 		this.pokemonService = pokemonService;
 		this.pokemonRepository = pokemonRepository;
 		this.playerService = playerService;
-		this.presenceService = presenceService;
 		this.sessionRegistry = sessionRegistry;
+		this.ghostRecall = ghostRecall;
 		this.clock = clock;
 		this.inviteTtl = inviteTtl;
 	}
@@ -240,26 +241,9 @@ public class LiveTradeService {
 				"session_uuid", session.uuid(), "trade_uuid", trade.uuid(),
 				"given_pokemon", recipientOffer, "received_pokemon", initiatorOffer)));
 
-		recallGhostIfTraded(initiatorUuid, initiatorOffer);
-		recallGhostIfTraded(recipientUuid, recipientOffer);
-	}
-
-	/**
-	 * A Pokémon that was out as a Ghost just changed owner: its former owner's
-	 * presence must stop pointing at it, and everyone who sees that Ghost
-	 * (group + the owner, same audience as {@code RecallGhost}) gets a despawn.
-	 */
-	private void recallGhostIfTraded(UUID playerUuid, UUID tradedPokemonUuid) {
-		presenceService.find(playerUuid)
-				.filter(presence -> tradedPokemonUuid.equals(presence.activeGhostPokemonUuid()))
-				.ifPresent(presence -> {
-					List<UUID> groupMembers = presenceService.groupMembers(playerUuid);
-					presenceService.recallGhost(playerUuid);
-					WsMessage despawn = WsMessage.of("GhostEntityDespawn",
-							Map.of("player_uuid", playerUuid, "pokemon_uuid", tradedPokemonUuid));
-					groupMembers.forEach(member -> sessionRegistry.send(member, despawn));
-					sessionRegistry.send(playerUuid, despawn);
-				});
+		// A Pokémon that was out as a Ghost just changed owner: its former owner's Ghost goes back in.
+		ghostRecall.recallIf(initiatorUuid, initiatorOffer::equals, "traded away");
+		ghostRecall.recallIf(recipientUuid, recipientOffer::equals, "traded away");
 	}
 
 	private void end(LiveTradeSession session) {

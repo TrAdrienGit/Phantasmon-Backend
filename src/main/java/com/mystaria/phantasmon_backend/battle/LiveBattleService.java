@@ -15,6 +15,7 @@ import com.mystaria.phantasmon_backend.player.Player;
 import com.mystaria.phantasmon_backend.player.PlayerService;
 import com.mystaria.phantasmon_backend.pokemon.PokemonResponse;
 import com.mystaria.phantasmon_backend.pokemon.PokemonService;
+import com.mystaria.phantasmon_backend.websocket.GhostRecall;
 import com.mystaria.phantasmon_backend.websocket.SessionRegistry;
 import com.mystaria.phantasmon_backend.websocket.WsMessage;
 
@@ -30,6 +31,8 @@ import lombok.extern.slf4j.Slf4j;
  *   <li>relays, opaquely: the host's encoded Cobblemon battle packets to the guest ({@code BattlePacket}) and
  *   the guest's encoded choices to the host ({@code BattleChoice}) — each direction only from the right player;</li>
  *   <li>broadcasts the turn timer once either player turns it on (never off again, like Showdown);</li>
+ *   <li>recalls both players' Ghosts when the battle starts, and refuses any send-out until it ends
+ *   ({@code ERROR_GHOST_IN_BATTLE}, TODO-14);</li>
  *   <li>applies the result guardrails: only the host reports it, the winner is a participant (or nobody for a
  *   draw), the session must still be active; a player leaving forfeits; a disconnection is a draw (CAD Partie
  *   1 §44).</li>
@@ -50,15 +53,18 @@ public class LiveBattleService {
 	private final PokemonService pokemonService;
 	private final PlayerService playerService;
 	private final SessionRegistry sessionRegistry;
+	private final GhostRecall ghostRecall;
 	private final Clock clock;
 	private final Duration inviteTtl;
 
 	public LiveBattleService(BattleRepository battleRepository, PokemonService pokemonService, PlayerService playerService,
-			SessionRegistry sessionRegistry, Clock clock, @Value("${phantasmon.battle.invite-ttl:PT60S}") Duration inviteTtl) {
+			SessionRegistry sessionRegistry, GhostRecall ghostRecall, Clock clock,
+			@Value("${phantasmon.battle.invite-ttl:PT60S}") Duration inviteTtl) {
 		this.battleRepository = battleRepository;
 		this.pokemonService = pokemonService;
 		this.playerService = playerService;
 		this.sessionRegistry = sessionRegistry;
+		this.ghostRecall = ghostRecall;
 		this.clock = clock;
 		this.inviteTtl = inviteTtl;
 	}
@@ -167,6 +173,21 @@ public class LiveBattleService {
 				"battle_uuid", battle.uuid, "role", "GUEST",
 				"opponent_uuid", hostUuid, "opponent_name", nameOf(hostUuid),
 				"own_team", guestTeam)));
+		// Both players' Ghosts go back in for the whole battle (TODO-14); ifNotInBattle keeps them in.
+		ghostRecall.recall(hostUuid, "battle started");
+		ghostRecall.recall(guestUuid, "battle started");
+	}
+
+	/**
+	 * Runs {@code action} only if the player is not in a live battle, under the same lock as a battle start, so a
+	 * Ghost can never be sent out between the start's recall and the battle being registered. Returns whether it ran.
+	 */
+	public synchronized boolean ifNotInBattle(UUID playerUuid, Runnable action) {
+		if (battlesByPlayer.containsKey(playerUuid)) {
+			return false;
+		}
+		action.run();
+		return true;
 	}
 
 	/** Alternation: whoever did not host the pair's previous live battle; the inviter for their very first one. */
