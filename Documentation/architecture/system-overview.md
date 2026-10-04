@@ -125,6 +125,11 @@ sequenceDiagram
     participant G as Client invité
     H->>B: BattleInvite (ou l'inverse)
     G->>B: BattleInviteResponse(accept)
+    B-->>H: BattleLobbyUpdated (aperçu de l'équipe adverse)
+    B-->>G: BattleLobbyUpdated
+    Note over H,G: lobby : choix Ghost / Cobblemon, lead caché, prêt
+    H->>B: BattleLobbySetReady
+    G->>B: BattleLobbySetReady
     B-->>H: BattleSessionStarted(role=HOST, deux équipes)
     B-->>G: BattleSessionStarted(role=GUEST, sa propre équipe)
     Note over H: lance le moteur de combat de Cobblemon<br/>(Showdown via GraalJS) en local

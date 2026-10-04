@@ -145,13 +145,35 @@ class LiveBattleWebSocketIntegrationTest {
 		}
 	}
 
-	/** Alice invites Bob, Bob accepts; returns Alice's {@code BattleSessionStarted}. */
-	private JsonNode startBattle(WebSocketSession inviter, RecordingHandler inviterHandler, UUID targetUuid,
+	/** The inviter invites, the invitee accepts: both land in the lobby. Returns the inviter's first lobby view. */
+	private JsonNode openLobby(WebSocketSession inviter, RecordingHandler inviterHandler, UUID targetUuid,
 			WebSocketSession invitee, RecordingHandler inviteeHandler) throws Exception {
 		send(inviter, "BattleInvite", "{\"target_uuid\":\"" + targetUuid + "\"}");
 		JsonNode invite = await(inviteeHandler, "BattleInviteReceived");
 		send(invitee, "BattleInviteResponse",
 				"{\"invite_uuid\":\"" + invite.get("invite_uuid").asString() + "\",\"accept\":true}");
+		await(inviteeHandler, "BattleLobbyUpdated");
+		return await(inviterHandler, "BattleLobbyUpdated");
+	}
+
+	private static void setReady(WebSocketSession session, String lobby, boolean ready) throws Exception {
+		send(session, "BattleLobbySetReady", "{\"lobby_uuid\":\"" + lobby + "\",\"ready\":" + ready + "}");
+	}
+
+	private static void setLead(WebSocketSession session, String lobby, int index) throws Exception {
+		send(session, "BattleLobbySetLead", "{\"lobby_uuid\":\"" + lobby + "\",\"index\":" + index + "}");
+	}
+
+	/** Both players get ready in the lobby: the battle starts. */
+	private void readyBoth(String lobby) throws Exception {
+		setReady(aliceSession, lobby, true);
+		setReady(bobSession, lobby, true);
+	}
+
+	/** Invite, accept, both ready with their default lead; returns the inviter's {@code BattleSessionStarted}. */
+	private JsonNode startBattle(WebSocketSession inviter, RecordingHandler inviterHandler, UUID targetUuid,
+			WebSocketSession invitee, RecordingHandler inviteeHandler) throws Exception {
+		readyBoth(openLobby(inviter, inviterHandler, targetUuid, invitee, inviteeHandler).get("lobby_uuid").asString());
 		await(inviteeHandler, "BattleSessionStarted");
 		return await(inviterHandler, "BattleSessionStarted");
 	}
@@ -162,7 +184,7 @@ class LiveBattleWebSocketIntegrationTest {
 	}
 
 	@Test
-	void startingABattleRecallsBothPlayersGhosts() throws Exception {
+	void openingTheLobbyRecallsBothPlayersGhosts() throws Exception {
 		Pokemon aliceMon = teamMember(aliceUuid, "pikachu", 1);
 		Pokemon bobMon = teamMember(bobUuid, "charmander", 1);
 		String group = "fp-battle-recall-" + UUID.randomUUID();
@@ -172,7 +194,7 @@ class LiveBattleWebSocketIntegrationTest {
 		send(bobSession, "SendOutGhost", "{\"pokemon_uuid\":\"" + bobMon.getUuid() + "\"}");
 		Thread.sleep(300);
 
-		startBattle(aliceSession, alice, bobUuid, bobSession, bob);
+		openLobby(aliceSession, alice, bobUuid, bobSession, bob);
 
 		// Each player sees both Ghosts go: their own and the opponent's (same group).
 		java.util.Set<String> seenByAlice = new java.util.HashSet<>();
@@ -224,6 +246,7 @@ class LiveBattleWebSocketIntegrationTest {
 		JsonNode invite = await(bob, "BattleInviteReceived");
 		assertThat(invite.get("from_team").asString()).isEqualTo("COBBLEMON");
 		send(bobSession, "BattleInviteResponse", "{\"invite_uuid\":\"" + invite.get("invite_uuid").asString() + "\",\"accept\":true}");
+		readyBoth(await(alice, "BattleLobbyUpdated").get("lobby_uuid").asString());
 
 		JsonNode aliceView = await(alice, "BattleSessionStarted");
 		assertThat(aliceView.get("role").asString()).isEqualTo("HOST");
@@ -248,6 +271,7 @@ class LiveBattleWebSocketIntegrationTest {
 		assertThat(invite.get("from_team").asString()).as("Ghosts unless said otherwise").isEqualTo("GHOST");
 		send(bobSession, "BattleInviteResponse", "{\"invite_uuid\":\"" + invite.get("invite_uuid").asString()
 				+ "\",\"accept\":true,\"team\":\"COBBLEMON\",\"party\":[" + partyMember(realUuid, "lucario", "{}") + "]}");
+		readyBoth(await(alice, "BattleLobbyUpdated").get("lobby_uuid").asString());
 
 		JsonNode aliceView = await(alice, "BattleSessionStarted");
 		assertThat(aliceView.get("opponent_team_source").asString()).isEqualTo("COBBLEMON");
@@ -297,14 +321,15 @@ class LiveBattleWebSocketIntegrationTest {
 	}
 
 	@Test
-	void aPlayerWithoutTeamCannotStartABattle() throws Exception {
+	void aPlayerWithoutTeamCannotGetReady() throws Exception {
+		// The lobby still opens: they may switch to their Cobblemon team there.
 		teamMember(aliceUuid, "pikachu", 1);
-		send(aliceSession, "BattleInvite", "{\"target_uuid\":\"" + bobUuid + "\"}");
-		JsonNode invite = await(bob, "BattleInviteReceived");
+		String lobby = openLobby(aliceSession, alice, bobUuid, bobSession, bob).get("lobby_uuid").asString();
 
-		send(bobSession, "BattleInviteResponse", "{\"invite_uuid\":\"" + invite.get("invite_uuid").asString() + "\",\"accept\":true}");
+		setReady(bobSession, lobby, true);
 
 		assertThat(await(bob, "BattleSessionError").get("error_code").asString()).isEqualTo("ERROR_BATTLE_EMPTY_TEAM");
+		assertNothing(alice, "BattleSessionStarted");
 	}
 
 	@Test
@@ -315,6 +340,7 @@ class LiveBattleWebSocketIntegrationTest {
 		send(aliceSession, "BattleInvite", "{\"target_uuid\":\"" + bobUuid + "\"}");
 		JsonNode invite = await(bob, "BattleInviteReceived");
 		send(bobSession, "BattleInviteResponse", "{\"invite_uuid\":\"" + invite.get("invite_uuid").asString() + "\",\"accept\":true}");
+		readyBoth(await(alice, "BattleLobbyUpdated").get("lobby_uuid").asString());
 
 		JsonNode aliceView = await(alice, "BattleSessionStarted");
 		assertThat(aliceView.get("role").asString()).isEqualTo("HOST");
@@ -509,5 +535,164 @@ class LiveBattleWebSocketIntegrationTest {
 		send(aliceSession, "BattlePacket", "{\"battle_uuid\":\"" + battle + "\",\"id\":\"cobblemon:battle_set_team\",\"payload\":\"" + big + "\"}");
 
 		assertThat(await(bob, "BattlePacket").get("payload").asString()).hasSize(100_000);
+	}
+
+	// ---- Lobby (team preview, hidden lead, ready, lobby timer) ----
+
+	private Pokemon detailedTeamMember(UUID ownerUuid, String species, int teamSlot) {
+		return pokemonRepository.saveAndFlush(new Pokemon(UUID.randomUUID(), ownerUuid, species, null,
+				(short) 50, "timid", "static", true, null, null, (short) teamSlot, "1.8.1",
+				Map.of("ivs", Map.of("hp", 31), "evs", Map.of("spa", 252), "moves", List.of("thunderbolt"),
+						"held_item", "light_ball", "gender", "F")));
+	}
+
+	@Test
+	void acceptingOpensALobbyWhereTheOpponentsTeamIsOnlyAPreview() throws Exception {
+		detailedTeamMember(aliceUuid, "pikachu", 1);
+		detailedTeamMember(bobUuid, "charmander", 1);
+
+		JsonNode aliceView = openLobby(aliceSession, alice, bobUuid, bobSession, bob);
+
+		assertThat(aliceView.get("opponent_name").asString()).isEqualTo("Bob");
+		assertThat(aliceView.get("own_team").get(0).get("data").get("moves").get(0).asString())
+				.as("a player sees their own sets in full").isEqualTo("thunderbolt");
+		assertThat(aliceView.get("own_lead").asInt()).isZero();
+		assertThat(aliceView.get("own_ready").asBoolean()).isFalse();
+		assertThat(aliceView.get("opponent_ready").asBoolean()).isFalse();
+		assertThat(aliceView.get("opponent_team_source").asString()).isEqualTo("GHOST");
+		JsonNode preview = aliceView.get("opponent_team").get(0);
+		assertThat(preview.get("species").asString()).isEqualTo("charmander");
+		assertThat(preview.get("is_shiny").asBoolean()).isTrue();
+		java.util.Set<String> fields = new java.util.HashSet<>(preview.propertyNames());
+		assertThat(fields).as("model and name only: no level, set, IV/EV or item").containsOnly("species", "form", "is_shiny", "gender");
+		assertNothing(alice, "BattleSessionStarted");
+	}
+
+	@Test
+	void theLeadStaysHiddenFromTheOpponentAndGoesFirstWhenTheBattleStarts() throws Exception {
+		teamMember(aliceUuid, "pikachu", 1);
+		teamMember(aliceUuid, "eevee", 2);
+		teamMember(bobUuid, "charmander", 1);
+		String lobby = openLobby(aliceSession, alice, bobUuid, bobSession, bob).get("lobby_uuid").asString();
+
+		setLead(aliceSession, lobby, 1);
+		assertThat(await(alice, "BattleLobbyUpdated").get("own_lead").asInt()).isEqualTo(1);
+		assertNothing(bob, "BattleLobbyUpdated");
+
+		setReady(aliceSession, lobby, true);
+		JsonNode bobView = await(bob, "BattleLobbyUpdated");
+		assertThat(bobView.get("opponent_ready").asBoolean()).isTrue();
+		assertThat(bobView.toString()).as("nothing about the opponent's lead").doesNotContain("opponent_lead");
+		assertThat(bobView.get("opponent_team").get(0).get("species").asString()).as("preview in team order").isEqualTo("pikachu");
+
+		setReady(bobSession, lobby, true);
+		JsonNode aliceStart = await(alice, "BattleSessionStarted");
+		assertThat(aliceStart.get("own_team").get(0).get("species").asString()).isEqualTo("eevee");
+		assertThat(aliceStart.get("own_team").get(1).get("species").asString()).isEqualTo("pikachu");
+		assertThat(await(bob, "BattleSessionStarted").get("own_team").get(0).get("species").asString()).isEqualTo("charmander");
+	}
+
+	@Test
+	void aReadyPlayerIsLockedAndATeamSwitchUnreadiesTheOpponent() throws Exception {
+		teamMember(aliceUuid, "pikachu", 1);
+		teamMember(aliceUuid, "eevee", 2);
+		teamMember(bobUuid, "charmander", 1);
+		String lobby = openLobby(aliceSession, alice, bobUuid, bobSession, bob).get("lobby_uuid").asString();
+		setReady(aliceSession, lobby, true);
+		await(bob, "BattleLobbyUpdated");
+
+		setLead(aliceSession, lobby, 1);
+		assertThat(await(alice, "BattleSessionError").get("error_code").asString()).isEqualTo("ERROR_BATTLE_LOBBY_LOCKED");
+
+		send(bobSession, "BattleLobbySetTeam", "{\"lobby_uuid\":\"" + lobby + "\",\"team\":\"COBBLEMON\",\"party\":["
+				+ partyMember(UUID.randomUUID(), "garchomp", "{}") + "]}");
+		JsonNode aliceView = await(alice, "BattleLobbyUpdated");
+		while (!aliceView.get("opponent_team_source").asString().equals("COBBLEMON")) {
+			aliceView = await(alice, "BattleLobbyUpdated");
+		}
+		assertThat(aliceView.get("own_ready").asBoolean()).as("the opponent's team changed: look again").isFalse();
+		assertThat(aliceView.get("opponent_team").get(0).get("species").asString()).isEqualTo("garchomp");
+		JsonNode bobView = await(bob, "BattleLobbyUpdated");
+		while (!bobView.get("own_team_source").asString().equals("COBBLEMON")) {
+			bobView = await(bob, "BattleLobbyUpdated");
+		}
+		assertThat(bobView.get("own_team").get(0).get("species").asString()).isEqualTo("garchomp");
+
+		send(bobSession, "BattleLobbySetTeam", "{\"lobby_uuid\":\"" + lobby + "\",\"team\":\"GHOST\"}");
+		assertThat(await(alice, "BattleLobbyUpdated").get("opponent_team").get(0).get("species").asString()).isEqualTo("charmander");
+	}
+
+	@Test
+	void playersInALobbyAreBusyAndKeepTheirGhostsIn() throws Exception {
+		Pokemon aliceMon = teamMember(aliceUuid, "pikachu", 1);
+		teamMember(bobUuid, "charmander", 1);
+		openLobby(aliceSession, alice, bobUuid, bobSession, bob);
+
+		send(aliceSession, "SendOutGhost", "{\"pokemon_uuid\":\"" + aliceMon.getUuid() + "\"}");
+		assertThat(await(alice, "Error").get("error_code").asString()).isEqualTo("ERROR_GHOST_IN_BATTLE");
+		send(bobSession, "BattleInvite", "{\"target_uuid\":\"" + aliceUuid + "\"}");
+		assertThat(await(bob, "BattleSessionError").get("error_code").asString()).isEqualTo("ERROR_BATTLE_ALREADY_IN_BATTLE");
+	}
+
+	@Test
+	void leavingTheLobbyCancelsItForBoth() throws Exception {
+		teamMember(aliceUuid, "pikachu", 1);
+		teamMember(bobUuid, "charmander", 1);
+		String lobby = openLobby(aliceSession, alice, bobUuid, bobSession, bob).get("lobby_uuid").asString();
+
+		send(bobSession, "BattleLobbyLeave", "{\"lobby_uuid\":\"" + lobby + "\"}");
+
+		JsonNode cancelled = await(alice, "BattleLobbyCancelled");
+		assertThat(cancelled.get("reason").asString()).isEqualTo("LEFT");
+		assertThat(cancelled.get("by_name").asString()).isEqualTo("Bob");
+		assertThat(await(bob, "BattleLobbyCancelled").get("lobby_uuid").asString()).isEqualTo(lobby);
+		// Free again: a new invitation goes through.
+		send(bobSession, "BattleInvite", "{\"target_uuid\":\"" + aliceUuid + "\"}");
+		await(alice, "BattleInviteReceived");
+	}
+
+	@Test
+	void disconnectingOrAStoppingBackendCancelsTheLobby() throws Exception {
+		teamMember(aliceUuid, "pikachu", 1);
+		teamMember(bobUuid, "charmander", 1);
+		openLobby(aliceSession, alice, bobUuid, bobSession, bob);
+		liveBattleService.endAllAsDraw("BACKEND_LOST");
+		assertThat(await(alice, "BattleLobbyCancelled").get("reason").asString()).isEqualTo("BACKEND_LOST");
+		assertThat(await(bob, "BattleLobbyCancelled").get("reason").asString()).isEqualTo("BACKEND_LOST");
+
+		openLobby(aliceSession, alice, bobUuid, bobSession, bob);
+		bobSession.close(CloseStatus.NORMAL);
+		assertThat(await(alice, "BattleLobbyCancelled").get("reason").asString()).isEqualTo("PARTNER_DISCONNECTED");
+	}
+
+	@Test
+	void theLobbyTimerPicksTheFirstPokemonForWhoeverIsNotReadyAndCarriesOverToTheBattle() throws Exception {
+		teamMember(aliceUuid, "pikachu", 1);
+		teamMember(aliceUuid, "eevee", 2);
+		teamMember(bobUuid, "charmander", 1);
+		teamMember(bobUuid, "squirtle", 2);
+		String lobby = openLobby(aliceSession, alice, bobUuid, bobSession, bob).get("lobby_uuid").asString();
+		setLead(aliceSession, lobby, 1);
+		setReady(aliceSession, lobby, true);
+		setLead(bobSession, lobby, 1);
+
+		send(bobSession, "BattleLobbyTimerEnable", "{\"lobby_uuid\":\"" + lobby + "\"}");
+		JsonNode timed = await(alice, "BattleLobbyUpdated");
+		while (timed.get("timer_seconds_left").isNull()) {
+			timed = await(alice, "BattleLobbyUpdated");
+		}
+		assertThat(timed.get("timer_seconds_left").asInt()).isBetween(148, 150);
+		assertThat(timed.get("timer_by_name").asString()).isEqualTo("Bob");
+
+		liveBattleService.expireLobbies(java.time.Instant.now().plusSeconds(151));
+
+		assertThat(await(alice, "BattleSessionStarted").get("own_team").get(0).get("species").asString())
+				.as("Alice was ready: her lead is kept").isEqualTo("eevee");
+		assertThat(await(bob, "BattleSessionStarted").get("own_team").get(0).get("species").asString())
+				.as("Bob was not ready: his first Pokémon leads").isEqualTo("charmander");
+		JsonNode battleTimer = await(alice, "BattleTimerEnabled");
+		assertThat(battleTimer.get("seconds").asInt()).isEqualTo(90);
+		assertThat(battleTimer.get("by_name").asString()).isEqualTo("Bob");
+		await(bob, "BattleTimerEnabled");
 	}
 }

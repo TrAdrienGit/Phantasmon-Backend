@@ -176,6 +176,13 @@ public class PhantasmonWebSocketHandler extends TextWebSocketHandler {
 			case "BattleInvite" -> liveBattleService.invite(playerUuid, uuidField(incoming, "target_uuid"), incoming.data());
 			case "BattleInviteResponse" -> liveBattleService.respond(playerUuid, uuidField(incoming, "invite_uuid"),
 					Boolean.TRUE.equals(incoming.data().get("accept")), incoming.data());
+			case "BattleLobbySetTeam" -> liveBattleService.setLobbyTeam(playerUuid, uuidField(incoming, "lobby_uuid"), incoming.data());
+			case "BattleLobbySetLead" -> liveBattleService.setLobbyLead(playerUuid, uuidField(incoming, "lobby_uuid"),
+					incoming.data().get("index") instanceof Number index ? index.intValue() : null);
+			case "BattleLobbySetReady" -> liveBattleService.setLobbyReady(playerUuid, uuidField(incoming, "lobby_uuid"),
+					Boolean.TRUE.equals(incoming.data().get("ready")));
+			case "BattleLobbyTimerEnable" -> liveBattleService.enableLobbyTimer(playerUuid, uuidField(incoming, "lobby_uuid"));
+			case "BattleLobbyLeave" -> liveBattleService.leaveLobby(playerUuid, uuidField(incoming, "lobby_uuid"));
 			case "BattlePacket" -> liveBattleService.relayPacket(playerUuid, uuidField(incoming, "battle_uuid"), incoming.data());
 			case "BattleChoice" -> liveBattleService.relayChoice(playerUuid, uuidField(incoming, "battle_uuid"), incoming.data());
 			case "BattleTimerEnable" -> liveBattleService.enableTimer(playerUuid, uuidField(incoming, "battle_uuid"));

@@ -35,6 +35,7 @@ Pour ajouter une décision : prendre le numéro suivant, dater, et mettre à jou
 | D-20 | Fonctions d'administration et limitation de débit reportées | Acceptée, débit WebSocket ajouté (SEC-5) | 2026-09-26 |
 | D-21 | Positions des joueurs visibles par tout leur groupe : limite assumée | Acceptée | 2026-10-04 |
 | D-22 | Ghost contre Pokémon normal = copie de l'équipe Cobblemon d'un joueur | Acceptée | 2026-10-04 |
+| D-23 | Lobby de combat (aperçu d'équipe, lead caché) avant chaque combat en direct | Acceptée | 2026-10-04 |
 
 ---
 
@@ -236,3 +237,16 @@ Pour ajouter une décision : prendre le numéro suivant, dater, et mettre à jou
 - **Conséquences** : la copie est validée comme un Ghost (bornes, légalité) mais vient du client : un client modifié
   pourrait annoncer une équipe qu'il n'a pas (LIM-10, dans la lignée de LIM-1).
 
+## D-23 — Lobby de combat (aperçu d'équipe, lead caché) avant chaque combat en direct
+
+- **Contexte** : demande d'Adrien (2026-10-04), reprise du « Team Preview » de Showdown. Jusque-là, accepter une
+  invitation lançait le combat aussitôt, avec l'équipe choisie dans le chat.
+- **Décision** : une invitation acceptée ouvre un lobby (même direction artistique que l'écran d'échange). Chaque
+  joueur voit son équipe complète et seulement le **modèle et le nom** des Pokémon adverses (ni niveau, ni objet, ni
+  capacités, ni IV/EV — filtrés par le backend, pas par l'écran), choisit Ghost ou équipe Cobblemon, choisit son lead
+  (jamais transmis à l'adversaire) et se déclare prêt. Règles choisies par Claude et annoncées à Adrien : changer
+  d'équipe retire le « prêt » de l'adversaire ; être prêt verrouille équipe et lead ; le timer du lobby (150 s)
+  donne le premier Pokémon comme lead à qui n'est pas prêt, puis active d'office le chrono de combat (90 s). Les
+  Ghost sont rappelés dès l'ouverture du lobby.
+- **Conséquences** : nouveaux messages `BattleLobby*` ; `BattleSessionStarted` part quand les deux sont prêts, équipes
+  réordonnées lead en premier. L'animation de lancement et la musique viendront plus tard.

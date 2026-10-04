@@ -3,7 +3,10 @@ package com.mystaria.phantasmon_backend.battle;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -12,6 +15,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.ContextClosedEvent;
 import org.springframework.context.event.EventListener;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import com.mystaria.phantasmon_backend.player.Player;
@@ -28,7 +32,12 @@ import lombok.extern.slf4j.Slf4j;
  * Live Ghost battles (Phase 9, CAD Partie 2 §9.1/§9.2). The battle engine (Cobblemon's own, Showdown inside)
  * runs on the <b>host</b> player's client; the backend:
  * <ul>
- *   <li>handles the invitation and picks the host — the inviter for a pair's first battle, then alternating
+ *   <li>handles the invitation, then the <b>lobby</b> (team preview, Showdown style): each player sees their own
+ *   team in full and only the species / form / shininess / gender of the opponent's, picks their lead — never
+ *   revealed to the opponent —, may switch between their Ghosts and a copy of their Cobblemon party, and gets
+ *   ready; the battle starts when both are ready, each team reordered lead first. An optional lobby timer
+ *   (150 s) readies whoever is not with their first Pokémon as lead, and turns the battle timer on;</li>
+ *   <li>picks the host — the inviter for a pair's first battle, then alternating
  *   between the two players on every following battle (the CAD's anti-abuse guardrail);</li>
  *   <li>persists the session ({@code battle_sessions}, player A = host) with both team snapshots;</li>
  *   <li>relays, opaquely: the host's encoded Cobblemon battle packets to the guest ({@code BattlePacket}) and
@@ -41,7 +50,7 @@ import lombok.extern.slf4j.Slf4j;
  *   1 §44).</li>
  * </ul>
  * The host is the only one to receive the opponent's full team (it needs it to build the battle); the guest
- * only ever sees what the battle itself reveals. In memory like presence; one coarse lock.
+ * only ever sees what the lobby preview and the battle itself reveal. In memory like presence; one coarse lock.
  */
 @Service
 @Slf4j
@@ -50,6 +59,7 @@ public class LiveBattleService {
 	static final int TIMER_SECONDS = 90;
 
 	private final Map<UUID, LiveBattle> battlesByPlayer = new HashMap<>();
+	private final Map<UUID, Lobby> lobbiesByPlayer = new HashMap<>();
 	private final Map<UUID, Invite> invites = new HashMap<>();
 
 	private final BattleRepository battleRepository;
@@ -60,10 +70,12 @@ public class LiveBattleService {
 	private final CobblemonPartyParser partyParser;
 	private final Clock clock;
 	private final Duration inviteTtl;
+	private final Duration lobbyTimer;
 
 	public LiveBattleService(BattleRepository battleRepository, PokemonService pokemonService, PlayerService playerService,
 			SessionRegistry sessionRegistry, GhostRecall ghostRecall, CobblemonPartyParser partyParser, Clock clock,
-			@Value("${phantasmon.battle.invite-ttl:PT60S}") Duration inviteTtl) {
+			@Value("${phantasmon.battle.invite-ttl:PT60S}") Duration inviteTtl,
+			@Value("${phantasmon.battle.lobby-timer:PT150S}") Duration lobbyTimer) {
 		this.battleRepository = battleRepository;
 		this.pokemonService = pokemonService;
 		this.playerService = playerService;
@@ -72,6 +84,7 @@ public class LiveBattleService {
 		this.partyParser = partyParser;
 		this.clock = clock;
 		this.inviteTtl = inviteTtl;
+		this.lobbyTimer = lobbyTimer;
 	}
 
 	private record Invite(UUID uuid, UUID inviterUuid, UUID inviteeUuid, Instant createdAt, BattleTeam inviterTeam) {
@@ -94,6 +107,43 @@ public class LiveBattleService {
 		}
 	}
 
+	/** One player's side of a lobby: team choice, resolved team (in team order), lead index, ready flag. */
+	private static final class LobbySide {
+		BattleTeam choice;
+		List<PokemonResponse> team;
+		int lead;
+		boolean ready;
+	}
+
+	private static final class Lobby {
+		final UUID uuid;
+		final UUID inviterUuid;
+		final UUID inviteeUuid;
+		final LobbySide inviterSide = new LobbySide();
+		final LobbySide inviteeSide = new LobbySide();
+		/** Lobby timer: null while off. */
+		Instant deadline;
+		UUID timerBy;
+
+		Lobby(UUID uuid, UUID inviterUuid, UUID inviteeUuid) {
+			this.uuid = uuid;
+			this.inviterUuid = inviterUuid;
+			this.inviteeUuid = inviteeUuid;
+		}
+
+		UUID other(UUID playerUuid) {
+			return inviterUuid.equals(playerUuid) ? inviteeUuid : inviterUuid;
+		}
+
+		LobbySide side(UUID playerUuid) {
+			return inviterUuid.equals(playerUuid) ? inviterSide : inviteeSide;
+		}
+	}
+
+	private boolean isBusy(UUID playerUuid) {
+		return battlesByPlayer.containsKey(playerUuid) || lobbiesByPlayer.containsKey(playerUuid);
+	}
+
 	// ---- Invitation ----
 
 	/** {@code message}: the {@code BattleInvite} data — target plus the optional team choice ({@link CobblemonPartyParser}). */
@@ -110,11 +160,11 @@ public class LiveBattleService {
 			sendError(inviterUuid, "ERROR_WS_MALFORMED_MESSAGE");
 		} else if (inviterUuid.equals(targetUuid)) {
 			sendError(inviterUuid, "ERROR_BATTLE_SELF");
-		} else if (battlesByPlayer.containsKey(inviterUuid)) {
+		} else if (isBusy(inviterUuid)) {
 			sendError(inviterUuid, "ERROR_BATTLE_ALREADY_IN_BATTLE");
 		} else if (!sessionRegistry.isConnected(targetUuid)) {
 			sendError(inviterUuid, "ERROR_BATTLE_PARTNER_UNAVAILABLE");
-		} else if (battlesByPlayer.containsKey(targetUuid)) {
+		} else if (isBusy(targetUuid)) {
 			sendError(inviterUuid, "ERROR_BATTLE_PARTNER_BUSY");
 		} else {
 			invites.values().removeIf(existing -> existing.inviterUuid().equals(inviterUuid) && existing.inviteeUuid().equals(targetUuid));
@@ -129,7 +179,10 @@ public class LiveBattleService {
 		}
 	}
 
-	/** {@code message}: the {@code BattleInviteResponse} data — the invitee's optional team choice. */
+	/**
+	 * {@code message}: the {@code BattleInviteResponse} data — the invitee's optional initial team choice. An
+	 * accepted invitation opens the lobby (the team can still be switched there).
+	 */
 	public synchronized void respond(UUID inviteeUuid, UUID inviteUuid, boolean accept, Map<String, Object> message) {
 		Invite invite = inviteUuid == null ? null : invites.get(inviteUuid);
 		if (invite == null || !invite.inviteeUuid().equals(inviteeUuid)
@@ -147,7 +200,7 @@ public class LiveBattleService {
 					"invite_uuid", inviteUuid, "by_uuid", inviteeUuid, "by_name", nameOf(inviteeUuid))));
 			return;
 		}
-		if (battlesByPlayer.containsKey(inviteeUuid)) {
+		if (isBusy(inviteeUuid)) {
 			sendError(inviteeUuid, "ERROR_BATTLE_ALREADY_IN_BATTLE");
 			return;
 		}
@@ -155,7 +208,7 @@ public class LiveBattleService {
 			sendError(inviteeUuid, "ERROR_BATTLE_PARTNER_UNAVAILABLE");
 			return;
 		}
-		if (battlesByPlayer.containsKey(inviterUuid)) {
+		if (isBusy(inviterUuid)) {
 			sendError(inviteeUuid, "ERROR_BATTLE_PARTNER_BUSY");
 			return;
 		}
@@ -168,21 +221,233 @@ public class LiveBattleService {
 			sendError(inviteeUuid, "ERROR_BATTLE_INVALID_PARTY");
 			return;
 		}
-		BattleTeam inviterChoice = invite.inviterTeam();
-		List<PokemonResponse> inviterTeam = inviterChoice.isGhost() ? pokemonService.activeTeam(inviterUuid) : inviterChoice.party();
-		List<PokemonResponse> inviteeTeam = inviteeChoice.isGhost() ? pokemonService.activeTeam(inviteeUuid) : inviteeChoice.party();
-		if (inviterTeam.isEmpty() || inviteeTeam.isEmpty()) {
-			sendError(inviteeUuid, "ERROR_BATTLE_EMPTY_TEAM");
-			sendError(inviterUuid, "ERROR_BATTLE_EMPTY_TEAM");
+		Lobby lobby = new Lobby(UUID.randomUUID(), inviterUuid, inviteeUuid);
+		choose(lobby.inviterSide, inviterUuid, invite.inviterTeam());
+		choose(lobby.inviteeSide, inviteeUuid, inviteeChoice);
+		lobbiesByPlayer.put(inviterUuid, lobby);
+		lobbiesByPlayer.put(inviteeUuid, lobby);
+		log.info("Live battle lobby {} opened: {} vs {}", lobby.uuid, inviterUuid, inviteeUuid);
+		sendLobby(lobby, inviterUuid);
+		sendLobby(lobby, inviteeUuid);
+		// Both players' Ghosts go back in from the lobby on (TODO-14); ifNotInBattle keeps them in.
+		ghostRecall.recall(inviterUuid, "battle lobby");
+		ghostRecall.recall(inviteeUuid, "battle lobby");
+	}
+
+	// ---- Lobby ----
+
+	/** Sets a side's team (resolving Ghosts to the active team, in team order); the lead goes back to the first. */
+	private void choose(LobbySide side, UUID playerUuid, BattleTeam choice) {
+		side.choice = choice;
+		side.team = resolve(playerUuid, choice);
+		side.lead = 0;
+	}
+
+	private List<PokemonResponse> resolve(UUID playerUuid, BattleTeam choice) {
+		List<PokemonResponse> team = new ArrayList<>(choice.isGhost() ? pokemonService.activeTeam(playerUuid) : choice.party());
+		team.sort(Comparator.comparing(PokemonResponse::teamSlot, Comparator.nullsLast(Comparator.naturalOrder())));
+		return team;
+	}
+
+	/** Switch between Ghosts and a copy of the Cobblemon party. Unreadies the opponent: what they saw changed. */
+	public synchronized void setLobbyTeam(UUID playerUuid, UUID lobbyUuid, Map<String, Object> message) {
+		Lobby lobby = lobbyOf(playerUuid, lobbyUuid);
+		if (lobby == null) {
 			return;
 		}
+		LobbySide side = lobby.side(playerUuid);
+		if (side.ready) {
+			sendError(playerUuid, "ERROR_BATTLE_LOBBY_LOCKED");
+			return;
+		}
+		BattleTeam choice;
+		try {
+			choice = partyParser.parse(playerUuid, message);
+		} catch (CobblemonPartyParser.InvalidPartyException ex) {
+			log.info("Battle lobby team from {} refused: invalid Cobblemon party ({})", playerUuid, ex.getMessage());
+			sendError(playerUuid, "ERROR_BATTLE_INVALID_PARTY");
+			return;
+		}
+		choose(side, playerUuid, choice);
+		lobby.side(lobby.other(playerUuid)).ready = false;
+		sendLobby(lobby, playerUuid);
+		sendLobby(lobby, lobby.other(playerUuid));
+	}
+
+	/** Picks the lead. Only the player is told: the opponent must not learn it, nor even that it changed. */
+	public synchronized void setLobbyLead(UUID playerUuid, UUID lobbyUuid, Integer index) {
+		Lobby lobby = lobbyOf(playerUuid, lobbyUuid);
+		if (lobby == null) {
+			return;
+		}
+		LobbySide side = lobby.side(playerUuid);
+		if (side.ready) {
+			sendError(playerUuid, "ERROR_BATTLE_LOBBY_LOCKED");
+		} else if (index == null || index < 0 || index >= side.team.size()) {
+			sendError(playerUuid, "ERROR_WS_MALFORMED_MESSAGE");
+		} else {
+			side.lead = index;
+			sendLobby(lobby, playerUuid);
+		}
+	}
+
+	/** Ready (team and lead locked) or not. Both ready: the battle starts. */
+	public synchronized void setLobbyReady(UUID playerUuid, UUID lobbyUuid, boolean ready) {
+		Lobby lobby = lobbyOf(playerUuid, lobbyUuid);
+		if (lobby == null) {
+			return;
+		}
+		LobbySide side = lobby.side(playerUuid);
+		if (ready && side.team.isEmpty()) {
+			sendError(playerUuid, "ERROR_BATTLE_EMPTY_TEAM");
+			return;
+		}
+		side.ready = ready;
+		if (lobby.inviterSide.ready && lobby.inviteeSide.ready) {
+			startBattle(lobby);
+		} else {
+			sendLobby(lobby, playerUuid);
+			sendLobby(lobby, lobby.other(playerUuid));
+		}
+	}
+
+	/** Either player, once: the lobby timer for both; it carries over as the battle's turn timer. */
+	public synchronized void enableLobbyTimer(UUID playerUuid, UUID lobbyUuid) {
+		Lobby lobby = lobbyOf(playerUuid, lobbyUuid);
+		if (lobby == null || lobby.deadline != null) {
+			return;
+		}
+		lobby.deadline = clock.instant().plus(lobbyTimer);
+		lobby.timerBy = playerUuid;
+		sendLobby(lobby, playerUuid);
+		sendLobby(lobby, lobby.other(playerUuid));
+	}
+
+	public synchronized void leaveLobby(UUID playerUuid, UUID lobbyUuid) {
+		Lobby lobby = lobbyOf(playerUuid, lobbyUuid);
+		if (lobby != null) {
+			cancelLobby(lobby, "LEFT", playerUuid);
+		}
+	}
+
+	@Scheduled(fixedRate = 1000)
+	public void tickLobbies() {
+		expireLobbies(clock.instant());
+	}
+
+	/** Lobby timer out: whoever is not ready leads with their first Pokémon and is readied; the battle starts. */
+	public synchronized void expireLobbies(Instant now) {
+		for (Lobby lobby : new LinkedHashSet<>(lobbiesByPlayer.values())) {
+			if (lobby.deadline == null || lobby.deadline.isAfter(now)) {
+				continue;
+			}
+			if (lobby.inviterSide.team.isEmpty() || lobby.inviteeSide.team.isEmpty()) {
+				cancelLobby(lobby, "EMPTY_TEAM", null);
+				continue;
+			}
+			for (LobbySide side : List.of(lobby.inviterSide, lobby.inviteeSide)) {
+				if (!side.ready) {
+					side.lead = 0;
+					side.ready = true;
+				}
+			}
+			startBattle(lobby);
+		}
+	}
+
+	private void cancelLobby(Lobby lobby, String reason, UUID byUuid) {
+		lobbiesByPlayer.remove(lobby.inviterUuid);
+		lobbiesByPlayer.remove(lobby.inviteeUuid);
+		log.info("Live battle lobby {} cancelled ({})", lobby.uuid, reason);
+		Map<String, Object> data = new HashMap<>();
+		data.put("lobby_uuid", lobby.uuid);
+		data.put("reason", reason);
+		data.put("by_name", byUuid == null ? null : nameOf(byUuid));
+		sessionRegistry.send(lobby.inviterUuid, WsMessage.of("BattleLobbyCancelled", data));
+		sessionRegistry.send(lobby.inviteeUuid, WsMessage.of("BattleLobbyCancelled", data));
+	}
+
+	/**
+	 * The lobby as {@code viewerUuid} sees it: their own team in full with their lead, the opponent's as a preview
+	 * (species, form, shininess, gender — what the model shows) and whether they are ready; never their lead.
+	 */
+	private void sendLobby(Lobby lobby, UUID viewerUuid) {
+		UUID opponentUuid = lobby.other(viewerUuid);
+		LobbySide own = lobby.side(viewerUuid);
+		LobbySide opponent = lobby.side(opponentUuid);
+		Map<String, Object> data = new HashMap<>();
+		data.put("lobby_uuid", lobby.uuid);
+		data.put("opponent_uuid", opponentUuid);
+		data.put("opponent_name", nameOf(opponentUuid));
+		data.put("own_team_source", own.choice.source().name());
+		data.put("own_team", own.team);
+		data.put("own_lead", own.lead);
+		data.put("own_ready", own.ready);
+		data.put("opponent_team_source", opponent.choice.source().name());
+		data.put("opponent_team", opponent.team.stream().map(LiveBattleService::preview).toList());
+		data.put("opponent_ready", opponent.ready);
+		data.put("timer_total_seconds", lobbyTimer.toSeconds());
+		data.put("timer_seconds_left", lobby.deadline == null ? null
+				: Math.max(0, Duration.between(clock.instant(), lobby.deadline).plusMillis(999).toSeconds()));
+		data.put("timer_by_name", lobby.timerBy == null ? null : nameOf(lobby.timerBy));
+		sessionRegistry.send(viewerUuid, WsMessage.of("BattleLobbyUpdated", data));
+	}
+
+	private static Map<String, Object> preview(PokemonResponse pokemon) {
+		Map<String, Object> preview = new HashMap<>();
+		preview.put("species", pokemon.species());
+		preview.put("form", pokemon.form());
+		preview.put("is_shiny", pokemon.isShiny());
+		preview.put("gender", pokemon.data() == null ? null : pokemon.data().get("gender"));
+		return preview;
+	}
+
+	private Lobby lobbyOf(UUID playerUuid, UUID lobbyUuid) {
+		Lobby lobby = lobbiesByPlayer.get(playerUuid);
+		if (lobby == null || lobbyUuid == null || !lobby.uuid.equals(lobbyUuid)) {
+			sendError(playerUuid, "ERROR_BATTLE_LOBBY_NOT_FOUND");
+			return null;
+		}
+		return lobby;
+	}
+
+	/** A side's final team: Ghosts re-read (the team may have changed meanwhile), the lead moved first, slots renumbered. */
+	private List<PokemonResponse> battleTeam(UUID playerUuid, LobbySide side) {
+		UUID leadUuid = side.team.isEmpty() ? null : side.team.get(side.lead).uuid();
+		List<PokemonResponse> team = side.choice.isGhost() ? resolve(playerUuid, side.choice) : new ArrayList<>(side.team);
+		team.stream().filter(pokemon -> pokemon.uuid().equals(leadUuid)).findFirst().ifPresent(lead -> {
+			team.remove(lead);
+			team.add(0, lead);
+		});
+		List<PokemonResponse> ordered = new ArrayList<>();
+		for (int i = 0; i < team.size(); i++) {
+			PokemonResponse p = team.get(i);
+			ordered.add(new PokemonResponse(p.uuid(), p.ownerUuid(), p.species(), p.form(), p.level(), p.nature(), p.ability(),
+					p.isShiny(), p.boxId(), p.boxSlot(), i + 1, p.cobblemonDataVersion(), p.data()));
+		}
+		return ordered;
+	}
+
+	// ---- Battle start ----
+
+	private void startBattle(Lobby lobby) {
+		UUID inviterUuid = lobby.inviterUuid;
+		UUID inviteeUuid = lobby.inviteeUuid;
+		List<PokemonResponse> inviterTeam = battleTeam(inviterUuid, lobby.inviterSide);
+		List<PokemonResponse> inviteeTeam = battleTeam(inviteeUuid, lobby.inviteeSide);
+		if (inviterTeam.isEmpty() || inviteeTeam.isEmpty()) {
+			cancelLobby(lobby, "EMPTY_TEAM", null);
+			return;
+		}
+		lobbiesByPlayer.remove(inviterUuid);
+		lobbiesByPlayer.remove(inviteeUuid);
 
 		UUID hostUuid = nextHost(inviterUuid, inviteeUuid);
 		UUID guestUuid = hostUuid.equals(inviterUuid) ? inviteeUuid : inviterUuid;
 		List<PokemonResponse> hostTeam = hostUuid.equals(inviterUuid) ? inviterTeam : inviteeTeam;
 		List<PokemonResponse> guestTeam = hostUuid.equals(inviterUuid) ? inviteeTeam : inviterTeam;
-		String hostSource = (hostUuid.equals(inviterUuid) ? inviterChoice : inviteeChoice).source().name();
-		String guestSource = (hostUuid.equals(inviterUuid) ? inviteeChoice : inviterChoice).source().name();
+		String hostSource = lobby.side(hostUuid).choice.source().name();
+		String guestSource = lobby.side(guestUuid).choice.source().name();
 
 		BattleSession session = BattleSession.hosted(UUID.randomUUID(), hostUuid, guestUuid,
 				hostTeam.stream().map(PokemonResponse::uuid).toList(), guestTeam.stream().map(PokemonResponse::uuid).toList());
@@ -190,7 +455,7 @@ public class LiveBattleService {
 		LiveBattle battle = new LiveBattle(session.getUuid(), hostUuid, guestUuid);
 		battlesByPlayer.put(hostUuid, battle);
 		battlesByPlayer.put(guestUuid, battle);
-		log.info("Live battle {} started: host {} vs guest {}", battle.uuid, hostUuid, guestUuid);
+		log.info("Live battle {} started from lobby {}: host {} vs guest {}", battle.uuid, lobby.uuid, hostUuid, guestUuid);
 
 		sessionRegistry.send(hostUuid, WsMessage.of("BattleSessionStarted", Map.of(
 				"battle_uuid", battle.uuid, "role", "HOST",
@@ -201,17 +466,19 @@ public class LiveBattleService {
 				"battle_uuid", battle.uuid, "role", "GUEST",
 				"opponent_uuid", hostUuid, "opponent_name", nameOf(hostUuid),
 				"own_team", guestTeam, "own_team_source", guestSource, "opponent_team_source", hostSource)));
-		// Both players' Ghosts go back in for the whole battle (TODO-14); ifNotInBattle keeps them in.
 		ghostRecall.recall(hostUuid, "battle started");
 		ghostRecall.recall(guestUuid, "battle started");
+		if (lobby.timerBy != null) {
+			enableTimer(battle, lobby.timerBy);
+		}
 	}
 
 	/**
-	 * Runs {@code action} only if the player is not in a live battle, under the same lock as a battle start, so a
+	 * Runs {@code action} only if the player is neither in a live battle nor in its lobby, under the same lock as a battle start, so a
 	 * Ghost can never be sent out between the start's recall and the battle being registered. Returns whether it ran.
 	 */
 	public synchronized boolean ifNotInBattle(UUID playerUuid, Runnable action) {
-		if (battlesByPlayer.containsKey(playerUuid)) {
+		if (isBusy(playerUuid)) {
 			return false;
 		}
 		action.run();
@@ -262,9 +529,13 @@ public class LiveBattleService {
 		if (battle == null || battle.timerEnabled) {
 			return;
 		}
+		enableTimer(battle, senderUuid);
+	}
+
+	private void enableTimer(LiveBattle battle, UUID byUuid) {
 		battle.timerEnabled = true;
 		WsMessage enabled = WsMessage.of("BattleTimerEnabled", Map.of(
-				"battle_uuid", battle.uuid, "by_uuid", senderUuid, "by_name", nameOf(senderUuid), "seconds", TIMER_SECONDS));
+				"battle_uuid", battle.uuid, "by_uuid", byUuid, "by_name", nameOf(byUuid), "seconds", TIMER_SECONDS));
 		sessionRegistry.send(battle.hostUuid, enabled);
 		sessionRegistry.send(battle.guestUuid, enabled);
 	}
@@ -296,7 +567,6 @@ public class LiveBattleService {
 		}
 	}
 
-	/** WebSocket closed: the battle can't go on — a draw (CAD Partie 1 §44), nobody's Ghost Pokémon is affected. */
 	/**
 	 * Backend stopping (CAD Partie 1 §44): every live battle ends as a draw — no winner, {@code BACKEND_LOST} — and
 	 * both players are told. {@link ContextClosedEvent} is published before the web server closes the WebSocket
@@ -309,6 +579,9 @@ public class LiveBattleService {
 	}
 
 	public synchronized void endAllAsDraw(String reason) {
+		for (Lobby lobby : new LinkedHashSet<>(lobbiesByPlayer.values())) {
+			cancelLobby(lobby, reason, null);
+		}
 		for (LiveBattle battle : new java.util.LinkedHashSet<>(battlesByPlayer.values())) {
 			finish(battle, null, reason, BattleStatus.FINISHED);
 		}
@@ -340,8 +613,13 @@ public class LiveBattleService {
 		}
 	}
 
+	/** WebSocket closed: the lobby is cancelled; a battle can't go on — a draw (CAD Partie 1 §44). */
 	public synchronized void onDisconnect(UUID playerUuid) {
 		invites.values().removeIf(invite -> invite.inviterUuid().equals(playerUuid) || invite.inviteeUuid().equals(playerUuid));
+		Lobby lobby = lobbiesByPlayer.get(playerUuid);
+		if (lobby != null) {
+			cancelLobby(lobby, "PARTNER_DISCONNECTED", playerUuid);
+		}
 		LiveBattle battle = battlesByPlayer.get(playerUuid);
 		if (battle != null) {
 			finish(battle, null, "PARTNER_DISCONNECTED", BattleStatus.ABORTED);

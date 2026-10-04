@@ -89,7 +89,9 @@ Canaux : **REST**, **WS** (`Error`), **WS-T** (`TradeSessionError` ou `reason` d
 | `ERROR_BATTLE_PARTNER_UNAVAILABLE` | — | WS-B | La cible n'est pas connectée au WebSocket | `phantasmon.battle.error.partner_unavailable` |
 | `ERROR_BATTLE_PARTNER_BUSY` | — | WS-B | La cible est déjà en combat | `phantasmon.battle.error.partner_busy` |
 | `ERROR_BATTLE_INVITE_NOT_FOUND` | — | WS-B | Invitation inconnue ou expirée (60 s) | `phantasmon.battle.error.invite_not_found` |
-| `ERROR_BATTLE_EMPTY_TEAM` | — | WS-B | Un des joueurs n'a aucun Pokémon en équipe | `phantasmon.battle.error.empty_team` |
+| `ERROR_BATTLE_EMPTY_TEAM` | — | WS-B | Se déclarer prêt (lobby) sans aucun Pokémon dans l'équipe choisie | `phantasmon.battle.error.empty_team` |
+| `ERROR_BATTLE_LOBBY_LOCKED` | — | WS-B | Changer d'équipe ou de lead dans le lobby en étant prêt | `phantasmon.battle.error.lobby_locked` |
+| `ERROR_BATTLE_LOBBY_NOT_FOUND` | — | WS-B | Action de lobby hors lobby ou mauvais `lobby_uuid` | `phantasmon.battle.error.lobby_not_found` |
 | `ERROR_BATTLE_INVALID_PARTY` | — | WS-B | Copie d'équipe Cobblemon refusée : `team` inconnu, 0 ou plus de 6 membres, champ manquant ou trop long, IV/EV illégaux, UUID en double | `phantasmon.battle.error.invalid_party` |
 | `ERROR_BATTLE_NOT_IN_BATTLE` | — | WS-B | Action hors combat ou mauvais `battle_uuid` (ignoré silencieusement par le client) | `phantasmon.battle.error.not_battling` |
 | `ERROR_BATTLE_NOT_HOST` | — | WS-B | `BattlePacket` / `BattleResult` envoyé par l'invité | `phantasmon.battle.error.not_host` |
