@@ -5,7 +5,7 @@
 >
 > Mis à jour le 2026-10-03. Une entrée résolue n'est pas supprimée : elle passe dans §5 avec la date de résolution.
 
-Identifiants : `BUG-n` (comportement incorrect), `TODO-n` (action à faire), `DEBT-n` (dette technique),
+Identifiants : `BUG-n` (comportement incorrect), `SEC-n` (sécurité, voir [`security-audit.md`](security-audit.md)), `TODO-n` (action à faire), `DEBT-n` (dette technique),
 `LIM-n` (limite connue, assumée pour l'instant). Priorité : **haute** (bloque une publication), **moyenne**,
 **basse**.
 
@@ -13,7 +13,15 @@ Identifiants : `BUG-n` (comportement incorrect), `TODO-n` (action à faire), `DE
 
 | ID | Priorité | Dépôt | Description | Piste |
 |---|---|---|---|---|
-| — | — | — | Aucun bug connu ouvert (BUG-1 à BUG-5 corrigés le 2026-10-03, voir §5). | — |
+| SEC-1 | haute | Les deux | Usurpation de compte : le `serverId` d'authentification est choisi par le client ; un serveur Minecraft tiers rejoint par la victime peut rejouer sa preuve Mojang auprès de `POST /auth/session`. | Défi à usage unique émis par le backend (`security-audit.md` §SEC-1). |
+| SEC-2 | haute | Client | L'invité d'un combat Ghost décode et exécute n'importe quel paquet Cobblemon relayé par l'hôte. | Liste blanche `cobblemon:battle_*` + `phantasmon:action_effect`. |
+| SEC-3 | moyenne | Backend | `POST /battles` (sans accord de l'adversaire) et `POST /battles/{uuid}/result` (tout participant, y compris l'invité d'un combat en direct) permettent de fabriquer des résultats. | Retirer ces routes (inutilisées par le client). |
+| SEC-4 | moyenne | Backend | Une présence sans empreinte ou sans dimension fait échouer `PresenceService.groupMembers` pour tous les joueurs. | Valider `server_fingerprint` / `dimension`. |
+| SEC-5 | moyenne | Backend | Tailles non bornées (`data`, surnom diffusé aux autres, chaînes WebSocket) et aucune limite de débit (D-20). | Bornes de taille + limite de messages par joueur. |
+| SEC-6 | moyenne | Backend | Quiconque connaît l'adresse d'un serveur peut rejoindre son groupe et recevoir la position des joueurs ayant un Ghost sorti. | À décider (conception) : proximité déclarée, arrondi, ou limite connue. |
+| SEC-7 | basse | Backend | Clé d'idempotence retrouvée par `request_uuid` seul, sans vérifier joueur ni route. | Comparer joueur et route, sinon 409. |
+| SEC-8 | basse | Backend | Une 2e connexion WebSocket du même joueur est désinscrite quand la 1re se ferme. | Ne désinscrire que la session enregistrée. |
+| SEC-9 | basse | Backend | `ivs` / `evs` mal typés : erreur 500 au lieu d'un refus 422. | Code d'erreur métier dédié. |
 
 ## 2. TODO
 
@@ -22,7 +30,6 @@ Identifiants : `BUG-n` (comportement incorrect), `TODO-n` (action à faire), `DE
 | TODO-2 | haute | Client | Retirer `/phantasmon debug fingerprint` quand un vrai serveur dédié remplacera les tests « Ouvrir au LAN » (décision D-18). |
 | TODO-3 | haute | Client | Remplacer les métadonnées factices : `homepage` / `sources` de `fabric.mod.json` (`github.com/your-account/…`), lien de mise à jour `https://modrinth.com/mod/phantasmon` (`AuthService`). |
 | TODO-7 | moyenne | Machine serveur | Rétablir l'accès SSH (`production-server`) : les déploiements du client retombent sur l'instance locale « Cobblemon 2 ». |
-| TODO-15 | haute | Les deux | Faire un audit de sécurité (client et backend). |
 | TODO-16 | haute | Machine qui héberge la base | Planifier `scripts/backup-database.ps1` (tâche Windows quotidienne, `guides/deployment.md` §3.2) vers un autre disque. |
 
 ## 3. Dette technique
@@ -69,3 +76,4 @@ Identifiants : `BUG-n` (comportement incorrect), `TODO-n` (action à faire), `DE
 | TODO-12 | 2026-10-04 | Formes spéciales en combat : `BattleVisuals` écrit les aspects reçus dans `PokemonEntity.ASPECTS` (comme les Ghost dans le monde) ; `GhostBattlePokemonFactory` force les aspects de forme en dernier, avec chromatique et sexe. |
 | TODO-14 | 2026-10-04 | Au démarrage d'un combat Ghost, le backend rappelle les Ghost des deux joueurs (`GhostEntityDespawn` à leur groupe) ; jusqu'à la fin, `SendOutGhost` répond `ERROR_GHOST_IN_BATTLE` (vérifié sous le verrou du combat). Rappel factorisé dans `GhostRecall` (aussi utilisé par `RecallGhost` et l'échange en direct). Tests `startingABattleRecallsBothPlayersGhosts`, `noGhostCanBeSentOutWhileTheBattleLasts`. |
 | TODO-13 | 2026-10-04 | Les Ghost sont connus d'office : `PokemonRendererMixin` fait afficher `[Ghost] <nom>` au-dessus des entités Phantasmon (Ghost dans le monde et Pokémon de combat Ghost, suivis par `PhantasmonEntities`) même si l'espèce n'est pas au Pokédex du joueur. Nom lu sur le `Pokemon` et non via `getName()` (que le mod catchindicator du modpack remplace par « ??? »). Niveau de l'étiquette synchronisé (`LABEL_LEVEL`, affichait « N. 1 »). Les vrais Pokémon et le Pokédex du joueur ne sont pas touchés. |
+| TODO-15 | 2026-10-04 | Audit de sécurité fait : [`security-audit.md`](security-audit.md). 9 points ouverts (SEC-1 à SEC-9, section 1), corrections en attente de décision. |
