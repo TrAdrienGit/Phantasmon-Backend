@@ -93,6 +93,8 @@ jouer une action automatique à l'expiration).
 | L'hôte envoie `BattleResult` (vainqueur ou `null`) | `FINISHED`, raison `FINISHED` (vainqueur vérifié : l'un des deux joueurs) |
 | Un joueur envoie `BattleLeave` | `FINISHED`, raison `FORFEIT`, l'autre gagne |
 | Un joueur se déconnecte | `ABORTED`, raison `PARTNER_DISCONNECTED`, pas de vainqueur |
+| Le backend s'arrête (proprement) | Nul : `FINISHED`, raison `BACKEND_LOST`, pas de vainqueur, annoncé aux deux joueurs avant la fermeture des connexions (`ContextClosedEvent`) |
+| Le backend a planté | Au redémarrage, chaque session restée `ACTIVE` devient un nul `BACKEND_LOST` (`closeOrphanedBattles`) |
 
 `finish` met à jour la ligne `battle_sessions` (statut, résultat JSON, date de fin) puis envoie `BattleEnded` aux
 deux. Les Pokémon stockés ne sont **jamais** modifiés par un combat : le client hôte combat avec des copies

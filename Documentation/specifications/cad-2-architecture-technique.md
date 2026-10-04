@@ -501,7 +501,7 @@ Niveau de détail à affiner en Partie 3 (rotation, rétention, format structur�
 
 ## 18. Heartbeat / disponibilité backend
 
-> **Note d'implémentation (2026-10-03)** : heartbeat WebSocket chaque seconde, TTL de 30 s côté backend. À l'entrée dans un monde, le client ne se connecte que si `GET /health` répond `UP` (silencieusement sinon). Une perte de connexion pendant un combat le termine en `ABORTED`.
+> **Note d'implémentation (2026-10-03)** : heartbeat WebSocket chaque seconde, TTL de 30 s côté backend. À l'entrée dans un monde, le client ne se connecte que si `GET /health` répond `UP` (silencieusement sinon). Une perte de connexion pendant un combat le termine (`ABORTED` si un joueur part ; nul `BACKEND_LOST` si le backend s'arrête ou a planté, CAD Partie 1 §44).
 
 ```text
 Ghost Client ⇄ Ghost Backend : ping périodique (WebSocket Heartbeat / HeartbeatAck)

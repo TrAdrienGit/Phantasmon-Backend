@@ -14,4 +14,6 @@ public interface BattleRepository extends JpaRepository<BattleSession, UUID> {
 			+ "((b.playerA = :first and b.playerB = :second) or (b.playerA = :second and b.playerB = :first)) "
 			+ "order by b.createdAt desc")
 	List<BattleSession> findHostedBetween(@Param("first") UUID first, @Param("second") UUID second);
+
+	List<BattleSession> findByStatus(BattleStatus status);
 }

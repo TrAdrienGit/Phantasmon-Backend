@@ -161,10 +161,13 @@ Action de combat hors combat ou avec un mauvais `battle_uuid` : `ERROR_BATTLE_NO
 | `BattlePacket` | comme en C2S | Invité |
 | `BattleChoice` | comme en C2S | Hôte |
 | `BattleTimerEnabled` | `{ "battle_uuid", "by_uuid", "by_name", "seconds": 90 }` | Les deux |
-| `BattleEnded` | `{ "battle_uuid", "winner_uuid" \| null, "reason": "FINISHED" \| "FORFEIT" \| "PARTNER_DISCONNECTED" }` | Les deux ; aussi stocké dans `battle_sessions.result` |
+| `BattleEnded` | `{ "battle_uuid", "winner_uuid" \| null, "reason": "FINISHED" \| "FORFEIT" \| "PARTNER_DISCONNECTED" \| "BACKEND_LOST" }` | Les deux ; aussi stocké dans `battle_sessions.result` |
 | `BattleSessionError` | `{ "error_code" }` | Auteur de l'action refusée |
 
-Une déconnexion pendant un combat le termine en `ABORTED`, sans vainqueur (`PARTNER_DISCONNECTED`).
+Une déconnexion pendant un combat le termine en `ABORTED`, sans vainqueur (`PARTNER_DISCONNECTED`). Si le backend
+s'arrête, chaque combat en cours devient un **nul** (`FINISHED`, sans vainqueur, `BACKEND_LOST`) annoncé aux deux
+joueurs avant la fermeture des connexions ; s'il plante, les sessions restées `ACTIVE` sont conclues de la même façon
+à son redémarrage (CAD Partie 1 §44). Un client qui perd la connexion termine lui-même le combat et l'annonce nul.
 
 ## 6. Échanges asynchrones (notifications)
 

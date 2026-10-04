@@ -9,6 +9,9 @@ import java.util.Map;
 import java.util.UUID;
 
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.event.ContextClosedEvent;
+import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
 
 import com.mystaria.phantasmon_backend.player.Player;
@@ -269,6 +272,49 @@ public class LiveBattleService {
 	}
 
 	/** WebSocket closed: the battle can't go on — a draw (CAD Partie 1 §44), nobody's Ghost Pokémon is affected. */
+	/**
+	 * Backend stopping (CAD Partie 1 §44): every live battle ends as a draw — no winner, {@code BACKEND_LOST} — and
+	 * both players are told. {@link ContextClosedEvent} is published before the web server closes the WebSocket
+	 * connections, so the {@code BattleEnded} still gets through (otherwise the closing connections would end the
+	 * battles as mere disconnections).
+	 */
+	@EventListener(ContextClosedEvent.class)
+	public void onBackendStopping() {
+		endAllAsDraw("BACKEND_LOST");
+	}
+
+	public synchronized void endAllAsDraw(String reason) {
+		for (LiveBattle battle : new java.util.LinkedHashSet<>(battlesByPlayer.values())) {
+			finish(battle, null, reason, BattleStatus.FINISHED);
+		}
+	}
+
+	/**
+	 * Startup (CAD Partie 1 §44): a backend that crashed could not close its battles — they only live in memory — so
+	 * their sessions were left {@code ACTIVE} for good. Each one not actually running here is recorded as a draw
+	 * ({@code BACKEND_LOST}). Ghost Pokémon are never touched by a battle, there is nothing else to restore.
+	 */
+	@EventListener(ApplicationReadyEvent.class)
+	public synchronized void closeOrphanedBattles() {
+		java.util.Set<UUID> running = new java.util.HashSet<>();
+		battlesByPlayer.values().forEach(battle -> running.add(battle.uuid));
+		List<BattleSession> orphans = battleRepository.findByStatus(BattleStatus.ACTIVE).stream()
+				.filter(session -> !running.contains(session.getUuid()))
+				.toList();
+		for (BattleSession session : orphans) {
+			Map<String, Object> result = new HashMap<>();
+			result.put("winner_uuid", null);
+			result.put("reason", "BACKEND_LOST");
+			session.setStatus(BattleStatus.FINISHED);
+			session.setResult(result);
+			session.setFinishedAt(Instant.now());
+		}
+		battleRepository.saveAll(orphans);
+		if (!orphans.isEmpty()) {
+			log.info("Closed {} battle session(s) left active by a previous backend run as draws (BACKEND_LOST)", orphans.size());
+		}
+	}
+
 	public synchronized void onDisconnect(UUID playerUuid) {
 		invites.values().removeIf(invite -> invite.inviterUuid().equals(playerUuid) || invite.inviteeUuid().equals(playerUuid));
 		LiveBattle battle = battlesByPlayer.get(playerUuid);

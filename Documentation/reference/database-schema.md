@@ -194,7 +194,7 @@ Pokémon ayant déjà été échangé. La seule protection utile (pas de suppres
 | `host_uuid` | UUID | FK → `players`, indexé (V8) | Client qui a exécuté le moteur ; `NULL` pour les anciennes lignes de `POST /battles` (route retirée). Sert à l'alternance de l'hôte. |
 | `team_a`, `team_b` | JSONB | NOT NULL | Instantané des UUID de Pokémon engagés, sans FK (historique) |
 | `status` | VARCHAR(16) | NOT NULL, défaut `PENDING`, ∈ {`PENDING`, `ACTIVE`, `FINISHED`, `ABORTED`} | Les sessions sont créées `ACTIVE` |
-| `result` | JSONB | | REST : `{winner_uuid, log}`. Direct : `{winner_uuid, reason}` (`FINISHED`, `FORFEIT`, `PARTNER_DISCONNECTED`) |
+| `result` | JSONB | | REST : `{winner_uuid, log}`. Direct : `{winner_uuid, reason}` (`FINISHED`, `FORFEIT`, `PARTNER_DISCONNECTED`, `BACKEND_LOST` = nul car le backend s'est arrêté ou a planté) |
 | `created_at` | TIMESTAMPTZ | NOT NULL, défaut `now()` | |
 | `finished_at` | TIMESTAMPTZ | | |
 

@@ -1,5 +1,6 @@
 package com.mystaria.phantasmon_backend.battle;
 
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.BlockingQueue;
@@ -54,6 +55,9 @@ class LiveBattleWebSocketIntegrationTest {
 
 	@Autowired
 	private BattleRepository battleRepository;
+
+	@Autowired
+	private LiveBattleService liveBattleService;
 
 	@Autowired
 	private ObjectMapper objectMapper;
@@ -382,6 +386,38 @@ class LiveBattleWebSocketIntegrationTest {
 		JsonNode ended = await(alice, "BattleEnded");
 		assertThat(ended.get("winner_uuid").asString()).isEqualTo(aliceUuid.toString());
 		assertThat(ended.get("reason").asString()).isEqualTo("FORFEIT");
+	}
+
+	@Test
+	void aStoppingBackendDeclaresEveryLiveBattleADraw() throws Exception {
+		// CAD Partie 1 §44: backend lost -> no winner, draw, both players told before the connections close.
+		teamMember(aliceUuid, "pikachu", 1);
+		teamMember(bobUuid, "charmander", 1);
+		String battle = startBattle(aliceSession, alice, bobUuid, bobSession, bob).get("battle_uuid").asString();
+
+		liveBattleService.endAllAsDraw("BACKEND_LOST");
+
+		for (RecordingHandler player : List.of(alice, bob)) {
+			JsonNode ended = await(player, "BattleEnded");
+			assertThat(ended.get("reason").asString()).isEqualTo("BACKEND_LOST");
+			assertThat(ended.get("winner_uuid").isNull()).isTrue();
+		}
+		BattleSession stored = battleRepository.findById(UUID.fromString(battle)).orElseThrow();
+		assertThat(stored.getStatus()).isEqualTo(BattleStatus.FINISHED);
+		assertThat(stored.getResult()).containsEntry("reason", "BACKEND_LOST").containsEntry("winner_uuid", null);
+	}
+
+	@Test
+	void battlesLeftActiveByACrashedBackendAreClosedAsDrawsAtStartup() {
+		BattleSession orphan = battleRepository.saveAndFlush(BattleSession.hosted(UUID.randomUUID(), aliceUuid, bobUuid,
+				List.of(UUID.randomUUID()), List.of(UUID.randomUUID())));
+
+		liveBattleService.closeOrphanedBattles();
+
+		BattleSession stored = battleRepository.findById(orphan.getUuid()).orElseThrow();
+		assertThat(stored.getStatus()).isEqualTo(BattleStatus.FINISHED);
+		assertThat(stored.getResult()).containsEntry("reason", "BACKEND_LOST").containsEntry("winner_uuid", null);
+		assertThat(stored.getFinishedAt()).isNotNull();
 	}
 
 	@Test

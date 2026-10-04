@@ -955,7 +955,7 @@ Le serveur ne doit pas être bloqué par l'indisponibilité du backend Ghost.
 
 # 44. Perte du backend pendant un combat
 
-> **Note d'implémentation (2026-10-03)** : une déconnexion WebSocket d'un joueur termine le combat en `ABORTED`, sans vainqueur (`PARTNER_DISCONNECTED`). L'état permanent des Ghost n'est jamais modifié par un combat (il se joue sur des copies jetables).
+> **Note d'implémentation (2026-10-04)** : implémenté. Backend qui s'arrête : chaque combat en cours est conclu en **nul** (`FINISHED`, sans vainqueur, `BACKEND_LOST`) et annoncé aux deux joueurs avant la fermeture des connexions ; backend qui a planté : les sessions restées `ACTIVE` sont conclues de la même façon au redémarrage. Côté client, une perte de connexion termine le combat (moteur arrêté chez l'hôte, interface fermée, visuels nettoyés) et l'annonce comme un match nul. L'état permanent des Ghost n'est jamais modifié par un combat (copies jetables). La déconnexion d'un seul joueur reste un combat annulé (`ABORTED`, `PARTNER_DISCONNECTED`).
 
 Si le backend devient indisponible pendant un combat Ghost :
 
