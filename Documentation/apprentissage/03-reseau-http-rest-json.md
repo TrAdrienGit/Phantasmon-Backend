@@ -67,7 +67,9 @@ spring.jackson.property-naming-strategy=SNAKE_CASE
 ```
 
 Piège : cette règle s'applique aux champs des objets, **pas aux clés d'une `Map`**. Les clés du champ libre `data`
-d'un Pokémon sont écrites telles quelles par le client (`heldItem`, `teraType` en camelCase).
+d'un Pokémon sont écrites telles quelles par le client. Deux clés y sont longtemps restées en camelCase (`heldItem`,
+`teraType`) ; la migration V9 les a renommées (`held_item`, `tera_type`) — d'où l'intérêt de fixer la casse dès le
+début.
 
 ## 3.5 REST : une façon d'organiser une API
 

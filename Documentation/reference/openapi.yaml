@@ -495,20 +495,20 @@ components:
       type: object
       description: >
         JSONB libre. Seuls `ivs` (0-31) et `evs` (0-252, total ≤ 510) sont validés par le
-        backend. Les autres clés sont celles utilisées par le client ; attention, `heldItem` et
-        `teraType` sont en camelCase (clés de Map non renommées).
+        backend (avec la taille totale et le surnom). Les autres clés sont celles utilisées par le
+        client, toutes en snake_case (migration V9).
       additionalProperties: true
       properties:
         nickname: { type: string }
         gender: { type: string, enum: [M, F], description: "Absente = aléatoire" }
-        teraType: { type: string }
+        tera_type: { type: string }
         ivs: { $ref: "#/components/schemas/Stats" }
         evs: { $ref: "#/components/schemas/Stats" }
         moves:
           type: array
           maxItems: 4
           items: { type: string }
-        heldItem: { type: string }
+        held_item: { type: string }
         friendship: { type: integer }
 
     Pokemon:

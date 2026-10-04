@@ -202,7 +202,7 @@ CREATE TABLE idempotency_keys (
 
 ### 5.2 Contenu du champ `data` (JSONB) pour un Pokémon
 
-> **Note d'implémentation (2026-10-03)** : contenu réel : `nickname`, `gender` (`M`/`F`), `teraType`, `ivs`, `evs`, `moves` (identifiants Cobblemon sans séparateur, ex. `aquatail`), `heldItem` (ex. `assault_vest`), `friendship` (seulement si l'import Showdown contient `Happiness:`). Les clés `heldItem` et `teraType` sont en camelCase. `origin` n'est pas utilisé.
+> **Note d'implémentation (2026-10-03)** : contenu réel : `nickname`, `gender` (`M`/`F`), `tera_type`, `ivs`, `evs`, `moves` (identifiants Cobblemon sans séparateur, ex. `aquatail`), `held_item` (ex. `assault_vest`), `friendship` (seulement si l'import Showdown contient `Happiness:`). Toutes les clés sont en snake_case (V9, 2026-10-04 : `heldItem` / `teraType` renommées). `origin` n'est pas utilisé.
 
 ```json
 {

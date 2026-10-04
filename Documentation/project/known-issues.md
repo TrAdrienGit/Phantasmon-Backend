@@ -29,7 +29,6 @@ Identifiants : `BUG-n` (comportement incorrect), `SEC-n` (sécurité, voir [`sec
 
 | ID | Dépôt | Description |
 |---|---|---|
-| DEBT-1 | Les deux | Les clés de `pokemon.data` `heldItem`, `teraType`, `friendship` sont en camelCase alors que le reste de l'API est en snake_case (les clés de `Map` échappent aux stratégies de nommage Jackson/Gson). Fonctionne ; tout renommage exige une migration des données existantes. |
 | DEBT-3 | Backend | Pas de révocation des refresh tokens (décision D-16). |
 
 ## 4. Limites connues (assumées)
@@ -81,3 +80,6 @@ Identifiants : `BUG-n` (comportement incorrect), `SEC-n` (sécurité, voir [`sec
 | DEBT-2 | 2026-10-04 | Erreurs de format au format structuré : `400 ERROR_VALIDATION_FAILED` (`details.fields`) et `400 ERROR_MALFORMED_REQUEST` (`ApiExceptionHandler`). Tests `AuthControllerTest`, `PokemonControllerTest`. |
 | DEBT-4 | 2026-10-04 | Idempotence sûre en concurrence : la clé est réservée par `INSERT … ON CONFLICT DO NOTHING` avant l'action, dans la même transaction ; un doublon simultané attend puis rejoue la réponse ; une action en échec libère la clé. Test `IdempotencyConcurrencyTest`. |
 | DEBT-5 | 2026-10-04 | Version réelle de Cobblemon enregistrée à la création et à l'édition (`PATCH` accepte `cobblemon_data_version`) ; Pokémon non reconnu signalé au joueur et exclu de la sortie et des combats, données intactes (`PokemonRecognition`). Tests `CobblemonDataVersionTest`, `PokemonControllerTest`. |
+| DEBT-1 | 2026-10-04 | Clés de `pokemon.data` en snake_case : migration Flyway V9 (`heldItem` → `held_item`, `teraType` → `tera_type`, aussi dans les réponses d'idempotence), client mis à jour en même temps. Test `SnakeCaseDataKeysMigrationTest` ; validée sur une copie des données réelles (25 / 10 Pokémon, reste des données identique, rejouable). |
+| — | 2026-10-04 | Puissance Cachée (retour d'Adrien) : Cobblemon n'a qu'une capacité `hiddenpower` (les variantes de Showdown partagent cet identifiant, l'entrée du registre garde le type Eau). Badges de la fiche et de l'éditeur calculés depuis les IV ; migration V10 : variantes stockées (`hiddenpowerice`…) → `hiddenpower`, ce qui rend ces Pokémon de nouveau reconnus et utilisables en combat. Test `HiddenPowerMigrationTest`. |
+| — | 2026-10-04 | Combat qui ne démarrait pas quand l'hôte est un client pur (invité LAN) avec un Pokémon portant un objet : `swapHeldItem` publiait un événement qui exige un serveur ; l'objet est désormais posé directement. |

@@ -135,11 +135,11 @@ pour ne jamais violer les index uniques.
 {
   "nickname": "Bichou",
   "gender": "M",
-  "teraType": "grass",
+  "tera_type": "grass",
   "ivs": { "hp": 31, "atk": 31, "def": 31, "spa": 31, "spd": 31, "spe": 31 },
   "evs": { "hp": 0, "atk": 144, "def": 64, "spa": 0, "spd": 136, "spe": 0 },
   "moves": ["avalanche", "aquatail", "bodyslam", "darkpulse"],
-  "heldItem": "assault_vest"
+  "held_item": "assault_vest"
 }
 ```
 
@@ -148,17 +148,18 @@ pour ne jamais violer les index uniques.
 | `ivs` | Import, éditeur | Chaque valeur ∈ [0, 31] (vérifié par le backend) |
 | `evs` | Import, éditeur | Chaque valeur ∈ [0, 252], total ≤ 510 (vérifié par le backend) |
 | `moves` | Import, éditeur | Jusqu'à 4 identifiants d'attaque, sans doublon (garanti par l'éditeur) |
-| `heldItem` | Import, éditeur | Identifiant d'objet Cobblemon (chemin du registre, ex. `choice_band`) |
+| `held_item` | Import, éditeur | Identifiant d'objet Cobblemon (chemin du registre, ex. `choice_band`) |
 | `nickname` | Import, éditeur | Texte libre |
 | `gender` | Import, éditeur | `"M"` ou `"F"` ; absente = aléatoire (convention Showdown) |
-| `teraType` | Import, éditeur | Identifiant de type ; absente = type primaire de l'espèce |
+| `tera_type` | Import, éditeur | Identifiant de type ; absente = type primaire de l'espèce |
 | `friendship` | Import (ligne `Happiness:`) | Entier ; non affiché ni éditable |
 
-**Casse des clés** : `heldItem`, `teraType` (camelCase) sont écrites telles quelles par le client ; les
-stratégies de nommage (Jackson côté backend, Gson côté client) ne s'appliquent pas aux clés d'une `Map`. Ne pas
-les renommer sans migration des données existantes.
+**Casse des clés** : tout en snake_case, comme le reste de l'API. Les stratégies de nommage (Jackson côté backend,
+Gson côté client) ne s'appliquent pas aux clés d'une `Map` : c'est le client qui les écrit ainsi. `heldItem` et
+`teraType` (camelCase) ont été renommées en `held_item` et `tera_type` par la migration V9 (DEBT-1) ; tout
+nouveau renommage exige lui aussi une migration des données existantes.
 
-`nickname`, `gender` et `teraType` sont en JSONB car ni filtrés ni indexés ; s'ils devaient l'être, une
+`nickname`, `gender` et `tera_type` sont en JSONB car ni filtrés ni indexés ; s'ils devaient l'être, une
 migration additive les passerait en colonnes. `PATCH /pokemon/{uuid}` **remplace** `data` en entier.
 
 ## 5. `trades`
@@ -236,6 +237,8 @@ Tout est perdu au redémarrage du backend (comportement voulu) et n'est pas part
 | V6 | `V6__resize_pokemon_box.sql` | 2026-09-27 | Boîtes 6×5 : contrainte `box_slot` 1-30 (`chk_pokemon_box_slot`), ancienne contrainte retrouvée via `pg_constraint` |
 | V7 | `V7__trades_pokemon_history_without_fk.sql` | 2026-10-02 | Retrait des FK `trades → pokemon`, index sur `offered_pokemon` / `requested_pokemon` |
 | V8 | `V8__battle_sessions_host.sql` | 2026-10-03 | Colonne `battle_sessions.host_uuid` et son index |
+| V9 | `V9__pokemon_data_snake_case_keys.sql` | 2026-10-04 | Clés de `pokemon.data` en snake_case : `heldItem` → `held_item`, `teraType` → `tera_type`, aussi dans les réponses mémorisées de `idempotency_keys` (DEBT-1). Rejouable ; aucune autre donnée modifiée (vérifié sur une copie des données réelles : 25 et 10 Pokémon concernés) |
+| V10 | `V10__pokemon_hidden_power_single_id.sql` | 2026-10-04 | Dans `data.moves`, les identifiants de variantes `hiddenpower<type>` (importés avant la correction de l'import) deviennent `hiddenpower`, seule capacité Puissance Cachée de Cobblemon (type tiré des IV). Ordre et autres capacités conservés ; rejouable. 1 Pokémon concerné dans les données réelles (`hiddenpowerice`) |
 
 ## 10. Décisions de schéma
 

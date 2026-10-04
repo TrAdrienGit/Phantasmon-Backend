@@ -164,18 +164,18 @@ Réponse `200` : même forme que `POST /auth/session`.
   "data": {
     "nickname": "Bichou",
     "gender": "M",
-    "teraType": "grass",
+    "tera_type": "grass",
     "ivs": { "hp": 31, "atk": 31, "def": 31, "spa": 31, "spd": 31, "spe": 31 },
     "evs": { "hp": 0, "atk": 144, "def": 64, "spa": 0, "spd": 136, "spe": 0 },
     "moves": ["avalanche", "aquatail", "bodyslam", "darkpulse"],
-    "heldItem": "assault_vest"
+    "held_item": "assault_vest"
   }
 }
 ```
 
 - Un Pokémon a **soit** `box_id` + `box_slot` (PC : boîtes 1-16, cases 1-30), **soit** `team_slot` (1-6).
 - `data` est un JSONB libre. Clés utilisées par le client : `nickname`, `gender` (`"M"`/`"F"`, absente =
-  aléatoire), `teraType`, `ivs`, `evs`, `moves`, `heldItem`, `friendship`. Seuls `ivs` et `evs` sont validés par le
+  aléatoire), `tera_type`, `ivs`, `evs`, `moves`, `held_item`, `friendship`. Seuls `ivs` et `evs` sont validés par le
   backend. **Attention** : ces clés sont en camelCase (ce sont des clés de `Map`, que la stratégie snake_case de
   Jackson ne renomme pas), contrairement à tous les autres champs de l'API.
 - Les identifiants suivent les conventions de Cobblemon (voir `Phantasmon-Client/Documentation/architecture/showdown-import.md`).
