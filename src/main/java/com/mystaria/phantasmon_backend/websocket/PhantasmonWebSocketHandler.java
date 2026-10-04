@@ -173,9 +173,9 @@ public class PhantasmonWebSocketHandler extends TextWebSocketHandler {
 			case "TradeSelectOffer" -> liveTradeService.selectOffer(playerUuid, uuidField(incoming, "pokemon_uuid"));
 			case "TradeSetReady" -> liveTradeService.setReady(playerUuid, Boolean.TRUE.equals(incoming.data().get("ready")));
 			case "TradeLeave" -> liveTradeService.leave(playerUuid);
-			case "BattleInvite" -> liveBattleService.invite(playerUuid, uuidField(incoming, "target_uuid"));
+			case "BattleInvite" -> liveBattleService.invite(playerUuid, uuidField(incoming, "target_uuid"), incoming.data());
 			case "BattleInviteResponse" -> liveBattleService.respond(playerUuid, uuidField(incoming, "invite_uuid"),
-					Boolean.TRUE.equals(incoming.data().get("accept")));
+					Boolean.TRUE.equals(incoming.data().get("accept")), incoming.data());
 			case "BattlePacket" -> liveBattleService.relayPacket(playerUuid, uuidField(incoming, "battle_uuid"), incoming.data());
 			case "BattleChoice" -> liveBattleService.relayChoice(playerUuid, uuidField(incoming, "battle_uuid"), incoming.data());
 			case "BattleTimerEnable" -> liveBattleService.enableTimer(playerUuid, uuidField(incoming, "battle_uuid"));

@@ -14,6 +14,7 @@ Confirmé : le Ghost Pokémon est un système **entièrement séparé** du gamep
 
 - Aucune XP, aucune évolution automatique, aucun breeding/daycare.
 - Aucun combat contre un Pokémon sauvage réel (cohérent avec l'absence d'entité serveur, Partie 2 §7).
+  > **Note d'implémentation (2026-10-04)** : un joueur peut combattre avec une **copie** de son équipe Cobblemon (décision D-22) ; rien n'est écrit côté serveur, le système reste fermé.
 - Toute évolution de niveau, de forme ou de stats d'un Ghost Pokémon passe **exclusivement** par une action manuelle du joueur (édition via UI/commande).
 
 ### A.1 Conséquence sur l'architecture

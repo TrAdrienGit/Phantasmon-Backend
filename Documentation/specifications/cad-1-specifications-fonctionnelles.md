@@ -695,6 +695,8 @@ Conditions :
 
 # 31. Ghost contre Pokémon normal
 
+> **Note d'implémentation (2026-10-04)** : implémenté sous la forme retenue par la décision D-22 : en combat en direct, chaque joueur choisit ses Ghost ou une **copie** de sa vraie équipe Cobblemon (`/phantasmon battle invite <joueur> cobblemon`, bouton [Accepter avec mon équipe Cobblemon]). Les vrais Pokémon ne sont jamais modifiés. Pas de combat contre un Pokémon sauvage réel (Partie 3 §A).
+
 La compatibilité Ghost ↔ Pokémon normal est souhaitée.
 
 Elle n'est cependant pas une obligation absolue du MVP.

@@ -57,22 +57,24 @@ public class LiveBattleService {
 	private final PlayerService playerService;
 	private final SessionRegistry sessionRegistry;
 	private final GhostRecall ghostRecall;
+	private final CobblemonPartyParser partyParser;
 	private final Clock clock;
 	private final Duration inviteTtl;
 
 	public LiveBattleService(BattleRepository battleRepository, PokemonService pokemonService, PlayerService playerService,
-			SessionRegistry sessionRegistry, GhostRecall ghostRecall, Clock clock,
+			SessionRegistry sessionRegistry, GhostRecall ghostRecall, CobblemonPartyParser partyParser, Clock clock,
 			@Value("${phantasmon.battle.invite-ttl:PT60S}") Duration inviteTtl) {
 		this.battleRepository = battleRepository;
 		this.pokemonService = pokemonService;
 		this.playerService = playerService;
 		this.sessionRegistry = sessionRegistry;
 		this.ghostRecall = ghostRecall;
+		this.partyParser = partyParser;
 		this.clock = clock;
 		this.inviteTtl = inviteTtl;
 	}
 
-	private record Invite(UUID uuid, UUID inviterUuid, UUID inviteeUuid, Instant createdAt) {
+	private record Invite(UUID uuid, UUID inviterUuid, UUID inviteeUuid, Instant createdAt, BattleTeam inviterTeam) {
 	}
 
 	private static final class LiveBattle {
@@ -94,7 +96,16 @@ public class LiveBattleService {
 
 	// ---- Invitation ----
 
-	public synchronized void invite(UUID inviterUuid, UUID targetUuid) {
+	/** {@code message}: the {@code BattleInvite} data — target plus the optional team choice ({@link CobblemonPartyParser}). */
+	public synchronized void invite(UUID inviterUuid, UUID targetUuid, Map<String, Object> message) {
+		BattleTeam inviterTeam;
+		try {
+			inviterTeam = partyParser.parse(inviterUuid, message);
+		} catch (CobblemonPartyParser.InvalidPartyException ex) {
+			log.info("Battle invite from {} refused: invalid Cobblemon party ({})", inviterUuid, ex.getMessage());
+			sendError(inviterUuid, "ERROR_BATTLE_INVALID_PARTY");
+			return;
+		}
 		if (targetUuid == null) {
 			sendError(inviterUuid, "ERROR_WS_MALFORMED_MESSAGE");
 		} else if (inviterUuid.equals(targetUuid)) {
@@ -107,17 +118,19 @@ public class LiveBattleService {
 			sendError(inviterUuid, "ERROR_BATTLE_PARTNER_BUSY");
 		} else {
 			invites.values().removeIf(existing -> existing.inviterUuid().equals(inviterUuid) && existing.inviteeUuid().equals(targetUuid));
-			Invite invite = new Invite(UUID.randomUUID(), inviterUuid, targetUuid, clock.instant());
+			Invite invite = new Invite(UUID.randomUUID(), inviterUuid, targetUuid, clock.instant(), inviterTeam);
 			invites.put(invite.uuid(), invite);
 			log.info("Live battle invite {}: {} invited {}", invite.uuid(), inviterUuid, targetUuid);
 			sessionRegistry.send(targetUuid, WsMessage.of("BattleInviteReceived", Map.of(
-					"invite_uuid", invite.uuid(), "from_uuid", inviterUuid, "from_name", nameOf(inviterUuid))));
+					"invite_uuid", invite.uuid(), "from_uuid", inviterUuid, "from_name", nameOf(inviterUuid),
+					"from_team", inviterTeam.source().name())));
 			sessionRegistry.send(inviterUuid, WsMessage.of("BattleInviteSent", Map.of(
 					"invite_uuid", invite.uuid(), "to_uuid", targetUuid, "to_name", nameOf(targetUuid))));
 		}
 	}
 
-	public synchronized void respond(UUID inviteeUuid, UUID inviteUuid, boolean accept) {
+	/** {@code message}: the {@code BattleInviteResponse} data — the invitee's optional team choice. */
+	public synchronized void respond(UUID inviteeUuid, UUID inviteUuid, boolean accept, Map<String, Object> message) {
 		Invite invite = inviteUuid == null ? null : invites.get(inviteUuid);
 		if (invite == null || !invite.inviteeUuid().equals(inviteeUuid)
 				|| invite.createdAt().plus(inviteTtl).isBefore(clock.instant())) {
@@ -147,8 +160,17 @@ public class LiveBattleService {
 			return;
 		}
 
-		List<PokemonResponse> inviterTeam = pokemonService.activeTeam(inviterUuid);
-		List<PokemonResponse> inviteeTeam = pokemonService.activeTeam(inviteeUuid);
+		BattleTeam inviteeChoice;
+		try {
+			inviteeChoice = partyParser.parse(inviteeUuid, message);
+		} catch (CobblemonPartyParser.InvalidPartyException ex) {
+			log.info("Battle invite answer from {} refused: invalid Cobblemon party ({})", inviteeUuid, ex.getMessage());
+			sendError(inviteeUuid, "ERROR_BATTLE_INVALID_PARTY");
+			return;
+		}
+		BattleTeam inviterChoice = invite.inviterTeam();
+		List<PokemonResponse> inviterTeam = inviterChoice.isGhost() ? pokemonService.activeTeam(inviterUuid) : inviterChoice.party();
+		List<PokemonResponse> inviteeTeam = inviteeChoice.isGhost() ? pokemonService.activeTeam(inviteeUuid) : inviteeChoice.party();
 		if (inviterTeam.isEmpty() || inviteeTeam.isEmpty()) {
 			sendError(inviteeUuid, "ERROR_BATTLE_EMPTY_TEAM");
 			sendError(inviterUuid, "ERROR_BATTLE_EMPTY_TEAM");
@@ -159,6 +181,8 @@ public class LiveBattleService {
 		UUID guestUuid = hostUuid.equals(inviterUuid) ? inviteeUuid : inviterUuid;
 		List<PokemonResponse> hostTeam = hostUuid.equals(inviterUuid) ? inviterTeam : inviteeTeam;
 		List<PokemonResponse> guestTeam = hostUuid.equals(inviterUuid) ? inviteeTeam : inviterTeam;
+		String hostSource = (hostUuid.equals(inviterUuid) ? inviterChoice : inviteeChoice).source().name();
+		String guestSource = (hostUuid.equals(inviterUuid) ? inviteeChoice : inviterChoice).source().name();
 
 		BattleSession session = BattleSession.hosted(UUID.randomUUID(), hostUuid, guestUuid,
 				hostTeam.stream().map(PokemonResponse::uuid).toList(), guestTeam.stream().map(PokemonResponse::uuid).toList());
@@ -171,11 +195,12 @@ public class LiveBattleService {
 		sessionRegistry.send(hostUuid, WsMessage.of("BattleSessionStarted", Map.of(
 				"battle_uuid", battle.uuid, "role", "HOST",
 				"opponent_uuid", guestUuid, "opponent_name", nameOf(guestUuid),
-				"own_team", hostTeam, "opponent_team", guestTeam)));
+				"own_team", hostTeam, "opponent_team", guestTeam,
+				"own_team_source", hostSource, "opponent_team_source", guestSource)));
 		sessionRegistry.send(guestUuid, WsMessage.of("BattleSessionStarted", Map.of(
 				"battle_uuid", battle.uuid, "role", "GUEST",
 				"opponent_uuid", hostUuid, "opponent_name", nameOf(hostUuid),
-				"own_team", guestTeam)));
+				"own_team", guestTeam, "own_team_source", guestSource, "opponent_team_source", hostSource)));
 		// Both players' Ghosts go back in for the whole battle (TODO-14); ifNotInBattle keeps them in.
 		ghostRecall.recall(hostUuid, "battle started");
 		ghostRecall.recall(guestUuid, "battle started");

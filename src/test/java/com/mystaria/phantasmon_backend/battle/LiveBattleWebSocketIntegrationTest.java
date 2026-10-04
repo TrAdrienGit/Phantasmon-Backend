@@ -205,6 +205,71 @@ class LiveBattleWebSocketIntegrationTest {
 				.as("once the battle is over, Ghosts can go out again").isEqualTo(aliceMon.getUuid().toString());
 	}
 
+	/** A copy of one real Cobblemon party member, as the client sends it (same shape as a Ghost Pokémon). */
+	private static String partyMember(UUID uuid, String species, String ivsJson) {
+		return """
+				{"uuid":"%s","species":"%s","form":null,"level":62,"nature":"jolly","ability":"roughskin","is_shiny":false,
+				 "cobblemon_data_version":"1.8.1",
+				 "data":{"ivs":%s,"evs":{"atk":252,"spe":252},"moves":["earthquake","dragonclaw"],"held_item":"choice_scarf"}}
+				""".formatted(uuid, species, ivsJson);
+	}
+
+	@Test
+	void theInviterCanFightWithACopyOfTheirCobblemonParty() throws Exception {
+		// Ghost vs normal Pokémon (CAD Partie 1 §31): the real party is only copied, never touched.
+		Pokemon bobMon = teamMember(bobUuid, "charmander", 1);
+		UUID realUuid = UUID.randomUUID();
+		send(aliceSession, "BattleInvite", "{\"target_uuid\":\"" + bobUuid + "\",\"team\":\"COBBLEMON\",\"party\":["
+				+ partyMember(realUuid, "garchomp", "{\"hp\":31}") + "]}");
+		JsonNode invite = await(bob, "BattleInviteReceived");
+		assertThat(invite.get("from_team").asString()).isEqualTo("COBBLEMON");
+		send(bobSession, "BattleInviteResponse", "{\"invite_uuid\":\"" + invite.get("invite_uuid").asString() + "\",\"accept\":true}");
+
+		JsonNode aliceView = await(alice, "BattleSessionStarted");
+		assertThat(aliceView.get("role").asString()).isEqualTo("HOST");
+		assertThat(aliceView.get("own_team_source").asString()).isEqualTo("COBBLEMON");
+		assertThat(aliceView.get("opponent_team_source").asString()).isEqualTo("GHOST");
+		JsonNode real = aliceView.get("own_team").get(0);
+		assertThat(real.get("uuid").asString()).isEqualTo(realUuid.toString());
+		assertThat(real.get("species").asString()).isEqualTo("garchomp");
+		assertThat(real.get("data").get("held_item").asString()).isEqualTo("choice_scarf");
+		assertThat(aliceView.get("opponent_team").get(0).get("uuid").asString()).isEqualTo(bobMon.getUuid().toString());
+
+		BattleSession stored = battleRepository.findById(UUID.fromString(aliceView.get("battle_uuid").asString())).orElseThrow();
+		assertThat(stored.getTeamA()).containsExactly(realUuid);
+	}
+
+	@Test
+	void theInviteeCanAnswerWithTheirCobblemonParty() throws Exception {
+		teamMember(aliceUuid, "pikachu", 1);
+		UUID realUuid = UUID.randomUUID();
+		send(aliceSession, "BattleInvite", "{\"target_uuid\":\"" + bobUuid + "\"}");
+		JsonNode invite = await(bob, "BattleInviteReceived");
+		assertThat(invite.get("from_team").asString()).as("Ghosts unless said otherwise").isEqualTo("GHOST");
+		send(bobSession, "BattleInviteResponse", "{\"invite_uuid\":\"" + invite.get("invite_uuid").asString()
+				+ "\",\"accept\":true,\"team\":\"COBBLEMON\",\"party\":[" + partyMember(realUuid, "lucario", "{}") + "]}");
+
+		JsonNode aliceView = await(alice, "BattleSessionStarted");
+		assertThat(aliceView.get("opponent_team_source").asString()).isEqualTo("COBBLEMON");
+		assertThat(aliceView.get("opponent_team").get(0).get("species").asString()).isEqualTo("lucario");
+		JsonNode bobView = await(bob, "BattleSessionStarted");
+		assertThat(bobView.get("own_team_source").asString()).isEqualTo("COBBLEMON");
+		assertThat(bobView.get("own_team").get(0).get("uuid").asString()).isEqualTo(realUuid.toString());
+	}
+
+	@Test
+	void anIllegalOrMalformedPartyIsRefused() throws Exception {
+		teamMember(bobUuid, "charmander", 1);
+		for (String party : List.of(
+				"[" + partyMember(UUID.randomUUID(), "garchomp", "{\"hp\":40}") + "]",
+				"[]",
+				"[" + String.join(",", java.util.Collections.nCopies(7, partyMember(UUID.randomUUID(), "garchomp", "{}"))) + "]")) {
+			send(aliceSession, "BattleInvite", "{\"target_uuid\":\"" + bobUuid + "\",\"team\":\"COBBLEMON\",\"party\":" + party + "}");
+			assertThat(await(alice, "BattleSessionError").get("error_code").asString()).isEqualTo("ERROR_BATTLE_INVALID_PARTY");
+		}
+		assertNothing(bob, "BattleInviteReceived");
+	}
+
 	@Test
 	void inviteReachesTheTarget() throws Exception {
 		send(aliceSession, "BattleInvite", "{\"target_uuid\":\"" + bobUuid + "\"}");

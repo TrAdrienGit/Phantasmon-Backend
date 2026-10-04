@@ -140,8 +140,8 @@ n'a pas hébergé le combat précédent de cette paire).
 
 | Type | `data` | Effet et refus (`BattleSessionError`) |
 |---|---|---|
-| `BattleInvite` | `{ "target_uuid" }` | Invite. Refus : `ERROR_BATTLE_SELF`, `ERROR_BATTLE_ALREADY_IN_BATTLE`, `ERROR_BATTLE_PARTNER_UNAVAILABLE`, `ERROR_BATTLE_PARTNER_BUSY`. |
-| `BattleInviteResponse` | `{ "invite_uuid", "accept": true }` | Accepte → `BattleSessionStarted` aux deux ; refuse → `BattleInviteDeclined`. Invitation inconnue ou expirée (`phantasmon.battle.invite-ttl`, 60 s) : `ERROR_BATTLE_INVITE_NOT_FOUND`. Équipe vide d'un côté : `ERROR_BATTLE_EMPTY_TEAM` aux deux. |
+| `BattleInvite` | `{ "target_uuid", "team"?: "GHOST" \| "COBBLEMON", "party"?: [Pokemon…] }` | Invite. `team` absent = `GHOST` (équipe active de Ghost) ; `COBBLEMON` = combat avec une **copie** de l'équipe Cobblemon réelle, envoyée dans `party` (voir ci-dessous). Refus : `ERROR_BATTLE_SELF`, `ERROR_BATTLE_ALREADY_IN_BATTLE`, `ERROR_BATTLE_PARTNER_UNAVAILABLE`, `ERROR_BATTLE_PARTNER_BUSY`, `ERROR_BATTLE_INVALID_PARTY`. |
+| `BattleInviteResponse` | `{ "invite_uuid", "accept": true, "team"?, "party"? }` | Accepte (avec son propre choix d'équipe, mêmes règles que l'invitation) → `BattleSessionStarted` aux deux ; refuse → `BattleInviteDeclined`. Équipe Cobblemon invalide : `ERROR_BATTLE_INVALID_PARTY`, l'invitation reste valable. Invitation inconnue ou expirée (`phantasmon.battle.invite-ttl`, 60 s) : `ERROR_BATTLE_INVITE_NOT_FOUND`. Équipe vide d'un côté : `ERROR_BATTLE_EMPTY_TEAM` aux deux. |
 | `BattlePacket` | `{ "battle_uuid", "id": "cobblemon:…", "payload": "<base64>" }` | **Hôte uniquement** (`ERROR_BATTLE_NOT_HOST`). Paquet S2C Cobblemon encodé par son propre codec, relayé tel quel à l'invité. L'identifiant `phantasmon:action_effect` transporte une animation d'attaque. |
 | `BattleChoice` | `{ "battle_uuid", "id": "cobblemon:battle_select_actions", "payload": "<base64>" }` | **Invité uniquement** (`ERROR_BATTLE_NOT_GUEST`). Choix de l'invité, relayé tel quel à l'hôte. |
 | `BattleTimerEnable` | `{ "battle_uuid" }` | Active le chrono (90 s par tour) pour les deux, une seule fois, sans retour possible. Ignoré s'il est déjà actif. L'hôte applique l'action automatique à expiration. |
@@ -154,15 +154,22 @@ Action de combat hors combat ou avec un mauvais `battle_uuid` : `ERROR_BATTLE_NO
 
 | Type | `data` | Destinataire |
 |---|---|---|
-| `BattleInviteReceived` | `{ "invite_uuid", "from_uuid", "from_name" }` | Invité |
+| `BattleInviteReceived` | `{ "invite_uuid", "from_uuid", "from_name", "from_team": "GHOST" \| "COBBLEMON" }` | Invité |
 | `BattleInviteSent` | `{ "invite_uuid", "to_uuid", "to_name" }` | Inviteur |
 | `BattleInviteDeclined` | `{ "invite_uuid", "by_uuid", "by_name" }` | Inviteur |
-| `BattleSessionStarted` | `{ "battle_uuid", "role": "HOST" \| "GUEST", "opponent_uuid", "opponent_name", "own_team": [Pokemon…], "opponent_team": [Pokemon…] }` | Les deux. `opponent_team` n'est envoyé **qu'à l'hôte**. Suivi d'un `GhostEntityDespawn` pour chaque joueur qui avait un Ghost sorti ; jusqu'à la fin du combat, `SendOutGhost` répond `ERROR_GHOST_IN_BATTLE`. |
+| `BattleSessionStarted` | `{ "battle_uuid", "role": "HOST" \| "GUEST", "opponent_uuid", "opponent_name", "own_team": [Pokemon…], "opponent_team": [Pokemon…], "own_team_source", "opponent_team_source": "GHOST" \| "COBBLEMON" }` | Les deux. `opponent_team` n'est envoyé **qu'à l'hôte**. Suivi d'un `GhostEntityDespawn` pour chaque joueur qui avait un Ghost sorti ; jusqu'à la fin du combat, `SendOutGhost` répond `ERROR_GHOST_IN_BATTLE`. |
 | `BattlePacket` | comme en C2S | Invité |
 | `BattleChoice` | comme en C2S | Hôte |
 | `BattleTimerEnabled` | `{ "battle_uuid", "by_uuid", "by_name", "seconds": 90 }` | Les deux |
 | `BattleEnded` | `{ "battle_uuid", "winner_uuid" \| null, "reason": "FINISHED" \| "FORFEIT" \| "PARTNER_DISCONNECTED" \| "BACKEND_LOST" }` | Les deux ; aussi stocké dans `battle_sessions.result` |
 | `BattleSessionError` | `{ "error_code" }` | Auteur de l'action refusée |
+
+**Ghost contre Pokémon normal** (CAD Partie 1 §31, décision D-22) : chaque joueur choisit ses Ghost ou une copie de son
+équipe Cobblemon. `party` : 1 à 6 objets de la forme d'un Pokémon Ghost (`uuid` = UUID Cobblemon du vrai Pokémon,
+`species`, `form`, `level`, `nature`, `ability`, `is_shiny`, `cobblemon_data_version`, `data` avec `ivs`, `evs`, `moves`,
+`held_item`, `tera_type`, `gender`, `nickname`, `friendship`), validés comme un Ghost (bornes, légalité IV/EV, taille,
+UUID distincts). Le combat se joue sur des copies : les vrais Pokémon ne sont jamais modifiés. `battle_sessions` garde les
+UUID engagés, réels compris.
 
 Une déconnexion pendant un combat le termine en `ABORTED`, sans vainqueur (`PARTNER_DISCONNECTED`). Si le backend
 s'arrête, chaque combat en cours devient un **nul** (`FINISHED`, sans vainqueur, `BACKEND_LOST`) annoncé aux deux

@@ -34,6 +34,7 @@ Pour ajouter une décision : prendre le numéro suivant, dater, et mettre à jou
 | D-19 | `PATCH /pokemon` remplace `data` en entier | Acceptée | 2026-09-26 |
 | D-20 | Fonctions d'administration et limitation de débit reportées | Acceptée, débit WebSocket ajouté (SEC-5) | 2026-09-26 |
 | D-21 | Positions des joueurs visibles par tout leur groupe : limite assumée | Acceptée | 2026-10-04 |
+| D-22 | Ghost contre Pokémon normal = copie de l'équipe Cobblemon d'un joueur | Acceptée | 2026-10-04 |
 
 ---
 
@@ -221,3 +222,17 @@ Pour ajouter une décision : prendre le numéro suivant, dater, et mettre à jou
 - **Décision (Adrien)** : limite **assumée et documentée** (LIM-9). Phantasmon vise des serveurs entre joueurs de
   confiance ; un joueur qui ne veut pas être localisable ne sort pas de Ghost.
 - **Conséquences** : à revoir avant toute ouverture à des serveurs publics.
+
+## D-22 — Ghost contre Pokémon normal = copie de l'équipe Cobblemon d'un joueur
+
+- **Contexte** : la Partie 1 §31 souhaite des combats Ghost ↔ Pokémon normal ; la Partie 3 §A (prioritaire) exclut tout
+  combat contre un Pokémon sauvage réel et garde le système Ghost fermé. Sans mod serveur, un vrai Pokémon (entité et
+  combats côté serveur) ne peut pas entrer dans un combat Ghost.
+- **Options écartées** : Ghost contre Pokémon sauvage réel (impossible sans mod serveur, exclu par la Partie 3) ;
+  entraînement solo seul.
+- **Décision (Adrien)** : en combat en direct, chaque joueur choisit ses Ghost **ou une copie** de sa vraie équipe
+  Cobblemon, lue sur son client. Le combat se joue sur des copies jetables : aucune XP, aucun dégât gardé, rien n'est
+  écrit côté serveur — la Partie 3 reste respectée. Même protocole, même moteur, même hôte.
+- **Conséquences** : la copie est validée comme un Ghost (bornes, légalité) mais vient du client : un client modifié
+  pourrait annoncer une équipe qu'il n'a pas (LIM-10, dans la lignée de LIM-1).
+
