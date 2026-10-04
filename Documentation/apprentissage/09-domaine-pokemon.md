@@ -94,8 +94,11 @@ décide s'il faut l'exécuter. Ce mécanisme est générique et sert aussi pour 
 sur la même route (sinon `409 ERROR_IDEMPOTENCY_KEY_REUSED`, SEC-7). Il
 est dans la même transaction que l'action : si l'action échoue, rien n'est mémorisé.
 
-Limite : deux requêtes identiques **exactement simultanées** pourraient toutes deux ne rien trouver puis s'exécuter
-(DEBT-4). Le cas réel visé, une nouvelle tentative après une perte de réponse, est séquentiel.
+Deux requêtes identiques **exactement simultanées** pourraient toutes deux « ne rien trouver » si l'on vérifiait
+avant d'enregistrer. Le service fait donc l'inverse (DEBT-4) : il **réserve** d'abord la clé avec
+`INSERT … ON CONFLICT DO NOTHING`. PostgreSQL fait attendre la seconde insertion jusqu'à la fin de la première
+transaction ; la seconde voit alors la clé déjà prise et rejoue la réponse enregistrée. Leçon : pour éviter un
+doublon, laisser la base trancher en une seule opération atomique plutôt que « vérifier puis écrire ».
 
 ## 9.5 Déplacer ou échanger de place
 

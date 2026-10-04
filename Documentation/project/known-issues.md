@@ -22,17 +22,15 @@ Identifiants : `BUG-n` (comportement incorrect), `SEC-n` (sécurité, voir [`sec
 | TODO-2 | haute | Client | Retirer `/phantasmon debug fingerprint` quand un vrai serveur dédié remplacera les tests « Ouvrir au LAN » (décision D-18). |
 | TODO-3 | haute | Client | Remplacer les métadonnées factices : `homepage` / `sources` de `fabric.mod.json` (`github.com/your-account/…`), lien de mise à jour `https://modrinth.com/mod/phantasmon` (`AuthService`). |
 | TODO-7 | moyenne | Machine serveur | Rétablir l'accès SSH (`production-server`) : les déploiements du client retombent sur l'instance locale « Cobblemon 2 ». |
-| TODO-16 | haute | Machine qui héberge la base | Planifier `scripts/backup-database.ps1` (tâche Windows quotidienne, `guides/deployment.md` §3.2) vers un autre disque. |
+| TODO-16 | haute | Machine qui héberge la base | Planifier `scripts/backup-database.ps1` (tâche Windows quotidienne, `guides/deployment.md` §3.2) vers un autre disque. **Reporté par Adrien (2026-10-04).** |
+| TODO-17 | haute | Machine de dev | Le disque D: (« URBAN 1TB », USB) qui porte les dépôts, le backend et ses logs s'est déconnecté le 2026-10-04 (erreurs `disk` 51 / `Ntfs` 50, 140, remontages 15h36 et 16h31) : backend tué en plein combat, pics de lag. Vérifier câble / port / mise en veille USB ; faire tourner le backend (et viser les sauvegardes de TODO-16) sur un disque interne. **Reporté par Adrien (2026-10-04).** |
 
 ## 3. Dette technique
 
 | ID | Dépôt | Description |
 |---|---|---|
 | DEBT-1 | Les deux | Les clés de `pokemon.data` `heldItem`, `teraType`, `friendship` sont en camelCase alors que le reste de l'API est en snake_case (les clés de `Map` échappent aux stratégies de nommage Jackson/Gson). Fonctionne ; tout renommage exige une migration des données existantes. |
-| DEBT-2 | Backend | Une requête refusée par la validation Bean (400) renvoie le format d'erreur de Spring, pas un `error_code` structuré. |
 | DEBT-3 | Backend | Pas de révocation des refresh tokens (décision D-16). |
-| DEBT-4 | Backend | Idempotence non protégée contre deux requêtes identiques **simultanées** (vérifier puis enregistrer). |
-| DEBT-5 | Client | `cobblemon_data_version` est enregistré (`1.8.1`, constante) mais jamais comparé à la version locale de Cobblemon. |
 
 ## 4. Limites connues (assumées)
 
@@ -79,3 +77,7 @@ Identifiants : `BUG-n` (comportement incorrect), `SEC-n` (sécurité, voir [`sec
 | SEC-8 | 2026-10-04 | Corrigé le 2026-10-04 : une nouvelle connexion ferme la précédente ; la fermeture d'une connexion remplacée ne touche plus à rien ; l'expiration TTL fait elle-même le nettoyage complet. Test WebSocket. |
 | SEC-9 | 2026-10-04 | Corrigé le 2026-10-04 : `ERROR_LEGALITY_INVALID_DATA` (422) sur `ivs` / `evs` / `nickname` mal typés. Test `PokemonLegalityServiceTest`. |
 | SEC-6 | 2026-10-04 | Limite assumée par Adrien (option « documenter ») : décision D-21, suivie en LIM-9. |
+| — | 2026-10-04 | Logs du 2026-10-04 (déconnexion en combat, pas de reconnexion) : le client rouvre seul le WebSocket perdu (2 s → 30 s, `/phantasmon login` pour forcer) ; `JoinServerGroup` envoyé seulement une fois la socket ouverte (il pouvait être jeté et jamais renvoyé) ; le backend ne crée plus d'utilisateur en mémoire (mot de passe généré écrit dans le log à chaque démarrage). Cause de la coupure : disque USB (TODO-17). |
+| DEBT-2 | 2026-10-04 | Erreurs de format au format structuré : `400 ERROR_VALIDATION_FAILED` (`details.fields`) et `400 ERROR_MALFORMED_REQUEST` (`ApiExceptionHandler`). Tests `AuthControllerTest`, `PokemonControllerTest`. |
+| DEBT-4 | 2026-10-04 | Idempotence sûre en concurrence : la clé est réservée par `INSERT … ON CONFLICT DO NOTHING` avant l'action, dans la même transaction ; un doublon simultané attend puis rejoue la réponse ; une action en échec libère la clé. Test `IdempotencyConcurrencyTest`. |
+| DEBT-5 | 2026-10-04 | Version réelle de Cobblemon enregistrée à la création et à l'édition (`PATCH` accepte `cobblemon_data_version`) ; Pokémon non reconnu signalé au joueur et exclu de la sortie et des combats, données intactes (`PokemonRecognition`). Tests `CobblemonDataVersionTest`, `PokemonControllerTest`. |

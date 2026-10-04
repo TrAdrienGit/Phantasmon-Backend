@@ -91,6 +91,9 @@ public class PokemonService {
 		if (request.isShiny() != null) {
 			pokemon.setShiny(request.isShiny());
 		}
+		if (request.cobblemonDataVersion() != null && !request.cobblemonDataVersion().isBlank()) {
+			pokemon.setCobblemonDataVersion(request.cobblemonDataVersion());
+		}
 		if (request.teamSlot() != null) {
 			moveToTeamSlot(ownerUuid, pokemon, request.teamSlot().shortValue());
 		} else if (request.boxId() != null || request.boxSlot() != null) {

@@ -223,7 +223,7 @@ Confirmé : le backend ne stocke **que des identifiants** (espèce, forme, capac
 
 ### 6.1 `cobblemon_data_version`
 
-> **Note d'implémentation (2026-10-03)** : la version est stockée sur chaque Pokémon, mais la comparaison avec la version locale n'est pas encore exploitée par le client. Une espèce introuvable empêche simplement l'affichage du Ghost (avertissement dans le log), sans modifier les données.
+> **Note d'implémentation (2026-10-04, DEBT-5)** : le client enregistre la version de Cobblemon réellement installée (création et édition complète). Un Pokémon dont l'espèce, la forme ou une attaque est introuvable localement est signalé au joueur (« non reconnu par votre version de Cobblemon », avec les deux versions) à la sélection dans le PC, et exclu de la sortie en Ghost et des combats ; ses données restent intactes.
 
 Chaque Pokémon stocke la version Cobblemon avec laquelle il a été créé/modifié pour la dernière fois (`cobblemon_data_version` en colonne, voir §5.1).
 

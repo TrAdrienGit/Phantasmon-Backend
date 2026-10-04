@@ -15,7 +15,7 @@
 | Authentification | `Public` : aucun en-tête. `Bearer` : `Authorization: Bearer <access_token>`. Un jeton absent ou invalide sur une route `Bearer` est refusé par Spring Security (403 par défaut, sans `error_code`). Un `refresh_token` présenté comme `access_token` est refusé. |
 | Propriétaire | Toujours déduit du JWT, jamais du corps de la requête. Sur `/players/{uuid}/…`, `{uuid}` doit être le joueur authentifié, sinon `403 ERROR_OWNERSHIP_MISMATCH`. |
 | Erreurs métier | `{"error_code": "ERROR_…", "details": {…}}` (catalogue : [`error-codes.md`](error-codes.md)) |
-| Erreurs de validation | Champ obligatoire manquant ou hors bornes : `400` au format par défaut de Spring (pas d'`error_code`) |
+| Erreurs de validation | Champ obligatoire manquant ou hors bornes : `400 ERROR_VALIDATION_FAILED` (`details.fields` = champs fautifs, en snake_case) ; corps JSON illisible, UUID de chemin invalide ou paramètre de requête manquant : `400 ERROR_MALFORMED_REQUEST` (`details.parameter` le cas échéant) |
 | Idempotence | `POST /pokemon` et `POST /trades` exigent un `request_uuid` (UUID généré par le client). Rejouer la même requête (même joueur, même route) renvoie la réponse d'origine sans rien recréer ; le même `request_uuid` présenté par un autre joueur ou sur une autre route est refusé (`409 ERROR_IDEMPOTENCY_KEY_REUSED`). |
 
 ## Sommaire
@@ -122,7 +122,7 @@ défaut). Le `refresh_token` vit 7 jours (`phantasmon.jwt.refresh-ttl`).
 | 401 | `ERROR_AUTH_INVALID_CHALLENGE` | `server_id` qui n'est pas un défi émis par le backend, expiré ou déjà utilisé (Mojang n'est pas interrogé) |
 | 401 | `ERROR_AUTH_MOJANG_VERIFICATION_FAILED` | Mojang ne confirme pas la session (`details.username`) |
 | 401 | `ERROR_AUTH_UUID_MISMATCH` | L'UUID annoncé diffère de celui confirmé par Mojang (`details.claimed_uuid`, `details.verified_uuid`) |
-| 400 | — | `uuid` manquant, `username` ou `server_id` vide |
+| 400 | `ERROR_VALIDATION_FAILED` | `uuid` manquant, `username` ou `server_id` vide |
 
 ### `POST /auth/refresh`
 
@@ -214,7 +214,7 @@ Sans emplacement fourni, le Pokémon va dans la **première case libre du PC**.
 | 201 | — | Créé, renvoie un `Pokemon` |
 | 422 | `ERROR_LEGALITY_IV_OUT_OF_RANGE`, `ERROR_LEGALITY_EV_OUT_OF_RANGE`, `ERROR_LEGALITY_EV_TOTAL_EXCEEDED` | IV ∉ [0, 31], EV ∉ [0, 252] ou total EV > 510 |
 | 422 | `ERROR_LEGALITY_NICKNAME_TOO_LONG`, `ERROR_LEGALITY_INVALID_DATA`, `ERROR_POKEMON_DATA_TOO_LARGE` | Surnom > 20 caractères ; `ivs` / `evs` / `nickname` mal typés (`details.field`) ; `data` > 16 Kio (mêmes règles pour `PATCH`) |
-| 400 | — | Champ obligatoire manquant ou chaîne trop longue |
+| 400 | `ERROR_VALIDATION_FAILED` | Champ obligatoire manquant ou chaîne trop longue |
 | 409 | `ERROR_IDEMPOTENCY_KEY_REUSED` | `request_uuid` déjà utilisé par un autre joueur ou une autre route |
 | 409 | `ERROR_POKEMON_SLOT_OCCUPIED` | L'emplacement demandé est pris |
 | 409 | `ERROR_POKEMON_PC_FULL` | Les 480 cases du PC sont occupées |
@@ -235,6 +235,7 @@ Mise à jour partielle : seuls les champs présents sont appliqués.
 |---|---|
 | `level` | 1 à 100 |
 | `nature`, `ability`, `is_shiny` | Remplacés tels quels |
+| `cobblemon_data_version` | Version de Cobblemon du client qui modifie (32 caractères au plus) ; conservée si absente. Le client l'envoie à chaque édition complète (CAD Partie 2 §6.1 : version de création **ou de dernière modification**) |
 | `data` | **Remplace tout** le JSONB (pas de fusion), puis contrôle de légalité IV/EV |
 | `team_slot` | Déplace vers cet emplacement d'équipe |
 | `box_id` + `box_slot` | Déplace vers cette case du PC (les deux ensemble) |

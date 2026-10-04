@@ -18,6 +18,13 @@
 Canaux : **REST**, **WS** (`Error`), **WS-T** (`TradeSessionError` ou `reason` de `TradeSessionCancelled`),
 **WS-B** (`BattleSessionError`).
 
+## Format de la requête
+
+| Code | Statut | Canal | Signification | Clé de traduction client |
+|---|---|---|---|---|
+| `ERROR_VALIDATION_FAILED` | 400 | REST | Champ obligatoire manquant, vide ou hors bornes (`details.fields`, en snake_case) — DEBT-2 | `phantasmon.error.validation_failed` |
+| `ERROR_MALFORMED_REQUEST` | 400 | REST | Corps JSON illisible, UUID de chemin invalide, paramètre de requête manquant (`details.parameter`) — DEBT-2 | `phantasmon.error.malformed_request` |
+
 ## Authentification
 
 | Code | Statut | Canal | Signification | Clé de traduction client |

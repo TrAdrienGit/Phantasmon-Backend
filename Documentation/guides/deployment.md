@@ -8,7 +8,7 @@
 
 | Machine | Adresse Tailscale | Rôle actuel |
 |---|---|---|
-| Machine de développement (Windows) | `100.116.43.32` | Fait tourner **le** backend utilisé par les tests (port 8080) et PostgreSQL natif (limité à `localhost` depuis le 2026-10-03) ; client Minecraft `MystAria_` |
+| Machine de développement (Windows) | `100.116.43.32` | Fait tourner **le** backend utilisé par les tests (port 8080, depuis les dépôts sur D:, **disque externe USB** qui s'est déconnecté le 2026-10-04 : voir TODO-17) et PostgreSQL natif (limité à `localhost` depuis le 2026-10-03) ; client Minecraft `MystAria_` |
 | « production-server » (ancien portable, Windows 10, i7-10750H, 16 Go) | `100.106.248.73` | Second client de test (`TheMashen`). Possède les dépôts et un backend installé comme service NSSM, **volontairement non utilisé** : les deux clients doivent partager un seul backend. Joignable en SSH par l'alias `production-server` (actuellement injoignable). |
 
 Le client vise `backend_url` de `config/phantasmon.json` (défaut `http://100.116.43.32:8080`). Changer de backend :

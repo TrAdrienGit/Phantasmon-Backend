@@ -29,5 +29,7 @@ public record PokemonUpdateRequest(
 		Boolean isShiny,
 		@Min(1) @Max(6) Integer teamSlot,
 		@Min(1) @Max(16) Integer boxId,
-		@Min(1) @Max(30) Integer boxSlot) {
+		@Min(1) @Max(30) Integer boxSlot,
+		/** Cobblemon version of the client making the edit (CAD Partie 2 §6.1: "created or last modified"); kept if absent. */
+		@Size(max = 32) String cobblemonDataVersion) {
 }

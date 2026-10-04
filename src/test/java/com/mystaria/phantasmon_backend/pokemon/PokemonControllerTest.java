@@ -65,13 +65,22 @@ class PokemonControllerTest {
 	}
 
 	@Test
+	void aMalformedUuidInThePathIsAStructuredError() throws Exception {
+		mockMvc.perform(delete("/pokemon/not-a-uuid").header("Authorization", bearerToken))
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.error_code").value("ERROR_MALFORMED_REQUEST"));
+	}
+
+	@Test
 	void anOverlongIdentifierIsRefusedAsABadRequestNotAServerError() throws Exception {
 		// SEC-5: species is VARCHAR(64); a longer value used to fail in the database with a 500.
 		mockMvc.perform(post("/pokemon")
 						.header("Authorization", bearerToken)
 						.contentType(MediaType.APPLICATION_JSON)
 						.content(validCreateBody(UUID.randomUUID()).replace("\"pikachu\"", "\"" + "p".repeat(65) + "\"")))
-				.andExpect(status().isBadRequest());
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.error_code").value("ERROR_VALIDATION_FAILED"))
+				.andExpect(jsonPath("$.details.fields[0]").value("species"));
 	}
 
 	@Test
@@ -166,6 +175,26 @@ class PokemonControllerTest {
 
 		mockMvc.perform(get("/players/" + ownerUuid + "/pokemon").header("Authorization", bearerToken))
 				.andExpect(jsonPath("$.length()").value(1));
+	}
+
+	@Test
+	void anEditRecordsTheCobblemonVersionItWasMadeWith() throws Exception {
+		// DEBT-5 / CAD Partie 2 §6.1: the version is the one the Pokémon was created *or last modified* with.
+		String createResponse = mockMvc.perform(post("/pokemon").header("Authorization", bearerToken)
+						.contentType(MediaType.APPLICATION_JSON).content(validCreateBody(UUID.randomUUID())))
+				.andExpect(status().isCreated())
+				.andReturn().getResponse().getContentAsString();
+		String pokemonUuid = com.jayway.jsonpath.JsonPath.read(createResponse, "$.uuid");
+
+		mockMvc.perform(patch("/pokemon/" + pokemonUuid).header("Authorization", bearerToken)
+						.contentType(MediaType.APPLICATION_JSON)
+						.content("{\"level\": 61, \"cobblemon_data_version\": \"1.9.0\"}"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.cobblemon_data_version").value("1.9.0"));
+		mockMvc.perform(patch("/pokemon/" + pokemonUuid).header("Authorization", bearerToken)
+						.contentType(MediaType.APPLICATION_JSON)
+						.content("{\"level\": 62}"))
+				.andExpect(jsonPath("$.cobblemon_data_version").value("1.9.0"));
 	}
 
 	@Test

@@ -52,6 +52,11 @@ public class IdempotencyKey {
 		this.responseSnapshot = responseSnapshot;
 	}
 
+	/** Stores the response of the request that reserved this key, replayed to any identical retry. */
+	public void recordResponse(Map<String, Object> responseSnapshot) {
+		this.responseSnapshot = responseSnapshot;
+	}
+
 	@PrePersist
 	void onCreate() {
 		createdAt = Instant.now();

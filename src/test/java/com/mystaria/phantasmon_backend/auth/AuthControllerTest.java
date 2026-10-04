@@ -134,13 +134,23 @@ class AuthControllerTest {
 	}
 
 	@Test
+	void unreadableJsonIsAStructuredError() throws Exception {
+		mockMvc.perform(post("/auth/session").contentType(MediaType.APPLICATION_JSON).content("{not json"))
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.error_code").value("ERROR_MALFORMED_REQUEST"));
+	}
+
+	@Test
 	void authenticateRejectsBlankUsername() throws Exception {
 		mockMvc.perform(post("/auth/session")
 						.contentType(MediaType.APPLICATION_JSON)
 						.content("""
 								{"uuid":"%s","username":"","server_id":"%s"}
 								""".formatted(UUID.randomUUID(), challenge())))
-				.andExpect(status().isBadRequest());
+				.andExpect(status().isBadRequest())
+				// DEBT-2: a structured error like every other refusal, naming the field in the API's snake_case.
+				.andExpect(jsonPath("$.error_code").value("ERROR_VALIDATION_FAILED"))
+				.andExpect(jsonPath("$.details.fields[0]").value("username"));
 	}
 
 	@Test

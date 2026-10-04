@@ -71,8 +71,8 @@ Requête HTTP
 - **Idempotence** : `POST /pokemon` et `POST /trades` passent par
   `IdempotencyService.executeIdempotent(request_uuid, joueur, endpoint, action)` : un `request_uuid` déjà vu
   rejoue la réponse stockée dans `idempotency_keys`, seulement pour le même joueur et la même route (sinon
-  `409 ERROR_IDEMPOTENCY_KEY_REUSED`, SEC-7). Ce n'est pas protégé contre deux requêtes identiques
-  **simultanées** (vérifier puis enregistrer), ce qui suffit pour des tentatives successives.
+  `409 ERROR_IDEMPOTENCY_KEY_REUSED`, SEC-7). La clé est réservée avant l'action par un `INSERT … ON CONFLICT DO NOTHING`, dans la
+  même transaction : deux requêtes identiques **simultanées** n'exécutent l'action qu'une fois (DEBT-4).
 - **Légalité** : `PokemonLegalityService` est appelé explicitement à la création et à chaque `PATCH` contenant
   `data` (jamais seulement par annotation).
 - Une requête refusée par la validation Bean renvoie le format d'erreur par défaut de Spring (400), pas un
