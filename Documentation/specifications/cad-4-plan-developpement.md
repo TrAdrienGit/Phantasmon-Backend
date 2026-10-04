@@ -115,7 +115,7 @@ Chaque phase liste : objectif, livrables, definition of done (DoD).
 
 ## Phase 6 — Client : Pokémon (PC, équipe, création/édition)
 
-> **Note d'implémentation (2026-10-03)** : terminée : PC graphique, éditeur complet, import Showdown. L'export Showdown n'est pas fait.
+> **Note d'implémentation (2026-10-03)** : terminée : PC graphique, éditeur complet, import Showdown ; export Showdown ajouté le 2026-10-03 (TODO-11).
 
 **Objectif** : rendre le système utilisable sans encore le volet visuel Ghost Entity.
 

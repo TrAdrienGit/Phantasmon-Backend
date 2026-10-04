@@ -121,7 +121,9 @@ Pour ajouter une décision : prendre le numéro suivant, dater, et mettre à jou
     déplace par `PATCH`.
   - `POST /pokemon/import-showdown` : l'analyse du format Showdown et la conversion des identifiants se font côté
     client (qui a les données Cobblemon), puis `POST /pokemon` classique.
-  - `GET /pokemon/{uuid}/export` : **pas encore implémenté**, ni côté backend ni côté client (CAD Partie 1 §11).
+  - `GET /pokemon/{uuid}/export` : remplacé par un export **côté client** (2026-10-03, TODO-11) : le client a déjà
+    les Pokémon et les noms anglais de Cobblemon (que le backend n'a pas) ; voir `architecture/showdown-import.md`
+    (dépôt Client).
 - **Conséquences** : l'OpenAPI ne décrit que l'existant ; les éléments manquants sont suivis dans `project/status.md`.
 
 ## D-10 — Seul un Pokémon de l'équipe peut sortir ; `sendout` = emplacement 1

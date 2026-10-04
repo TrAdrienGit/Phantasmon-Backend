@@ -17,7 +17,7 @@ Plan de référence : [`specifications/cad-4-plan-developpement.md`](../specific
 | 3 | Backend : échanges REST atomiques | ✅ Terminée | |
 | 4 | Backend : sessions de combat et garde-fous | ✅ Terminée | |
 | 5 | Client : connexion, JWT en mémoire, handshake de version, i18n | ✅ Terminée | Validée en jeu (2026-09-26) |
-| 6 | Client : PC, équipe, édition, import Showdown | ✅ Terminée | PC graphique et éditeur validés (2026-10-02) ; export Showdown non fait |
+| 6 | Client : PC, équipe, édition, import Showdown | ✅ Terminée | PC graphique et éditeur validés (2026-10-02) ; export Showdown ajouté (2026-10-03) |
 | 7 | Client : rendu des Ghost, sortie/rappel, cycle de vie | ✅ Terminée | Validée à deux comptes (2026-09-29) |
 | 8 | Client : interface d'échange | ✅ Terminée | Échange en direct validé à deux comptes (2026-10-02) |
 | 9 | Client + backend : combat Ghost (client hôte) | ✅ Cœur terminé | Validé à deux comptes, hôte LAN et hôte client pur, animations d'attaque comprises (2026-10-03) |
@@ -43,7 +43,6 @@ Adrien a confirmé le fonctionnement en jeu des phases 1 à 8 le 2026-10-03.
 
 | Élément | Référence CAD | Commentaire |
 |---|---|---|
-| Export Showdown vers le presse-papiers | Partie 1 §11 | Ni backend (`GET /pokemon/{uuid}/export`) ni client |
 | Fonctions d'administration (`/admin/*`, rôle admin, inspection) | Partie 1 §37-38, Partie 2 §16 | [D-20](../architecture/decisions.md#d-20--fonctions-dadministration-et-limitation-de-débit-reportées) |
 | Limitation de débit par joueur | Partie 2 §13 | D-20 |
 | Arrêt des combats en cas de perte du backend (match nul) | Partie 1 §44 | Une déconnexion WebSocket termine le combat en `ABORTED` |

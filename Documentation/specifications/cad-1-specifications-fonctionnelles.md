@@ -263,7 +263,7 @@ Une interface graphique pourra être ajoutée ultérieurement.
 
 # 11. Export
 
-> **Note d'implémentation (2026-10-03)** : non implémenté (ni backend, ni client).
+> **Note d'implémentation (2026-10-03)** : implémenté côté client (décision D-09) : bouton EXPORTER du PC (équipe active) et de l'éditeur (un Pokémon), `/phantasmon pokemon export [uuid]`. Le texte se réimporte à l'identique.
 
 Les Ghost Pokémon doivent pouvoir être exportés au format Showdown.
 

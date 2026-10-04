@@ -345,7 +345,7 @@ Ce modèle fait du client hôte une autorité de fait sur le déroulement du com
 
 ## 10. API REST
 
-> **Note d'implémentation (2026-10-03)** : API réelle : `reference/rest-api.md` (dépôt Backend). Ajouts : `POST /auth/refresh`, `GET /version`, échanges (`/trades`). Non implémentés : `/players/{uuid}/team`, `/pokemon/import-showdown`, `/pokemon/{uuid}/export`, `/admin/*` (décisions D-09, D-20).
+> **Note d'implémentation (2026-10-03)** : API réelle : `reference/rest-api.md` (dépôt Backend). Ajouts : `POST /auth/refresh`, `GET /version`, échanges (`/trades`). Non implémentés : `/players/{uuid}/team`, `/pokemon/import-showdown`, `/pokemon/{uuid}/export` (import et export Showdown faits côté client), `/admin/*` (décisions D-09, D-20).
 
 ```http
 # Authentification
