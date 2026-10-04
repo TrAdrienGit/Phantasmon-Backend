@@ -33,7 +33,7 @@ Adrien a confirmé le fonctionnement en jeu des phases 1 à 8 le 2026-10-03.
 | PC | 16 boîtes × 30 cases, équipe de 6, glisser-déposer (déplacer ou échanger), fiche complète, suppression avec confirmation | Touche **P**, `/phantasmon pc` |
 | Création | Import Showdown depuis le presse-papiers (plusieurs Pokémon à la fois) | Bouton IMPORTER, `/phantasmon pokemon import` |
 | Édition | Surnom, niveau, sexe, chromatique, talent, objet, nature, Téracristal, IV/EV, 4 attaques, aperçu en direct | Bouton ÉDITER du PC |
-| Ghost | Sortie/rappel du Pokémon en emplacement 1, suivi fluide, balade, animations de Poké Ball, formes, sexe et chromatique | Touche **O**, `/phantasmon sendout` |
+| Ghost | Sortie/rappel du Pokémon en emplacement 1, suivi fluide, balade, animations de Poké Ball, formes, sexe et chromatique | Touche **H**, `/phantasmon sendout` |
 | Échange en direct | Invitation, choix des offres, double confirmation, échange atomique | Touche **G**, roue Cobblemon (**R**), `/phantasmon trade invite` |
 | Échange asynchrone | Offre par UUID, acceptation ou annulation plus tard | `/phantasmon trade propose\|accept\|cancel\|view\|list` |
 | Combat | Combat Ghost contre Ghost avec l'interface de Cobblemon, chrono optionnel, abandon | Touche **B**, roue Cobblemon (**R**), `/phantasmon battle invite` |

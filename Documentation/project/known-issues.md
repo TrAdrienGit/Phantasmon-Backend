@@ -24,6 +24,11 @@ Identifiants : `BUG-n` (comportement incorrect), `SEC-n` (sécurité, voir [`sec
 | TODO-7 | moyenne | Machine serveur | Rétablir l'accès SSH (`production-server`) : les déploiements du client retombent sur l'instance locale « Cobblemon 2 ». |
 | TODO-16 | haute | Machine qui héberge la base | Planifier `scripts/backup-database.ps1` (tâche Windows quotidienne, `guides/deployment.md` §3.2) vers un autre disque. **Reporté par Adrien (2026-10-04).** |
 | TODO-17 | haute | Machine de dev | Le disque D: (« URBAN 1TB », USB) qui porte les dépôts, le backend et ses logs s'est déconnecté le 2026-10-04 (erreurs `disk` 51 / `Ntfs` 50, 140, remontages 15h36 et 16h31) : backend tué en plein combat, pics de lag. Vérifier câble / port / mise en veille USB ; faire tourner le backend (et viser les sauvegardes de TODO-16) sur un disque interne. **Reporté par Adrien (2026-10-04).** |
+| TODO-18 | moyenne | Client | Polir l'overlay de l'équipe Ghost (`GhostPartyHud`, touche « Cacher l'équipe » de Cobblemon) : rendu, tailles et finitions à revoir avec Adrien. |
+| TODO-19 | moyenne | Client | PC : double-clic sur un Pokémon d'une boîte = le mettre dans l'équipe ; double-clic sur un Pokémon de l'équipe = le ranger dans le premier emplacement libre du PC. |
+| TODO-20 | moyenne | Client | Animations en combat (à préciser avec Adrien). |
+| TODO-21 | basse | Client | Musique (lobby, cinématique, combat) sans alourdir le mod : piste « resource pack » optionnel (sons déclarés dans `sounds.json` du mod, fichiers `.ogg` fournis à part et chargés seulement s'ils existent), ou streaming ; vérifier les licences. |
+| TODO-22 | basse | Client | Se libérer des touches dédiées (PC, sortie du Ghost, échange, combat) : les regrouper dans un point d'entrée unique (roue d'interaction de Cobblemon, menu radial Phantasmon, ou une seule touche ouvrant un menu) pour éviter les conflits avec Cobblemon et les autres mods. |
 
 ## 3. Dette technique
 
