@@ -165,8 +165,8 @@ Pour ajouter une décision : prendre le numéro suivant, dater, et mettre à jou
 
 ## D-15 — Mixins autorisés, en échec explicite au démarrage
 
-- **Décision** : 7 Mixins côté client (interception des choix de combat, exécution de Showdown sans serveur,
-  animations d'attaque, roue d'interaction). `defaultRequire = 1` : si une cible change après une mise à jour de
+- **Décision** : 9 Mixins côté client (interception des choix de combat, exécution de Showdown sans serveur,
+  animations d'attaque, roue d'interaction, nom des Ghost toujours affiché, Ghost jamais pris pour des Pokémon sauvages). `defaultRequire = 1` : si une cible change après une mise à jour de
   Cobblemon ou de Minecraft, le jeu refuse de démarrer avec une erreur Mixin explicite, plutôt que de se
   comporter faussement en silence.
 - **Conséquences** : chaque mise à jour de Cobblemon impose de revalider la liste des Mixins
