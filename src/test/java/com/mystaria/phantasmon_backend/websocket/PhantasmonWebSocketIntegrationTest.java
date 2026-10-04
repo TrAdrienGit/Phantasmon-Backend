@@ -80,6 +80,55 @@ class PhantasmonWebSocketIntegrationTest {
 	}
 
 	@Test
+	void aFloodOfMessagesIsCutOffWithOneError() throws Exception {
+		UUID playerUuid = UUID.randomUUID();
+		playerService.recordConnection(playerUuid, "Bichou");
+		RecordingHandler handler = new RecordingHandler();
+		WebSocketSession session = connect(jwtService.issueAccessToken(playerUuid, "Bichou"), handler);
+		try {
+			for (int i = 0; i < 400; i++) {
+				session.sendMessage(new TextMessage("{\"type\":\"Heartbeat\",\"data\":{}}"));
+			}
+			Thread.sleep(1000);
+			long acks = handler.received.stream().filter(m -> m.contains("HeartbeatAck")).count();
+			long errors = handler.received.stream().filter(m -> m.contains("ERROR_WS_RATE_LIMITED")).count();
+			assertThat(acks).isLessThan(400);
+			assertThat(errors).isGreaterThanOrEqualTo(1);
+		} finally {
+			session.close();
+		}
+	}
+
+	@Test
+	void reconnectingReplacesTheOldConnectionWithoutLosingTheNewOne() throws Exception {
+		// SEC-8: closing the old connection used to unregister the new one and remove the player's presence.
+		UUID playerUuid = UUID.randomUUID();
+		playerService.recordConnection(playerUuid, "Bichou");
+		RecordingHandler oldHandler = new RecordingHandler();
+		WebSocketSession oldSession = joinGroup(playerUuid, oldHandler, "fp-sec8");
+		RecordingHandler newHandler = new RecordingHandler();
+		WebSocketSession newSession = joinGroup(playerUuid, newHandler, "fp-sec8");
+		try {
+			Thread.sleep(500);
+			assertThat(oldSession.isOpen()).as("the old connection is closed by the backend").isFalse();
+			assertThat(presenceService.find(playerUuid)).isPresent();
+
+			newSession.sendMessage(new TextMessage("{\"type\":\"Heartbeat\",\"data\":{}}"));
+			String reply = null;
+			for (int i = 0; i < 10 && (reply == null || !reply.contains("HeartbeatAck")); i++) {
+				reply = newHandler.received.poll(1, TimeUnit.SECONDS);
+			}
+			assertThat(reply).contains("HeartbeatAck");
+			assertThat(presenceService.find(playerUuid)).isPresent();
+		} finally {
+			if (oldSession.isOpen()) {
+				oldSession.close();
+			}
+			newSession.close();
+		}
+	}
+
+	@Test
 	void joinServerGroupRecordsPresence() throws Exception {
 		UUID playerUuid = UUID.randomUUID();
 		playerService.recordConnection(playerUuid, "Bichou");
@@ -169,6 +218,56 @@ class PhantasmonWebSocketIntegrationTest {
 				"{\"type\":\"JoinServerGroup\",\"data\":{\"server_fingerprint\":\"" + fingerprint + "\",\"dimension\":\"minecraft:overworld\"}}"));
 		Thread.sleep(300);
 		return session;
+	}
+
+	@Test
+	void aPresenceWithoutFingerprintOrDimensionIsRefusedAndBreaksNoOneElse() throws Exception {
+		// SEC-4: a null fingerprint used to make every other player's group lookup throw.
+		UUID malloryUuid = UUID.randomUUID();
+		UUID aliceUuid = UUID.randomUUID();
+		UUID bobUuid = UUID.randomUUID();
+		playerService.recordConnection(malloryUuid, "Mallory");
+		playerService.recordConnection(aliceUuid, "Alice");
+		playerService.recordConnection(bobUuid, "Bob");
+		Pokemon aliceMon = givePokemon(aliceUuid);
+
+		RecordingHandler malloryHandler = new RecordingHandler();
+		WebSocketSession mallorySession = connect(jwtService.issueAccessToken(malloryUuid, "Mallory"), malloryHandler);
+		RecordingHandler aliceHandler = new RecordingHandler();
+		RecordingHandler bobHandler = new RecordingHandler();
+		WebSocketSession aliceSession = joinGroup(aliceUuid, aliceHandler, "fp-sec4");
+		WebSocketSession bobSession = joinGroup(bobUuid, bobHandler, "fp-sec4");
+
+		try {
+			mallorySession.sendMessage(new TextMessage("{\"type\":\"JoinServerGroup\",\"data\":{\"dimension\":\"minecraft:overworld\"}}"));
+			assertThat(malloryHandler.received.poll(5, TimeUnit.SECONDS)).contains("ERROR_WS_MALFORMED_MESSAGE");
+			mallorySession.sendMessage(new TextMessage("{\"type\":\"JoinServerGroup\",\"data\":{\"server_fingerprint\":\"fp-sec4\"}}"));
+			assertThat(malloryHandler.received.poll(5, TimeUnit.SECONDS)).contains("ERROR_WS_MALFORMED_MESSAGE");
+			assertThat(presenceService.find(malloryUuid)).isEmpty();
+
+			aliceSession.sendMessage(new TextMessage(
+					"{\"type\":\"SendOutGhost\",\"data\":{\"pokemon_uuid\":\"" + aliceMon.getUuid() + "\"}}"));
+			assertThat(bobHandler.received.poll(5, TimeUnit.SECONDS)).contains("GhostEntitySpawn");
+		} finally {
+			mallorySession.close();
+			aliceSession.close();
+			bobSession.close();
+		}
+	}
+
+	@Test
+	void aPositionUpdateWithoutDimensionIsRefused() throws Exception {
+		UUID aliceUuid = UUID.randomUUID();
+		playerService.recordConnection(aliceUuid, "Alice");
+		RecordingHandler aliceHandler = new RecordingHandler();
+		WebSocketSession aliceSession = joinGroup(aliceUuid, aliceHandler, "fp-sec4-pos");
+		try {
+			aliceSession.sendMessage(new TextMessage("{\"type\":\"PositionUpdate\",\"data\":{\"x\":1,\"y\":2,\"z\":3}}"));
+			assertThat(aliceHandler.received.poll(5, TimeUnit.SECONDS)).contains("ERROR_WS_MALFORMED_MESSAGE");
+			assertThat(presenceService.find(aliceUuid).orElseThrow().dimension()).isEqualTo("minecraft:overworld");
+		} finally {
+			aliceSession.close();
+		}
 	}
 
 	@Test

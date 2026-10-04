@@ -77,8 +77,11 @@ sequenceDiagram
     C->>B: GET /version
     B-->>C: current_version, min_supported_version
     Note over C: refus si version < min_supported_version
-    C->>M: joinServer(uuid, accessToken, serverId aléatoire)
+    C->>B: POST /auth/challenge
+    B-->>C: défi à usage unique (60 s)
+    C->>M: joinServer(uuid, accessToken, serverId = défi)
     C->>B: POST /auth/session {uuid, username, server_id}
+    Note over B: refus si server_id n'est pas un défi émis, valide, non consommé
     B->>M: hasJoined(username, server_id)
     M-->>B: profil (uuid vérifié)
     B-->>C: access_token (20 min) + refresh_token (7 j)

@@ -90,7 +90,8 @@ public <T> T executeIdempotent(UUID requestUuid, UUID playerUuid, String endpoin
 ```
 
 Le contrôleur passe l'action sous forme de lambda (`() -> pokemonService.create(...)`) : le service d'idempotence
-décide s'il faut l'exécuter. Ce mécanisme est générique et sert aussi pour `POST /trades` et `POST /battles`. Il
+décide s'il faut l'exécuter. Ce mécanisme est générique et sert aussi pour `POST /trades` ; la réponse n'est rejouée que pour le même joueur
+sur la même route (sinon `409 ERROR_IDEMPOTENCY_KEY_REUSED`, SEC-7). Il
 est dans la même transaction que l'action : si l'action échoue, rien n'est mémorisé.
 
 Limite : deux requêtes identiques **exactement simultanées** pourraient toutes deux ne rien trouver puis s'exécuter

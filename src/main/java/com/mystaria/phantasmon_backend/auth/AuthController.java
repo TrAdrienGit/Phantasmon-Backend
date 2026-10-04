@@ -32,15 +32,29 @@ public class AuthController {
 	private final MojangSessionClient mojangSessionClient;
 	private final PlayerService playerService;
 	private final JwtService jwtService;
+	private final AuthChallengeService challengeService;
 
-	public AuthController(MojangSessionClient mojangSessionClient, PlayerService playerService, JwtService jwtService) {
+	public AuthController(MojangSessionClient mojangSessionClient, PlayerService playerService, JwtService jwtService,
+			AuthChallengeService challengeService) {
 		this.mojangSessionClient = mojangSessionClient;
 		this.playerService = playerService;
 		this.jwtService = jwtService;
+		this.challengeService = challengeService;
+	}
+
+	/** Step 1 of the login: a one-time challenge the client must use as its Mojang {@code serverId} (SEC-1). */
+	@PostMapping("/challenge")
+	public Map<String, String> challenge() {
+		return Map.of("challenge", challengeService.issue());
 	}
 
 	@PostMapping("/session")
 	public AuthSessionResponse authenticate(@Valid @RequestBody AuthSessionRequest request, HttpServletRequest httpRequest) {
+		// Only a serverId we issued proves the join was made for us, not replayed by another server (SEC-1).
+		if (!challengeService.consume(request.serverId())) {
+			log.warn("Auth rejected for username={}: server_id is not a challenge issued by this backend", request.username());
+			throw new ApiException(HttpStatus.UNAUTHORIZED, "ERROR_AUTH_INVALID_CHALLENGE", Map.of());
+		}
 		MojangProfile profile = mojangSessionClient.hasJoined(request.username(), request.serverId(), httpRequest.getRemoteAddr())
 				.orElseThrow(() -> {
 					log.warn("Mojang verification failed for username={}", request.username());

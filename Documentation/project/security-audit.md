@@ -2,7 +2,7 @@
 
 > TODO-15. Lecture du code des deux dépôts (backend : authentification, contrôleurs REST, WebSocket, services
 > d'échange et de combat ; client : authentification, relais de combat, configuration). Aucune correction faite
-> pendant l'audit : chaque point est suivi dans [`known-issues.md`](known-issues.md) (`SEC-n`) en attendant la
+> pendant l'audit ; corrections du même jour signalées sous chaque point. Chaque point est suivi dans [`known-issues.md`](known-issues.md) (`SEC-n`) en attendant la
 > décision d'Adrien. Document identique dans les deux dépôts.
 >
 > Non couvert : analyse automatique des dépendances (CVE), tests d'intrusion réels, machine serveur (SSH
@@ -10,21 +10,23 @@
 
 ## 1. Résumé
 
-| ID | Gravité | Dépôt | Sujet |
-|---|---|---|---|
-| SEC-1 | **Haute** | Les deux | Usurpation de compte : le `serverId` de l'authentification est choisi par le client |
-| SEC-2 | **Haute** | Client | L'invité exécute n'importe quel paquet Cobblemon relayé par l'hôte d'un combat |
-| SEC-3 | Moyenne | Backend | Anciennes routes REST de combat : combat créé sans accord, résultat déclaré par n'importe quel participant |
-| SEC-4 | Moyenne | Backend | Une présence sans empreinte ou sans dimension casse le regroupement pour tous les joueurs |
-| SEC-5 | Moyenne | Backend | Tailles non bornées (données Pokémon, surnom, chaînes WebSocket) et aucune limite de débit |
-| SEC-6 | Moyenne | Backend | Coordonnées des joueurs diffusées à quiconque rejoint leur groupe |
-| SEC-7 | Basse | Backend | Clé d'idempotence non liée au joueur ni à la route |
-| SEC-8 | Basse | Backend | Une deuxième connexion WebSocket du même joueur est défaite par la fermeture de la première |
-| SEC-9 | Basse | Backend | Données `ivs` / `evs` mal typées : erreur 500 au lieu d'un refus propre |
+| ID | Gravité | Dépôt | Sujet | État |
+|---|---|---|---|---|
+| SEC-1 | **Haute** | Les deux | Usurpation de compte : le `serverId` de l'authentification est choisi par le client | Corrigé (2026-10-04) |
+| SEC-2 | **Haute** | Client | L'invité exécute n'importe quel paquet Cobblemon relayé par l'hôte d'un combat | Corrigé (2026-10-04) |
+| SEC-3 | Moyenne | Backend | Anciennes routes REST de combat : combat créé sans accord, résultat déclaré par n'importe quel participant | Corrigé (2026-10-04) |
+| SEC-4 | Moyenne | Backend | Une présence sans empreinte ou sans dimension casse le regroupement pour tous les joueurs | Corrigé (2026-10-04) |
+| SEC-5 | Moyenne | Backend | Tailles non bornées (données Pokémon, surnom, chaînes WebSocket) et aucune limite de débit | Corrigé (2026-10-04) |
+| SEC-6 | Moyenne | Backend | Coordonnées des joueurs diffusées à quiconque rejoint leur groupe | Assumé (LIM-9, D-21) |
+| SEC-7 | Basse | Backend | Clé d'idempotence non liée au joueur ni à la route | Corrigé (2026-10-04) |
+| SEC-8 | Basse | Backend | Une deuxième connexion WebSocket du même joueur est défaite par la fermeture de la première | Corrigé (2026-10-04) |
+| SEC-9 | Basse | Backend | Données `ivs` / `evs` mal typées : erreur 500 au lieu d'un refus propre | Corrigé (2026-10-04) |
 
 ## 2. Détail
 
 ### SEC-1 — Usurpation de compte via le `serverId` (haute)
+
+> **Corrigé le 2026-10-04 : `POST /auth/challenge` (`AuthChallengeService`, 128 bits, 60 s, usage unique, 10 000 en attente au plus) ; `/auth/session` refuse tout autre `server_id` (`ERROR_AUTH_INVALID_CHALLENGE`) sans interroger Mojang ; le client demande le défi avant `joinServer`. Tests `AuthChallengeServiceTest`, `AuthControllerTest`.**
 
 - **Constat** : le client tire un `serverId` au hasard, appelle `joinServer` chez Mojang, puis l'envoie à
   `POST /auth/session` ; le backend vérifie seulement que Mojang confirme `hasJoined(username, serverId)`. Le backend
@@ -41,6 +43,8 @@
 
 ### SEC-2 — L'invité exécute tout paquet relayé par l'hôte (haute)
 
+> **Corrigé le 2026-10-04 : `RelayedPacketPolicy` (client) n'accepte que `cobblemon:battle_*` et `phantasmon:action_effect`, vérifié avant décodage. Test `RelayedPacketPolicyTest`.**
+
 - **Constat** : `LiveBattleController.onRelayedPacket` décode et remet à Cobblemon (`CobblemonPackets.dispatchLocally`)
   **tout** paquet client de Cobblemon envoyé par l'hôte, sans liste blanche.
 - **Attaque** : un hôte au client modifié peut envoyer à l'invité des paquets sans rapport avec le combat
@@ -53,6 +57,8 @@
 
 ### SEC-3 — Anciennes routes REST de combat (moyenne)
 
+> **Corrigé le 2026-10-04 : `POST /battles` et `POST /battles/{uuid}/result` retirés (seul `GET /battles/{uuid}` reste). Test `BattleControllerTest`.**
+
 - **Constat** : `POST /battles` crée une session contre n'importe quel joueur sans son accord ;
   `POST /battles/{uuid}/result` accepte le vainqueur déclaré par **n'importe quel** participant, y compris l'invité
   d'un combat en direct (qui contourne alors la règle « seul l'hôte déclare »).
@@ -63,6 +69,8 @@
 
 ### SEC-4 — Regroupement cassé par une présence incomplète (moyenne)
 
+> **Corrigé le 2026-10-04 : `JoinServerGroup` / `PositionUpdate` refusent une empreinte ou une dimension absente, vide ou > 128 caractères (`ERROR_WS_MALFORMED_MESSAGE`) ; comparaison des groupes tolérante au `null`. Tests WebSocket.**
+
 - **Constat** : `JoinServerGroup` et `PositionUpdate` acceptent `server_fingerprint` / `dimension` absents (`null`).
   `PresenceService.groupMembers` appelle ensuite `presence.serverFingerprint().equals(...)` sur toutes les présences.
 - **Effet** : un seul client modifié envoie une présence sans empreinte ; chaque calcul de groupe des autres joueurs
@@ -71,6 +79,8 @@
   trop longue ; comparaisons tolérantes au `null` en défense.
 
 ### SEC-5 — Tailles non bornées et aucune limite de débit (moyenne)
+
+> **Corrigé le 2026-10-04 : `data` ≤ 16 Kio, surnom ≤ 20 caractères, chaînes de la requête bornées (`@Size`) ; 40 messages WebSocket par seconde par connexion, rafales jusqu'à 200 (`MessageRateLimiter`, `ERROR_WS_RATE_LIMITED`).**
 
 - **Constat** : `data` d'un Pokémon (JSON libre, jusqu'à la taille de requête acceptée par Tomcat), surnom sans
   longueur maximale (diffusé aux autres joueurs dans `GhostEntitySpawn` et affiché au-dessus du Ghost), chaînes
@@ -82,6 +92,8 @@
 
 ### SEC-6 — Coordonnées des joueurs exposées (moyenne, conception)
 
+> **Décision d'Adrien (2026-10-04) : limite assumée et documentée (option 3) — décision D-21, limite connue LIM-9. À revoir avant toute ouverture à des serveurs publics.**
+
 - **Constat** : l'empreinte d'un serveur est le SHA-256 de son adresse, calculable par n'importe qui. Un joueur
   authentifié peut rejoindre le groupe de n'importe quel serveur et recevoir chaque seconde la position de tous
   les joueurs qui ont un Ghost sorti (`GhostEntitySpawn` / `GhostEntityMove`), où qu'ils soient.
@@ -91,6 +103,8 @@
 
 ### SEC-7 — Idempotence non cloisonnée (basse)
 
+> **Corrigé le 2026-10-04 : réponse rejouée seulement pour le même joueur et la même route, sinon `409 ERROR_IDEMPOTENCY_KEY_REUSED`. Test `IdempotencyServiceTest`.**
+
 - **Constat** : `IdempotencyService` retrouve une réponse par `request_uuid` seul, sans vérifier le joueur ni la
   route enregistrés.
 - **Effet** : qui connaîtrait le `request_uuid` d'un autre joueur recevrait sa réponse (UUID aléatoires : peu
@@ -99,12 +113,16 @@
 
 ### SEC-8 — Double connexion WebSocket (basse)
 
+> **Corrigé le 2026-10-04 : une nouvelle connexion ferme la précédente ; la fermeture d'une connexion remplacée ne touche plus à rien ; l'expiration TTL fait elle-même le nettoyage complet. Test WebSocket.**
+
 - **Constat** : une nouvelle connexion du même joueur remplace l'ancienne dans `SessionRegistry` ; quand l'ancienne
   se ferme, `afterConnectionClosed` désinscrit la **nouvelle** et retire sa présence.
 - **Effet** : le joueur reste connecté mais ne reçoit plus rien (Ghost, échanges, combats) jusqu'à reconnexion.
 - **Correction proposée** : ne désinscrire / quitter le groupe que si la session fermée est celle enregistrée.
 
 ### SEC-9 — Erreur 500 sur `ivs` / `evs` mal typés (basse)
+
+> **Corrigé le 2026-10-04 : `ERROR_LEGALITY_INVALID_DATA` (422) sur `ivs` / `evs` / `nickname` mal typés. Test `PokemonLegalityServiceTest`.**
 
 - **Constat** : `PokemonLegalityService` fait un cast en `Map` et un `Integer.parseInt` sans garde.
 - **Effet** : une requête forgée donne une erreur 500 (et une trace dans le log) au lieu d'une erreur métier.

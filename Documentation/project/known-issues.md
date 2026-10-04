@@ -13,15 +13,7 @@ Identifiants : `BUG-n` (comportement incorrect), `SEC-n` (sécurité, voir [`sec
 
 | ID | Priorité | Dépôt | Description | Piste |
 |---|---|---|---|---|
-| SEC-1 | haute | Les deux | Usurpation de compte : le `serverId` d'authentification est choisi par le client ; un serveur Minecraft tiers rejoint par la victime peut rejouer sa preuve Mojang auprès de `POST /auth/session`. | Défi à usage unique émis par le backend (`security-audit.md` §SEC-1). |
-| SEC-2 | haute | Client | L'invité d'un combat Ghost décode et exécute n'importe quel paquet Cobblemon relayé par l'hôte. | Liste blanche `cobblemon:battle_*` + `phantasmon:action_effect`. |
-| SEC-3 | moyenne | Backend | `POST /battles` (sans accord de l'adversaire) et `POST /battles/{uuid}/result` (tout participant, y compris l'invité d'un combat en direct) permettent de fabriquer des résultats. | Retirer ces routes (inutilisées par le client). |
-| SEC-4 | moyenne | Backend | Une présence sans empreinte ou sans dimension fait échouer `PresenceService.groupMembers` pour tous les joueurs. | Valider `server_fingerprint` / `dimension`. |
-| SEC-5 | moyenne | Backend | Tailles non bornées (`data`, surnom diffusé aux autres, chaînes WebSocket) et aucune limite de débit (D-20). | Bornes de taille + limite de messages par joueur. |
-| SEC-6 | moyenne | Backend | Quiconque connaît l'adresse d'un serveur peut rejoindre son groupe et recevoir la position des joueurs ayant un Ghost sorti. | À décider (conception) : proximité déclarée, arrondi, ou limite connue. |
-| SEC-7 | basse | Backend | Clé d'idempotence retrouvée par `request_uuid` seul, sans vérifier joueur ni route. | Comparer joueur et route, sinon 409. |
-| SEC-8 | basse | Backend | Une 2e connexion WebSocket du même joueur est désinscrite quand la 1re se ferme. | Ne désinscrire que la session enregistrée. |
-| SEC-9 | basse | Backend | `ivs` / `evs` mal typés : erreur 500 au lieu d'un refus 422. | Code d'erreur métier dédié. |
+| — | — | — | Aucun bug connu ouvert (BUG-1 à BUG-5 et SEC-1 à SEC-9 traités, voir §5 ; SEC-6 devenu LIM-9). | — |
 
 ## 2. TODO
 
@@ -54,6 +46,7 @@ Identifiants : `BUG-n` (comportement incorrect), `SEC-n` (sécurité, voir [`sec
 | LIM-6 | Derrière un proxy (Velocity/BungeeCord), deux serveurs partageant la même adresse seraient regroupés (empreinte de serveur). |
 | LIM-7 | L'échange asynchrone par commandes exige l'UUID Mojang de l'autre joueur (l'échange en direct évite ce problème). |
 | LIM-8 | Pas d'archivage WAL : la restauration revient à la dernière sauvegarde (jusqu'à 24 h de pertes avec une sauvegarde quotidienne). |
+| LIM-9 | Positions visibles par tout le groupe (SEC-6, décision D-21) : quiconque connaît l'adresse d'un serveur peut rejoindre son groupe et recevoir chaque seconde la position des joueurs ayant un Ghost sorti. Assumé pour des serveurs entre joueurs de confiance. |
 
 ## 5. Résolu
 
@@ -76,4 +69,13 @@ Identifiants : `BUG-n` (comportement incorrect), `SEC-n` (sécurité, voir [`sec
 | TODO-12 | 2026-10-04 | Formes spéciales en combat : `BattleVisuals` écrit les aspects reçus dans `PokemonEntity.ASPECTS` (comme les Ghost dans le monde) ; `GhostBattlePokemonFactory` force les aspects de forme en dernier, avec chromatique et sexe. |
 | TODO-14 | 2026-10-04 | Au démarrage d'un combat Ghost, le backend rappelle les Ghost des deux joueurs (`GhostEntityDespawn` à leur groupe) ; jusqu'à la fin, `SendOutGhost` répond `ERROR_GHOST_IN_BATTLE` (vérifié sous le verrou du combat). Rappel factorisé dans `GhostRecall` (aussi utilisé par `RecallGhost` et l'échange en direct). Tests `startingABattleRecallsBothPlayersGhosts`, `noGhostCanBeSentOutWhileTheBattleLasts`. |
 | TODO-13 | 2026-10-04 | Les Ghost sont connus d'office : `PokemonRendererMixin` fait afficher `[Ghost] <nom>` au-dessus des entités Phantasmon (Ghost dans le monde et Pokémon de combat Ghost, suivis par `PhantasmonEntities`) même si l'espèce n'est pas au Pokédex du joueur. Nom lu sur le `Pokemon` et non via `getName()` (que le mod catchindicator du modpack remplace par « ??? »). Niveau de l'étiquette synchronisé (`LABEL_LEVEL`, affichait « N. 1 »). Les vrais Pokémon et le Pokédex du joueur ne sont pas touchés. |
-| TODO-15 | 2026-10-04 | Audit de sécurité fait : [`security-audit.md`](security-audit.md). 9 points ouverts (SEC-1 à SEC-9, section 1), corrections en attente de décision. |
+| TODO-15 | 2026-10-04 | Audit de sécurité fait : [`security-audit.md`](security-audit.md). 9 points : 8 corrigés le même jour, SEC-6 assumé comme limite (LIM-9, D-21) ; détail ci-dessous. |
+| SEC-1 | 2026-10-04 | Corrigé le 2026-10-04 : `POST /auth/challenge` (`AuthChallengeService`, 128 bits, 60 s, usage unique, 10 000 en attente au plus) ; `/auth/session` refuse tout autre `server_id` (`ERROR_AUTH_INVALID_CHALLENGE`) sans interroger Mojang ; le client demande le défi avant `joinServer`. Tests `AuthChallengeServiceTest`, `AuthControllerTest`. |
+| SEC-2 | 2026-10-04 | Corrigé le 2026-10-04 : `RelayedPacketPolicy` (client) n'accepte que `cobblemon:battle_*` et `phantasmon:action_effect`, vérifié avant décodage. Test `RelayedPacketPolicyTest`. |
+| SEC-3 | 2026-10-04 | Corrigé le 2026-10-04 : `POST /battles` et `POST /battles/{uuid}/result` retirés (seul `GET /battles/{uuid}` reste). Test `BattleControllerTest`. |
+| SEC-4 | 2026-10-04 | Corrigé le 2026-10-04 : `JoinServerGroup` / `PositionUpdate` refusent une empreinte ou une dimension absente, vide ou > 128 caractères (`ERROR_WS_MALFORMED_MESSAGE`) ; comparaison des groupes tolérante au `null`. Tests WebSocket. |
+| SEC-5 | 2026-10-04 | Corrigé le 2026-10-04 : `data` ≤ 16 Kio, surnom ≤ 20 caractères, chaînes de la requête bornées (`@Size`) ; 40 messages WebSocket par seconde par connexion, rafales jusqu'à 200 (`MessageRateLimiter`, `ERROR_WS_RATE_LIMITED`). |
+| SEC-7 | 2026-10-04 | Corrigé le 2026-10-04 : réponse rejouée seulement pour le même joueur et la même route, sinon `409 ERROR_IDEMPOTENCY_KEY_REUSED`. Test `IdempotencyServiceTest`. |
+| SEC-8 | 2026-10-04 | Corrigé le 2026-10-04 : une nouvelle connexion ferme la précédente ; la fermeture d'une connexion remplacée ne touche plus à rien ; l'expiration TTL fait elle-même le nettoyage complet. Test WebSocket. |
+| SEC-9 | 2026-10-04 | Corrigé le 2026-10-04 : `ERROR_LEGALITY_INVALID_DATA` (422) sur `ivs` / `evs` / `nickname` mal typés. Test `PokemonLegalityServiceTest`. |
+| SEC-6 | 2026-10-04 | Limite assumée par Adrien (option « documenter ») : décision D-21, suivie en LIM-9. |

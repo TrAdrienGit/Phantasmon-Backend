@@ -25,12 +25,25 @@ public class SessionRegistry {
 		this.objectMapper = objectMapper;
 	}
 
+	/**
+	 * One connection per player: a new one replaces the previous, which is closed (SEC-8). Its close then finds it
+	 * is no longer the registered one ({@link #unregister}) and leaves the player's state alone.
+	 */
 	public void register(UUID playerUuid, WebSocketSession session) {
-		sessions.put(playerUuid, session);
+		WebSocketSession previous = sessions.put(playerUuid, session);
+		if (previous != null && previous != session && previous.isOpen()) {
+			log.info("Player {} reconnected — closing the previous WebSocket session", playerUuid);
+			try {
+				previous.close(CloseStatus.POLICY_VIOLATION.withReason("Replaced by a newer connection"));
+			} catch (IOException ex) {
+				log.warn("Failed to close the replaced WebSocket session of {}", playerUuid, ex);
+			}
+		}
 	}
 
-	public void unregister(UUID playerUuid) {
-		sessions.remove(playerUuid);
+	/** Removes {@code session} only if it is still the player's registered one; returns whether it was. */
+	public boolean unregister(UUID playerUuid, WebSocketSession session) {
+		return sessions.remove(playerUuid, session);
 	}
 
 	/**

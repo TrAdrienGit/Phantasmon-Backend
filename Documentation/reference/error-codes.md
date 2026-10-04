@@ -24,6 +24,8 @@ Canaux : **REST**, **WS** (`Error`), **WS-T** (`TradeSessionError` ou `reason` d
 |---|---|---|---|---|
 | `ERROR_AUTH_MOJANG_VERIFICATION_FAILED` | 401 | REST | Mojang ne confirme pas la session | `phantasmon.auth.error.mojang_verification_failed` |
 | `ERROR_AUTH_UUID_MISMATCH` | 401 | REST | UUID annoncé ≠ UUID vérifié par Mojang | `phantasmon.auth.error.uuid_mismatch` |
+| `ERROR_AUTH_INVALID_CHALLENGE` | 401 | REST | `server_id` qui n'est pas un défi émis par `POST /auth/challenge`, expiré ou déjà utilisé (SEC-1) | `phantasmon.auth.error.invalid_challenge` |
+| `ERROR_AUTH_TOO_MANY_CHALLENGES` | 429 | REST | Plus de 10 000 défis en attente | `phantasmon.auth.error.too_many_challenges` |
 | `ERROR_AUTH_INVALID_REFRESH_TOKEN` | 401 | REST | Refresh token invalide, expiré ou joueur inconnu | `phantasmon.auth.error.invalid_refresh_token` |
 
 ## Propriété et existence
@@ -31,7 +33,6 @@ Canaux : **REST**, **WS** (`Error`), **WS-T** (`TradeSessionError` ou `reason` d
 | Code | Statut | Canal | Signification | Clé de traduction client |
 |---|---|---|---|---|
 | `ERROR_OWNERSHIP_MISMATCH` | 403 | REST, WS, WS-T | La ressource appartient à un autre joueur | `phantasmon.error.ownership_mismatch` |
-| `ERROR_PLAYER_NOT_FOUND` | 404 | REST | Joueur inconnu (`POST /battles`) | — |
 | `ERROR_POKEMON_NOT_FOUND` | 404 | REST, WS, WS-T | Pokémon inexistant | `phantasmon.pokemon.error.not_found` |
 | `ERROR_TRADE_NOT_FOUND` | 404 | REST | Échange inexistant | `phantasmon.trade.error.not_found` |
 | `ERROR_BATTLE_NOT_FOUND` | 404 | REST | Session de combat inexistante | — |
@@ -43,6 +44,10 @@ Canaux : **REST**, **WS** (`Error`), **WS-T** (`TradeSessionError` ou `reason` d
 | `ERROR_LEGALITY_IV_OUT_OF_RANGE` | 422 | REST | Un IV hors de [0, 31] | `phantasmon.pokemon.error.legality_iv` |
 | `ERROR_LEGALITY_EV_OUT_OF_RANGE` | 422 | REST | Un EV hors de [0, 252] | `phantasmon.pokemon.error.legality_ev` |
 | `ERROR_LEGALITY_EV_TOTAL_EXCEEDED` | 422 | REST | Total des EV > 510 (`details.total`, `details.max`) | `phantasmon.pokemon.error.legality_ev_total` |
+| `ERROR_LEGALITY_NICKNAME_TOO_LONG` | 422 | REST | Surnom > 20 caractères (SEC-5) | `phantasmon.pokemon.error.nickname_too_long` |
+| `ERROR_LEGALITY_INVALID_DATA` | 422 | REST | `ivs` / `evs` / `nickname` mal typés (`details.field`, SEC-9) | `phantasmon.pokemon.error.invalid_data` |
+| `ERROR_POKEMON_DATA_TOO_LARGE` | 422 | REST | `data` > 16 Kio sérialisé (`details.max_bytes`, SEC-5) | `phantasmon.pokemon.error.data_too_large` |
+| `ERROR_IDEMPOTENCY_KEY_REUSED` | 409 | REST | `request_uuid` déjà utilisé par un autre joueur ou sur une autre route (SEC-7) | `phantasmon.error.request_reused` |
 | `ERROR_POKEMON_SLOT_OCCUPIED` | 409 | REST | Emplacement demandé déjà pris (création) ou conflit d'index résiduel | `phantasmon.pokemon.error.slot_occupied` |
 | `ERROR_POKEMON_PC_FULL` | 409 | REST | Plus aucune case libre (480/480) | `phantasmon.pokemon.error.pc_full` |
 | `ERROR_POKEMON_INCOMPLETE_BOX_DESTINATION` | 422 | REST | Un seul de `box_id` / `box_slot` fourni | `phantasmon.pokemon.error.incomplete_box_destination` |
@@ -71,11 +76,8 @@ Canaux : **REST**, **WS** (`Error`), **WS-T** (`TradeSessionError` ou `reason` d
 
 | Code | Statut | Canal | Signification | Clé de traduction client |
 |---|---|---|---|---|
-| `ERROR_BATTLE_SELF` | 409 | REST, WS-B | Combat contre soi-même | `phantasmon.battle.error.self` |
-| `ERROR_BATTLE_INVALID_TEAM` | 422 | REST | Équipe vide, plus de 6 Pokémon ou doublons | — |
-| `ERROR_BATTLE_OPPONENT_NO_TEAM` | 409 | REST | L'adversaire n'a pas d'équipe active | — |
-| `ERROR_BATTLE_INVALID_STATE` | 409 | REST | Session plus `ACTIVE` | — |
-| `ERROR_BATTLE_INVALID_RESULT` | 422 | REST, WS-B | Vainqueur hors participants | `phantasmon.battle.error.invalid_result` |
+| `ERROR_BATTLE_SELF` | — | WS-B | Combat contre soi-même | `phantasmon.battle.error.self` |
+| `ERROR_BATTLE_INVALID_RESULT` | — | WS-B | Vainqueur hors participants | `phantasmon.battle.error.invalid_result` |
 | `ERROR_BATTLE_ALREADY_IN_BATTLE` | — | WS-B | L'appelant est déjà en combat | `phantasmon.battle.error.already_in_battle` |
 | `ERROR_BATTLE_PARTNER_UNAVAILABLE` | — | WS-B | La cible n'est pas connectée au WebSocket | `phantasmon.battle.error.partner_unavailable` |
 | `ERROR_BATTLE_PARTNER_BUSY` | — | WS-B | La cible est déjà en combat | `phantasmon.battle.error.partner_busy` |
@@ -91,7 +93,8 @@ Les codes marqués « — » côté client concernent des routes REST que le cli
 
 | Code | Canal | Signification |
 |---|---|---|
-| `ERROR_WS_MALFORMED_MESSAGE` | WS | JSON illisible, enveloppe invalide ou champ attendu manquant |
+| `ERROR_WS_MALFORMED_MESSAGE` | WS | JSON illisible, enveloppe invalide ou champ attendu manquant (dont `server_fingerprint` / `dimension` absents, vides ou > 128 caractères, SEC-4) |
+| `ERROR_WS_RATE_LIMITED` | WS | Plus de 40 messages par seconde en continu (rafales jusqu'à 200) : messages ignorés, une erreur par série (SEC-5) |
 | `ERROR_WS_UNKNOWN_MESSAGE_TYPE` | WS | `type` inconnu (`details.type`) |
 
 ## Erreurs propres au client

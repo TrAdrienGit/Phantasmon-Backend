@@ -34,6 +34,7 @@ Lues depuis l'environnement système, ou depuis un fichier `.env` à la racine d
 | `phantasmon.jwt.secret` | `${JWT_SECRET}` | |
 | `phantasmon.jwt.access-ttl` | `PT20M` | Durée de vie de l'access token (`expires_in` = 1200) |
 | `phantasmon.jwt.refresh-ttl` | `P7D` | Durée de vie du refresh token |
+| `phantasmon.auth.challenge-ttl` | `PT60S` | Durée de validité d'un défi de connexion (`POST /auth/challenge`, usage unique) |
 | `phantasmon.logging.enabled` | `${LOGGING_ENABLED:true}` | |
 | `phantasmon.logging.directory` | `log` | Relatif au répertoire de lancement |
 | `phantasmon.logging.max-total-bytes` | `5368709120` (5 Gio) | Plafond du dossier de logs |

@@ -69,13 +69,40 @@ paths:
                   current_version: { type: string, example: "0.1.0" }
                   min_supported_version: { type: string, example: "0.1.0" }
 
+  /auth/challenge:
+    post:
+      tags: [Authentification]
+      summary: Émet un défi de connexion à usage unique (SEC-1)
+      description: >
+        Le client utilise ce défi comme `server_id` de `joinServer` chez Mojang, puis l'envoie à `/auth/session`.
+        Valable 60 s, usage unique : un `server_id` non émis ici est refusé, si bien qu'un serveur Minecraft tiers
+        ne peut pas rejouer la preuve de connexion d'un joueur.
+      security: []
+      responses:
+        "200":
+          description: Défi émis
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [challenge]
+                properties:
+                  challenge: { type: string, example: 3f9c2a7e5b1d4c8a9e0f6b2d7a4c1e8f }
+        "429":
+          description: ERROR_AUTH_TOO_MANY_CHALLENGES
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /auth/session:
     post:
       tags: [Authentification]
       summary: Échange une preuve de session Mojang contre un couple de JWT
       description: >
-        Le client a appelé `joinServer` chez Mojang avec `server_id` ; le backend vérifie avec
-        `hasJoined`, crée ou met à jour le joueur, puis émet les jetons.
+        Le client a appelé `joinServer` chez Mojang avec, comme `server_id`, un défi obtenu par
+        `/auth/challenge` ; le backend consomme le défi, vérifie avec `hasJoined`, crée ou met à jour le
+        joueur, puis émet les jetons.
       security: []
       requestBody:
         required: true
@@ -98,7 +125,7 @@ paths:
         "400":
           description: Champ manquant ou vide (format Spring)
         "401":
-          description: ERROR_AUTH_MOJANG_VERIFICATION_FAILED, ERROR_AUTH_UUID_MISMATCH
+          description: ERROR_AUTH_INVALID_CHALLENGE, ERROR_AUTH_MOJANG_VERIFICATION_FAILED, ERROR_AUTH_UUID_MISMATCH
           content:
             application/json:
               schema:
@@ -370,44 +397,6 @@ paths:
         "403":
           $ref: "#/components/responses/Error"
 
-  /battles:
-    post:
-      tags: [Combats]
-      summary: Crée une session de combat (idempotent via request_uuid)
-      description: >
-        `team` est l'équipe de l'appelant ; l'équipe adverse est lue en base. La session
-        démarre ACTIVE. Non utilisé par le combat en direct (WebSocket).
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [request_uuid, opponent_uuid, team]
-              properties:
-                request_uuid: { type: string, format: uuid }
-                opponent_uuid: { type: string, format: uuid }
-                team:
-                  type: array
-                  minItems: 1
-                  maxItems: 6
-                  items: { type: string, format: uuid }
-      responses:
-        "201":
-          description: Session créée
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/BattleSession"
-        "403":
-          $ref: "#/components/responses/Error"
-        "404":
-          $ref: "#/components/responses/Error"
-        "409":
-          $ref: "#/components/responses/Error"
-        "422":
-          $ref: "#/components/responses/Error"
-
   /battles/{uuid}:
     get:
       tags: [Combats]
@@ -424,38 +413,6 @@ paths:
         "403":
           $ref: "#/components/responses/Error"
         "404":
-          $ref: "#/components/responses/Error"
-
-  /battles/{uuid}/result:
-    post:
-      tags: [Combats]
-      summary: Soumet le résultat (garde-fous ; participants uniquement)
-      parameters:
-        - $ref: "#/components/parameters/BattleUuid"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [winner_uuid]
-              properties:
-                winner_uuid: { type: string, format: uuid }
-                log: { type: object }
-      responses:
-        "200":
-          description: Session FINISHED
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/BattleSession"
-        "403":
-          $ref: "#/components/responses/Error"
-        "404":
-          $ref: "#/components/responses/Error"
-        "409":
-          $ref: "#/components/responses/Error"
-        "422":
           $ref: "#/components/responses/Error"
 
 components:

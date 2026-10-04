@@ -41,6 +41,10 @@ import tools.jackson.databind.ObjectMapper;
 public class PhantasmonWebSocketHandler extends TextWebSocketHandler {
 
 	private static final int MAX_MESSAGE_BYTES = 1024 * 1024;
+	/** Per-connection message budget (SEC-5): 40 per second sustained, bursts up to 200 (a battle turn's packets). */
+	static final double MESSAGES_PER_SECOND = 40;
+	static final double MESSAGE_BURST = 200;
+	private static final String RATE_LIMITER_ATTRIBUTE = "phantasmonRateLimiter";
 
 	private final PresenceService presenceService;
 	private final SessionRegistry sessionRegistry;
@@ -70,6 +74,8 @@ public class PhantasmonWebSocketHandler extends TextWebSocketHandler {
 		// whole encoded Cobblemon packets (a team packet carries six full Pokémon), so allow up to 1 MiB.
 		session.setTextMessageSizeLimit(MAX_MESSAGE_BYTES);
 		session.setBinaryMessageSizeLimit(MAX_MESSAGE_BYTES);
+		session.getAttributes().put(RATE_LIMITER_ATTRIBUTE,
+				new MessageRateLimiter(MESSAGES_PER_SECOND, MESSAGE_BURST, System::nanoTime));
 		sessionRegistry.register(playerUuid, session);
 	}
 
@@ -77,19 +83,25 @@ public class PhantasmonWebSocketHandler extends TextWebSocketHandler {
 	public void afterConnectionClosed(WebSocketSession session, CloseStatus status) {
 		UUID playerUuid = playerUuid(session);
 		log.info("WebSocket closed: player {} ({})", playerUuid, status);
+		if (!sessionRegistry.unregister(playerUuid, session)) {
+			// A newer connection of the same player replaced this one: its presence, trade and battle carry on (SEC-8).
+			return;
+		}
 		leaveAndDespawnGhost(playerUuid);
 		liveTradeService.onDisconnect(playerUuid);
 		liveBattleService.onDisconnect(playerUuid);
-		sessionRegistry.unregister(playerUuid);
 	}
 
 	/**
-	 * TTL expiry ({@link PresenceTtlSweeper}): leaves the group exactly like a {@code LeaveServerGroup} (Ghost
-	 * despawned for the others), then force-closes the session if it is still open — its
-	 * {@link #afterConnectionClosed} then ends the live trade/battle and finds no presence left, which is a no-op.
+	 * TTL expiry ({@link PresenceTtlSweeper}): the same cleanup as a disconnection — leaves the group like a
+	 * {@code LeaveServerGroup} (Ghost despawned for the others), ends the live trade/battle — then force-closes the
+	 * session if it is still open. {@code close} unregisters it first, so the {@link #afterConnectionClosed} that
+	 * follows does nothing more (SEC-8 guard).
 	 */
 	public void expire(UUID playerUuid) {
 		leaveAndDespawnGhost(playerUuid);
+		liveTradeService.onDisconnect(playerUuid);
+		liveBattleService.onDisconnect(playerUuid);
 		sessionRegistry.close(playerUuid);
 	}
 
@@ -109,6 +121,14 @@ public class PhantasmonWebSocketHandler extends TextWebSocketHandler {
 	@Override
 	protected void handleTextMessage(WebSocketSession session, TextMessage message) throws Exception {
 		UUID playerUuid = playerUuid(session);
+		MessageRateLimiter limiter = (MessageRateLimiter) session.getAttributes().get(RATE_LIMITER_ATTRIBUTE);
+		if (limiter != null && !limiter.tryAcquire()) {
+			if (limiter.shouldReportRefusal()) {
+				log.warn("Player {} exceeds the WebSocket message rate — messages dropped", playerUuid);
+				send(session, WsMessage.error("ERROR_WS_RATE_LIMITED", Map.of()));
+			}
+			return;
+		}
 		WsMessage incoming;
 		try {
 			JsonNode node = objectMapper.readTree(message.getPayload());
@@ -122,12 +142,20 @@ public class PhantasmonWebSocketHandler extends TextWebSocketHandler {
 			case "JoinServerGroup" -> {
 				String fingerprint = stringField(incoming, "server_fingerprint");
 				String dimension = stringField(incoming, "dimension");
+				if (!isValidKey(fingerprint) || !isValidKey(dimension)) {
+					send(session, WsMessage.error("ERROR_WS_MALFORMED_MESSAGE", Map.of()));
+					return;
+				}
 				log.info("Player {} joined group fingerprint={} dimension={}", playerUuid, fingerprint, dimension);
 				presenceService.join(playerUuid, fingerprint, dimension);
 				sendGhostCatchUp(session, playerUuid);
 			}
 			case "LeaveServerGroup" -> leaveAndDespawnGhost(playerUuid);
 			case "PositionUpdate" -> {
+				if (!isValidKey(stringField(incoming, "dimension"))) {
+					send(session, WsMessage.error("ERROR_WS_MALFORMED_MESSAGE", Map.of()));
+					return;
+				}
 				presenceService.updatePosition(playerUuid,
 						numberField(incoming, "x"), numberField(incoming, "y"), numberField(incoming, "z"),
 						stringField(incoming, "dimension"));
@@ -263,6 +291,17 @@ public class PhantasmonWebSocketHandler extends TextWebSocketHandler {
 
 	private static UUID playerUuid(WebSocketSession session) {
 		return (UUID) session.getAttributes().get(JwtHandshakeInterceptor.PLAYER_UUID_ATTRIBUTE);
+	}
+
+	/** Longest accepted server fingerprint / dimension id (a SHA-256 hex is 64; dimension ids are short). */
+	static final int MAX_KEY_LENGTH = 128;
+
+	/**
+	 * Group keys must be present, non-blank and bounded (SEC-4): a single presence with a null fingerprint or
+	 * dimension used to make every other player's group lookup throw.
+	 */
+	private static boolean isValidKey(String value) {
+		return value != null && !value.isBlank() && value.length() <= MAX_KEY_LENGTH;
 	}
 
 	private static String stringField(WsMessage message, String key) {

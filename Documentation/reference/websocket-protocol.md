@@ -14,8 +14,12 @@ ws://<hôte>:8080/ws?token=<access_token>
 
 - Le jeton est vérifié **au handshake** (`JwtHandshakeInterceptor`) : absent, invalide, expiré ou de type
   `refresh` → réponse HTTP `401`, aucune session ouverte.
-- Un client = une connexion, partagée par la présence, les Ghost, les échanges et les combats.
+- Un client = une connexion, partagée par la présence, les Ghost, les échanges et les combats. Une **seule
+  connexion par joueur** : une nouvelle connexion ferme la précédente, sans toucher à la présence, à l'échange
+  ni au combat en cours (SEC-8).
 - Taille maximale d'un message : **1 Mio**.
+- Débit : 40 messages par seconde en continu, rafales jusqu'à 200 ; au-delà les messages sont ignorés et une erreur
+  `ERROR_WS_RATE_LIMITED` est envoyée une fois par série (SEC-5).
 
 ### Enveloppe
 
@@ -41,8 +45,8 @@ Catalogue complet : [`error-codes.md`](error-codes.md).
 
 | C2S | `data` | Effet |
 |---|---|---|
-| `JoinServerGroup` | `{ "server_fingerprint": "…", "dimension": "minecraft:overworld" }` | Enregistre la présence ; groupe = même empreinte **et** même dimension. Le joueur reçoit aussitôt un `GhostEntitySpawn` pour chaque Ghost déjà sorti dans son groupe. |
-| `PositionUpdate` | `{ "x", "y", "z", "dimension" }` | Met à jour position et dimension ; si le joueur a un Ghost sorti, diffuse `GhostEntityMove`. Envoyé chaque seconde par le client. |
+| `JoinServerGroup` | `{ "server_fingerprint": "…", "dimension": "minecraft:overworld" }` | Enregistre la présence ; groupe = même empreinte **et** même dimension. Le joueur reçoit aussitôt un `GhostEntitySpawn` pour chaque Ghost déjà sorti dans son groupe. Empreinte et dimension obligatoires, non vides, 128 caractères au plus, sinon `ERROR_WS_MALFORMED_MESSAGE` (SEC-4). |
+| `PositionUpdate` | `{ "x", "y", "z", "dimension" }` | Met à jour position et dimension (dimension obligatoire, mêmes règles) ; si le joueur a un Ghost sorti, diffuse `GhostEntityMove`. Envoyé chaque seconde par le client. |
 | `Heartbeat` | `{}` | Rafraîchit `last_heartbeat_at` ; répond `HeartbeatAck`. Envoyé chaque seconde par le client. |
 | `LeaveServerGroup` | `{}` | Retire la présence (et le Ghost éventuel) |
 
@@ -59,6 +63,9 @@ brutale ou TTL) équivaut à un `LeaveServerGroup`, annule l'échange en direct 
 (`GhostEntityDespawn`).
 
 ## 3. Ghost
+
+> Les positions (`GhostEntitySpawn` / `GhostEntityMove`) sont reçues par **tout** membre du groupe, et n'importe quel
+> joueur authentifié peut rejoindre le groupe d'un serveur dont il connaît l'adresse : limite assumée (LIM-9, D-21).
 
 | C2S | `data` | Effet |
 |---|---|---|

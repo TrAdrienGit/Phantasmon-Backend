@@ -189,8 +189,8 @@ Pokémon ayant déjà été échangé. La seule protection utile (pas de suppres
 | Colonne | Type | Contraintes | Notes |
 |---|---|---|---|
 | `uuid` | UUID | PK | |
-| `player_a`, `player_b` | UUID | NOT NULL, FK → `players`, indexés | Combat en direct : `player_a` = hôte. `POST /battles` : `player_a` = appelant. |
-| `host_uuid` | UUID | FK → `players`, indexé (V8) | Client qui a exécuté le moteur ; `NULL` pour `POST /battles`. Sert à l'alternance de l'hôte. |
+| `player_a`, `player_b` | UUID | NOT NULL, FK → `players`, indexés | Combat en direct : `player_a` = hôte. Anciennes lignes créées par `POST /battles` (route retirée le 2026-10-04) : `player_a` = appelant. |
+| `host_uuid` | UUID | FK → `players`, indexé (V8) | Client qui a exécuté le moteur ; `NULL` pour les anciennes lignes de `POST /battles` (route retirée). Sert à l'alternance de l'hôte. |
 | `team_a`, `team_b` | JSONB | NOT NULL | Instantané des UUID de Pokémon engagés, sans FK (historique) |
 | `status` | VARCHAR(16) | NOT NULL, défaut `PENDING`, ∈ {`PENDING`, `ACTIVE`, `FINISHED`, `ABORTED`} | Les sessions sont créées `ACTIVE` |
 | `result` | JSONB | | REST : `{winner_uuid, log}`. Direct : `{winner_uuid, reason}` (`FINISHED`, `FORFEIT`, `PARTNER_DISCONNECTED`) |
@@ -208,7 +208,7 @@ Journal technique anti-doublon des `POST` sensibles.
 |---|---|---|---|
 | `request_uuid` | UUID | PK | Généré par le client |
 | `player_uuid` | UUID | NOT NULL, **sans FK** | Volontaire : un journal technique ne doit pas dépendre du cycle de vie des joueurs |
-| `endpoint` | VARCHAR(64) | NOT NULL | `POST /pokemon`, `POST /trades`, `POST /battles` |
+| `endpoint` | VARCHAR(64) | NOT NULL | `POST /pokemon`, `POST /trades` (`POST /battles` dans d'anciennes lignes). Comparé, avec `player_uuid`, à chaque réutilisation (SEC-7) |
 | `response_snapshot` | JSONB | | Réponse d'origine, rejouée telle quelle |
 | `created_at` | TIMESTAMPTZ | NOT NULL, défaut `now()` | Aucune purge en V1 |
 

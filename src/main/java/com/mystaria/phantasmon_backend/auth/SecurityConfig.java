@@ -11,7 +11,7 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 
 /**
  * Baseline security chain: only the routes the OpenAPI contract marks as
- * {@code security: []} (health, version, auth/session, auth/refresh) are
+ * {@code security: []} (health, version, auth/challenge, auth/session, auth/refresh) are
  * public. Everything else requires a valid JWT access token
  * ({@link JwtAuthenticationFilter}); there is no session/form login, the API
  * is stateless (CAD Partie 2 §3).
@@ -35,7 +35,7 @@ public class SecurityConfig {
 				.sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
 				.authorizeHttpRequests(auth -> auth
 						.requestMatchers(HttpMethod.GET, "/health", "/version").permitAll()
-						.requestMatchers(HttpMethod.POST, "/auth/session", "/auth/refresh").permitAll()
+						.requestMatchers(HttpMethod.POST, "/auth/challenge", "/auth/session", "/auth/refresh").permitAll()
 						.requestMatchers("/ws").permitAll()
 						.anyRequest().authenticated())
 				.addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);

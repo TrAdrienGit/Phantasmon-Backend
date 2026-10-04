@@ -20,7 +20,7 @@ Pour ajouter une décision : prendre le numéro suivant, dater, et mettre à jou
 | D-05 | Combat : le client hôte exécute la pile de combat de Cobblemon | Acceptée | 2026-10-03 |
 | D-06 | Échange en direct par WebSocket, en plus de l'échange REST asynchrone | Acceptée | 2026-10-02 |
 | D-07 | Historique des échanges sans clé étrangère vers `pokemon` (V7) | Acceptée | 2026-10-02 |
-| D-08 | `POST /battles` : équipe adverse dérivée côté serveur | Acceptée | 2026-09-26 |
+| D-08 | `POST /battles` : équipe adverse dérivée côté serveur | Caduque (route retirée, SEC-3) | 2026-09-26 |
 | D-09 | Pas d'endpoints `team`, `import-showdown`, `export` côté backend | Acceptée | 2026-09-26 |
 | D-10 | Seul un Pokémon de l'équipe peut sortir ; `sendout` = emplacement 1 | Acceptée | 2026-09-29 |
 | D-11 | Le mouvement du Ghost suit `PositionUpdate` et est lissé côté client | Acceptée | 2026-10-03 |
@@ -32,7 +32,8 @@ Pour ajouter une décision : prendre le numéro suivant, dater, et mettre à jou
 | D-17 | Spring Boot 4.1 au lieu de 3.x | Acceptée | 2026-09-23 |
 | D-18 | Empreinte de serveur = SHA-256 de l'adresse ; surcharge de test | Acceptée | 2026-09-29 |
 | D-19 | `PATCH /pokemon` remplace `data` en entier | Acceptée | 2026-09-26 |
-| D-20 | Fonctions d'administration et limitation de débit reportées | Acceptée | 2026-09-26 |
+| D-20 | Fonctions d'administration et limitation de débit reportées | Acceptée, débit WebSocket ajouté (SEC-5) | 2026-09-26 |
+| D-21 | Positions des joueurs visibles par tout leur groupe : limite assumée | Acceptée | 2026-10-04 |
 
 ---
 
@@ -113,6 +114,9 @@ Pour ajouter une décision : prendre le numéro suivant, dater, et mettre à jou
   base (Pokémon de l'adversaire avec `team_slot` non nul). La session démarre `ACTIVE`.
 - **Conséquences** : aucun joueur ne peut imposer l'équipe de l'autre. Cet endpoint REST n'est pas utilisé par le
   combat en direct (D-05), qui crée sa propre ligne `battle_sessions`.
+- **Caduque (2026-10-04)** : `POST /battles` et `POST /battles/{uuid}/result` ont été retirés (audit de sécurité,
+  SEC-3) : ils permettaient d'ouvrir un combat sans l'accord de l'adversaire et de déclarer le vainqueur depuis
+  n'importe quel participant.
 
 ## D-09 — Pas d'endpoints `team`, `import-showdown`, `export` côté backend
 
@@ -203,3 +207,17 @@ Pour ajouter une décision : prendre le numéro suivant, dater, et mettre à jou
 - **Décision** : les routes `/admin/*`, le rôle admin dans le JWT (CAD Partie 2 §13/§16) et la limitation de débit
   par joueur ne sont pas implémentés. La conversion Ghost → Pokémon réel reste une procédure manuelle d'OP avec les
   commandes de Cobblemon (CAD Partie 3 §A.2), sans code.
+- **Mise à jour (2026-10-04, SEC-5)** : une limite de débit existe désormais sur le WebSocket (40 messages par
+  seconde et par connexion, rafales jusqu'à 200, `ERROR_WS_RATE_LIMITED`). Rien côté REST, pas de rôle admin.
+
+## D-21 — Positions des joueurs visibles par tout leur groupe : limite assumée
+
+- **Contexte** : audit de sécurité, SEC-6. L'empreinte d'un serveur est le SHA-256 de son adresse (D-18),
+  calculable par n'importe qui. Un joueur authentifié peut donc rejoindre le groupe d'un serveur sans y être
+  connecté et recevoir chaque seconde la position des joueurs qui ont un Ghost sorti (`GhostEntitySpawn` /
+  `GhostEntityMove`).
+- **Options écartées** : n'envoyer la position qu'aux membres qui se déclarent proches (les positions viennent des
+  clients, donc contournable) ; arrondir les positions (Ghost moins bien placé).
+- **Décision (Adrien)** : limite **assumée et documentée** (LIM-9). Phantasmon vise des serveurs entre joueurs de
+  confiance ; un joueur qui ne veut pas être localisable ne sort pas de Ghost.
+- **Conséquences** : à revoir avant toute ouverture à des serveurs publics.

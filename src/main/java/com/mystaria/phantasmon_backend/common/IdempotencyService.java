@@ -4,6 +4,7 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.function.Supplier;
 
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -34,7 +35,14 @@ public class IdempotencyService {
 	@SuppressWarnings("unchecked")
 	public <T> T executeIdempotent(UUID requestUuid, UUID playerUuid, String endpoint, Supplier<T> action, Class<T> responseType) {
 		return repository.findById(requestUuid)
-				.map(existing -> objectMapper.convertValue(existing.getResponseSnapshot(), responseType))
+				.map(existing -> {
+					// Only the same player replaying the same route gets the stored response back (SEC-7).
+					if (!existing.getPlayerUuid().equals(playerUuid) || !existing.getEndpoint().equals(endpoint)) {
+						throw new ApiException(HttpStatus.CONFLICT, "ERROR_IDEMPOTENCY_KEY_REUSED",
+								Map.of("request_uuid", requestUuid));
+					}
+					return objectMapper.convertValue(existing.getResponseSnapshot(), responseType);
+				})
 				.orElseGet(() -> {
 					T result = action.get();
 					Map<String, Object> snapshot = objectMapper.convertValue(result, Map.class);

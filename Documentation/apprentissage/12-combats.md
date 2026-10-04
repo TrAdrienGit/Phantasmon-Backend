@@ -100,8 +100,11 @@ jetables.
 
 ## 12.7 Les routes REST `/battles`
 
-Une première version (phase 4) proposait de créer une session par `POST /battles` puis de soumettre un résultat. Ces
-routes existent toujours mais ne sont pas utilisées par le combat en direct, qui crée lui-même sa ligne en base.
+Une première version (phase 4) proposait de créer une session par `POST /battles` puis de soumettre un résultat.
+Le combat en direct, qui crée lui-même sa ligne en base, les a rendues inutiles ; l'audit de sécurité du 2026-10-04
+(SEC-3) a montré qu'elles contournaient ses garde-fous (combat ouvert sans accord, vainqueur déclaré par n'importe
+quel participant) : elles ont été **retirées**. Seule la lecture `GET /battles/{uuid}` reste. Leçon : une ancienne
+porte d'entrée qui n'est plus utilisée reste une porte d'entrée.
 
 ## À retenir
 

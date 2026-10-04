@@ -19,6 +19,8 @@ import com.mystaria.phantasmon_backend.player.PlayerRepository;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -53,8 +55,8 @@ class AuthControllerTest {
 		mockMvc.perform(post("/auth/session")
 						.contentType(MediaType.APPLICATION_JSON)
 						.content("""
-								{"uuid":"%s","username":"Bichou","server_id":"abc123"}
-								""".formatted(uuid)))
+								{"uuid":"%s","username":"Bichou","server_id":"%s"}
+								""".formatted(uuid, challenge())))
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.access_token").isNotEmpty())
 				.andExpect(jsonPath("$.refresh_token").isNotEmpty())
@@ -65,14 +67,52 @@ class AuthControllerTest {
 	}
 
 	@Test
+	void eachChallengeIsDifferent() throws Exception {
+		assertThat(challenge()).isNotBlank().isNotEqualTo(challenge());
+	}
+
+	@Test
+	void authenticateRejectsAServerIdTheBackendNeverIssued_withoutAskingMojang() throws Exception {
+		// SEC-1: a third-party Minecraft server replaying a player's join proof only knows its own serverId.
+		when(mojangSessionClient.hasJoined(anyString(), anyString(), any()))
+				.thenReturn(Optional.of(new MojangProfile(dashless(UUID.randomUUID()), "Bichou")));
+
+		mockMvc.perform(post("/auth/session")
+						.contentType(MediaType.APPLICATION_JSON)
+						.content("""
+								{"uuid":"%s","username":"Bichou","server_id":"-4f2a9c3b1d0e7a6b5c4d3e2f1a0b9c8d7e6f5a4b"}
+								""".formatted(UUID.randomUUID())))
+				.andExpect(status().isUnauthorized())
+				.andExpect(jsonPath("$.error_code").value("ERROR_AUTH_INVALID_CHALLENGE"));
+
+		verify(mojangSessionClient, never()).hasJoined(anyString(), anyString(), any());
+	}
+
+	@Test
+	void aChallengeCanOnlyBeUsedOnce() throws Exception {
+		UUID uuid = UUID.randomUUID();
+		when(mojangSessionClient.hasJoined(anyString(), anyString(), any()))
+				.thenReturn(Optional.of(new MojangProfile(dashless(uuid), "Bichou")));
+		String body = """
+				{"uuid":"%s","username":"Bichou","server_id":"%s"}
+				""".formatted(uuid, challenge());
+
+		mockMvc.perform(post("/auth/session").contentType(MediaType.APPLICATION_JSON).content(body))
+				.andExpect(status().isOk());
+		mockMvc.perform(post("/auth/session").contentType(MediaType.APPLICATION_JSON).content(body))
+				.andExpect(status().isUnauthorized())
+				.andExpect(jsonPath("$.error_code").value("ERROR_AUTH_INVALID_CHALLENGE"));
+	}
+
+	@Test
 	void authenticateReturns401_whenMojangDoesNotVerify() throws Exception {
 		when(mojangSessionClient.hasJoined(anyString(), anyString(), any())).thenReturn(Optional.empty());
 
 		mockMvc.perform(post("/auth/session")
 						.contentType(MediaType.APPLICATION_JSON)
 						.content("""
-								{"uuid":"%s","username":"Bichou","server_id":"abc123"}
-								""".formatted(UUID.randomUUID())))
+								{"uuid":"%s","username":"Bichou","server_id":"%s"}
+								""".formatted(UUID.randomUUID(), challenge())))
 				.andExpect(status().isUnauthorized())
 				.andExpect(jsonPath("$.error_code").value("ERROR_AUTH_MOJANG_VERIFICATION_FAILED"));
 	}
@@ -87,8 +127,8 @@ class AuthControllerTest {
 		mockMvc.perform(post("/auth/session")
 						.contentType(MediaType.APPLICATION_JSON)
 						.content("""
-								{"uuid":"%s","username":"Bichou","server_id":"abc123"}
-								""".formatted(claimedUuid)))
+								{"uuid":"%s","username":"Bichou","server_id":"%s"}
+								""".formatted(claimedUuid, challenge())))
 				.andExpect(status().isUnauthorized())
 				.andExpect(jsonPath("$.error_code").value("ERROR_AUTH_UUID_MISMATCH"));
 	}
@@ -98,8 +138,8 @@ class AuthControllerTest {
 		mockMvc.perform(post("/auth/session")
 						.contentType(MediaType.APPLICATION_JSON)
 						.content("""
-								{"uuid":"%s","username":"","server_id":"abc123"}
-								""".formatted(UUID.randomUUID())))
+								{"uuid":"%s","username":"","server_id":"%s"}
+								""".formatted(UUID.randomUUID(), challenge())))
 				.andExpect(status().isBadRequest());
 	}
 
@@ -112,8 +152,8 @@ class AuthControllerTest {
 		String sessionResponseJson = mockMvc.perform(post("/auth/session")
 						.contentType(MediaType.APPLICATION_JSON)
 						.content("""
-								{"uuid":"%s","username":"Bichou","server_id":"abc123"}
-								""".formatted(uuid)))
+								{"uuid":"%s","username":"Bichou","server_id":"%s"}
+								""".formatted(uuid, challenge())))
 				.andReturn().getResponse().getContentAsString();
 		String refreshToken = com.jayway.jsonpath.JsonPath.read(sessionResponseJson, "$.refresh_token");
 
@@ -155,6 +195,14 @@ class AuthControllerTest {
 						.content(objectMapper.writeValueAsString(new RefreshRequest(refreshToken))))
 				.andExpect(status().isUnauthorized())
 				.andExpect(jsonPath("$.error_code").value("ERROR_AUTH_INVALID_REFRESH_TOKEN"));
+	}
+
+	/** A fresh one-time challenge from the backend, used as the Mojang {@code serverId} (SEC-1). */
+	private String challenge() throws Exception {
+		String body = mockMvc.perform(post("/auth/challenge"))
+				.andExpect(status().isOk())
+				.andReturn().getResponse().getContentAsString();
+		return objectMapper.readTree(body).get("challenge").asString();
 	}
 
 	private static String dashless(UUID uuid) {

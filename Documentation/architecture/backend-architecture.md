@@ -9,7 +9,7 @@
 | Langage | Java 21 (toolchain Gradle) |
 | Framework | Spring Boot **4.1.1** : Web MVC, WebSocket, Security, Data JPA, Validation, RestClient |
 | Base de données | PostgreSQL (développé sur la 18), schéma versionné par Flyway (`ddl-auto=none`) |
-| Authentification | Vérification de session Mojang (`hasJoined`) puis JWT HMAC-SHA256 (jjwt 0.12.6) |
+| Authentification | Défi à usage unique émis par le backend, vérification de session Mojang (`hasJoined`) sur ce défi, puis JWT HMAC-SHA256 (jjwt 0.12.6) |
 | JSON | Jackson 3 (`tools.jackson.databind`), noms de champs en **snake_case** globalement |
 | Build | Gradle (wrapper), jar exécutable via `bootJar` |
 | Tests | JUnit 5, Testcontainers PostgreSQL (jamais H2), MockMvc, client WebSocket réel |
@@ -25,7 +25,7 @@ Organisation **par domaine** (pas par couche technique). Racine : `com.mystaria.
 
 | Paquet | Responsabilité | Classes principales |
 |---|---|---|
-| `auth` | Vérification Mojang, émission/validation des JWT, chaîne Spring Security | `AuthController`, `MojangSessionClient`, `JwtService`, `JwtAuthenticationFilter`, `SecurityConfig` |
+| `auth` | Vérification Mojang, émission/validation des JWT, chaîne Spring Security | `AuthController`, `AuthChallengeService`, `MojangSessionClient`, `JwtService`, `JwtAuthenticationFilter`, `SecurityConfig` |
 | `player` | Identité des joueurs (UUID Mojang, dernier pseudo) | `Player`, `PlayerService.recordConnection` |
 | `pokemon` | CRUD, légalité IV/EV, PC et équipe (déplacer ou échanger) | `PokemonController`, `PokemonService`, `PokemonLegalityService`, `PokemonRepository` |
 | `trade` | Échanges REST asynchrones et échanges en direct (mémoire + transaction finale) | `TradeController`, `TradeService`, `LiveTradeService`, `LiveTradeSession` |
@@ -60,7 +60,7 @@ Chaque domaine contient ses entités, dépôts, services, contrôleurs et DTO (r
 Requête HTTP
   → RequestLoggingFilter          (méthode, chemin, statut, durée)
   → JwtAuthenticationFilter       (Bearer access token → principal = UUID du joueur)
-  → SecurityConfig                (public : GET /health, GET /version, POST /auth/session, POST /auth/refresh, /ws)
+  → SecurityConfig                (public : GET /health, GET /version, POST /auth/challenge, POST /auth/session, POST /auth/refresh, /ws)
   → Contrôleur (@Valid)           (validation Bean des DTO)
   → Service (@Transactional)      (propriété revérifiée en base, règles métier)
   → ApiException → ApiExceptionHandler → {"error_code", "details"} + statut HTTP
@@ -68,9 +68,10 @@ Requête HTTP
 
 - Le **principal** est l'UUID du joueur extrait du JWT ; il n'est jamais lu dans le corps ou le chemin.
   `/players/{uuid}/…` exige que `{uuid}` soit le joueur authentifié (sinon `ERROR_OWNERSHIP_MISMATCH`).
-- **Idempotence** : `POST /pokemon`, `POST /trades`, `POST /battles` passent par
+- **Idempotence** : `POST /pokemon` et `POST /trades` passent par
   `IdempotencyService.executeIdempotent(request_uuid, joueur, endpoint, action)` : un `request_uuid` déjà vu
-  rejoue la réponse stockée dans `idempotency_keys`. Ce n'est pas protégé contre deux requêtes identiques
+  rejoue la réponse stockée dans `idempotency_keys`, seulement pour le même joueur et la même route (sinon
+  `409 ERROR_IDEMPOTENCY_KEY_REUSED`, SEC-7). Ce n'est pas protégé contre deux requêtes identiques
   **simultanées** (vérifier puis enregistrer), ce qui suffit pour des tentatives successives.
 - **Légalité** : `PokemonLegalityService` est appelé explicitement à la création et à chaque `PATCH` contenant
   `data` (jamais seulement par annotation).

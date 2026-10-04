@@ -5,6 +5,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -79,9 +80,10 @@ public class PresenceService {
 		}
 		List<UUID> members = new ArrayList<>();
 		for (PlayerPresence presence : presences.values()) {
+			// Null-safe in defence: the handler already refuses missing keys (SEC-4).
 			if (!presence.playerUuid().equals(playerUuid)
-					&& presence.serverFingerprint().equals(self.serverFingerprint())
-					&& presence.dimension().equals(self.dimension())) {
+					&& Objects.equals(presence.serverFingerprint(), self.serverFingerprint())
+					&& Objects.equals(presence.dimension(), self.dimension())) {
 				members.add(presence.playerUuid());
 			}
 		}

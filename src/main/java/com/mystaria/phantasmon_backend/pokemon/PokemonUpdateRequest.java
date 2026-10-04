@@ -4,6 +4,7 @@ import java.util.Map;
 
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.Size;
 
 /**
  * Matches the OpenAPI {@code PokemonUpdateRequest} schema — partial update.
@@ -23,8 +24,8 @@ import jakarta.validation.constraints.Min;
 public record PokemonUpdateRequest(
 		Map<String, Object> data,
 		@Min(1) @Max(100) Integer level,
-		String nature,
-		String ability,
+		@Size(max = 32) String nature,
+		@Size(max = 64) String ability,
 		Boolean isShiny,
 		@Min(1) @Max(6) Integer teamSlot,
 		@Min(1) @Max(16) Integer boxId,

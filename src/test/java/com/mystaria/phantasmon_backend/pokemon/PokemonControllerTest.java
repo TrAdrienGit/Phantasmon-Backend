@@ -65,6 +65,16 @@ class PokemonControllerTest {
 	}
 
 	@Test
+	void anOverlongIdentifierIsRefusedAsABadRequestNotAServerError() throws Exception {
+		// SEC-5: species is VARCHAR(64); a longer value used to fail in the database with a 500.
+		mockMvc.perform(post("/pokemon")
+						.header("Authorization", bearerToken)
+						.contentType(MediaType.APPLICATION_JSON)
+						.content(validCreateBody(UUID.randomUUID()).replace("\"pikachu\"", "\"" + "p".repeat(65) + "\"")))
+				.andExpect(status().isBadRequest());
+	}
+
+	@Test
 	void createReturns201AndPersistsPokemon() throws Exception {
 		mockMvc.perform(post("/pokemon")
 						.header("Authorization", bearerToken)

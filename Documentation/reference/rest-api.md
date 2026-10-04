@@ -16,7 +16,7 @@
 | Propriétaire | Toujours déduit du JWT, jamais du corps de la requête. Sur `/players/{uuid}/…`, `{uuid}` doit être le joueur authentifié, sinon `403 ERROR_OWNERSHIP_MISMATCH`. |
 | Erreurs métier | `{"error_code": "ERROR_…", "details": {…}}` (catalogue : [`error-codes.md`](error-codes.md)) |
 | Erreurs de validation | Champ obligatoire manquant ou hors bornes : `400` au format par défaut de Spring (pas d'`error_code`) |
-| Idempotence | `POST /pokemon`, `POST /trades`, `POST /battles` exigent un `request_uuid` (UUID généré par le client). Rejouer la même requête renvoie la réponse d'origine sans rien recréer. |
+| Idempotence | `POST /pokemon` et `POST /trades` exigent un `request_uuid` (UUID généré par le client). Rejouer la même requête (même joueur, même route) renvoie la réponse d'origine sans rien recréer ; le même `request_uuid` présenté par un autre joueur ou sur une autre route est refusé (`409 ERROR_IDEMPOTENCY_KEY_REUSED`). |
 
 ## Sommaire
 
@@ -24,6 +24,7 @@
 |---|---|---|---|
 | `GET` | [`/health`](#get-health) | Public | Disponibilité du backend et de la base |
 | `GET` | [`/version`](#get-version) | Public | Versions client courante et minimale |
+| `POST` | [`/auth/challenge`](#post-authchallenge) | Public | Défi de connexion à usage unique |
 | `POST` | [`/auth/session`](#post-authsession) | Public | Preuve Mojang → JWT |
 | `POST` | [`/auth/refresh`](#post-authrefresh) | Public | Renouvellement des jetons |
 | `POST` | [`/pokemon`](#post-pokemon) | Bearer | Créer un Pokémon |
@@ -37,9 +38,7 @@
 | `POST` | [`/trades/{uuid}/cancel`](#post-tradesuuidcancel) | Bearer | Annuler |
 | `GET` | [`/trades/{uuid}`](#get-tradesuuid) | Bearer | Détail |
 | `GET` | [`/players/{uuid}/trades`](#get-playersuuidtrades) | Bearer | Échanges du joueur |
-| `POST` | [`/battles`](#post-battles) | Bearer | Créer une session de combat |
 | `GET` | [`/battles/{uuid}`](#get-battlesuuid) | Bearer | Détail |
-| `POST` | [`/battles/{uuid}/result`](#post-battlesuuidresult) | Bearer | Soumettre un résultat |
 
 ---
 
@@ -75,11 +74,28 @@ Côté client : version < `min_supported_version` → refus avec lien de mise à
 
 ## Authentification
 
+### `POST /auth/challenge`
+
+Première étape de la connexion. Sans corps, sans authentification.
+
+```json
+200 OK
+{ "challenge": "3f9c2a7e5b1d4c8a9e0f6b2d7a4c1e8f" }
+```
+
+128 bits aléatoires (hexadécimal), valables `phantasmon.auth.challenge-ttl` (60 s), **à usage unique**. Gardés en
+mémoire (10 000 au plus en même temps, au-delà `429 ERROR_AUTH_TOO_MANY_CHALLENGES`).
+
 ### `POST /auth/session`
 
-Le client a d'abord appelé `joinServer` chez Mojang avec un `server_id` aléatoire ; le backend vérifie via
-`hasJoined` (`https://sessionserver.mojang.com/session/minecraft/hasJoined`). En cas de succès, le joueur est
-créé ou mis à jour (`last_username`, `last_seen_at`).
+Le client a d'abord appelé `joinServer` chez Mojang avec, comme `server_id`, un défi obtenu par
+`POST /auth/challenge` ; le backend consomme le défi puis vérifie via `hasJoined`
+(`https://sessionserver.mojang.com/session/minecraft/hasJoined`). En cas de succès, le joueur est créé ou mis à
+jour (`last_username`, `last_seen_at`).
+
+Pourquoi un défi (SEC-1, [`project/security-audit.md`](../project/security-audit.md)) : tout serveur Minecraft que
+rejoint un joueur reçoit une preuve `hasJoined` pour **son** `server_id` ; sans défi émis par le backend, ce serveur
+pourrait la rejouer ici et obtenir un jeton au nom du joueur.
 
 ```json
 Requête
@@ -103,6 +119,7 @@ défaut). Le `refresh_token` vit 7 jours (`phantasmon.jwt.refresh-ttl`).
 
 | Statut | `error_code` | Cas |
 |---|---|---|
+| 401 | `ERROR_AUTH_INVALID_CHALLENGE` | `server_id` qui n'est pas un défi émis par le backend, expiré ou déjà utilisé (Mojang n'est pas interrogé) |
 | 401 | `ERROR_AUTH_MOJANG_VERIFICATION_FAILED` | Mojang ne confirme pas la session (`details.username`) |
 | 401 | `ERROR_AUTH_UUID_MISMATCH` | L'UUID annoncé diffère de celui confirmé par Mojang (`details.claimed_uuid`, `details.verified_uuid`) |
 | 400 | — | `uuid` manquant, `username` ou `server_id` vide |
@@ -183,10 +200,10 @@ Requête
 | Champ | Obligatoire | Contraintes |
 |---|---|---|
 | `request_uuid` | oui | UUID |
-| `species`, `nature`, `ability`, `cobblemon_data_version` | oui | non vides |
+| `species`, `nature`, `ability`, `cobblemon_data_version` | oui | non vides ; 64 caractères au plus (`nature`, `cobblemon_data_version` : 32) |
 | `level` | oui | 1 à 100 |
-| `data` | oui | objet |
-| `form`, `is_shiny` | non | `is_shiny` faux par défaut |
+| `data` | oui | objet de 16 Kio au plus une fois sérialisé ; `data.nickname` : texte de 20 caractères au plus ; `ivs` / `evs` : objets de nombres |
+| `form`, `is_shiny` | non | `form` : 64 caractères au plus ; `is_shiny` faux par défaut |
 | `box_id` + `box_slot` | non | 1-16 et 1-30 |
 | `team_slot` | non | 1-6 |
 
@@ -196,6 +213,9 @@ Sans emplacement fourni, le Pokémon va dans la **première case libre du PC**.
 |---|---|---|
 | 201 | — | Créé, renvoie un `Pokemon` |
 | 422 | `ERROR_LEGALITY_IV_OUT_OF_RANGE`, `ERROR_LEGALITY_EV_OUT_OF_RANGE`, `ERROR_LEGALITY_EV_TOTAL_EXCEEDED` | IV ∉ [0, 31], EV ∉ [0, 252] ou total EV > 510 |
+| 422 | `ERROR_LEGALITY_NICKNAME_TOO_LONG`, `ERROR_LEGALITY_INVALID_DATA`, `ERROR_POKEMON_DATA_TOO_LARGE` | Surnom > 20 caractères ; `ivs` / `evs` / `nickname` mal typés (`details.field`) ; `data` > 16 Kio (mêmes règles pour `PATCH`) |
+| 400 | — | Champ obligatoire manquant ou chaîne trop longue |
+| 409 | `ERROR_IDEMPOTENCY_KEY_REUSED` | `request_uuid` déjà utilisé par un autre joueur ou une autre route |
 | 409 | `ERROR_POKEMON_SLOT_OCCUPIED` | L'emplacement demandé est pris |
 | 409 | `ERROR_POKEMON_PC_FULL` | Les 480 cases du PC sont occupées |
 
@@ -325,9 +345,11 @@ Réservé aux deux participants (`403` sinon, `404 ERROR_TRADE_NOT_FOUND`).
 
 ## Sessions de combat (REST)
 
-> Le **combat en direct** (Phase 9) ne passe pas par ces routes : il est entièrement piloté par WebSocket
-> ([`websocket-protocol.md`](websocket-protocol.md#5-combat-en-direct)) et crée sa propre ligne `battle_sessions`.
-> Ces routes restent disponibles mais ne sont pas utilisées par le client actuel.
+> Les sessions de combat sont créées, relayées et conclues **uniquement** par le combat en direct (WebSocket,
+> [`websocket-protocol.md`](websocket-protocol.md#5-combat-en-direct)), qui choisit l'hôte et applique les
+> garde-fous. Les anciennes routes `POST /battles` et `POST /battles/{uuid}/result` ont été **retirées** le
+> 2026-10-04 (SEC-3) : elles permettaient d'ouvrir un combat contre n'importe qui sans son accord et de déclarer le
+> vainqueur depuis n'importe quel participant, y compris l'invité d'un combat en direct.
 
 ### Objet `BattleSession`
 
@@ -347,41 +369,9 @@ Réservé aux deux participants (`403` sinon, `404 ERROR_TRADE_NOT_FOUND`).
 
 `status` ∈ `PENDING`, `ACTIVE`, `FINISHED`, `ABORTED`. `host_uuid` (colonne V8) n'est pas exposé.
 
-### `POST /battles`
-
-```json
-{ "request_uuid": "…", "opponent_uuid": "…", "team": ["…", "…"] }
-```
-
-`team` est **l'équipe de l'appelant** (1 à 6 Pokémon distincts, propriété revérifiée). L'équipe adverse est lue en
-base (équipe active de l'adversaire). La session démarre `ACTIVE`. `201` + `BattleSession`.
-
-| Statut | `error_code` | Cas |
-|---|---|---|
-| 403 | `ERROR_OWNERSHIP_MISMATCH` | Un Pokémon de `team` n'appartient pas à l'appelant |
-| 404 | `ERROR_PLAYER_NOT_FOUND`, `ERROR_POKEMON_NOT_FOUND` | Adversaire ou Pokémon inconnu |
-| 409 | `ERROR_BATTLE_SELF` | Adversaire = appelant |
-| 409 | `ERROR_BATTLE_OPPONENT_NO_TEAM` | L'adversaire n'a aucun Pokémon en équipe |
-| 422 | `ERROR_BATTLE_INVALID_TEAM` | Équipe vide, plus de 6 Pokémon ou doublons |
-
 ### `GET /battles/{uuid}`
 
 Réservé aux deux joueurs (`403`), `404 ERROR_BATTLE_NOT_FOUND`.
-
-### `POST /battles/{uuid}/result`
-
-```json
-{ "winner_uuid": "…", "log": { "turns": 3 } }
-```
-
-`200` + session `FINISHED` (`result` = `{winner_uuid, log}`, `finished_at` renseigné). Garde-fous : le vainqueur doit
-être l'un des deux joueurs, la session doit être `ACTIVE` (ce qui bloque aussi une double soumission).
-
-| Statut | `error_code` | Cas |
-|---|---|---|
-| 403 | `ERROR_OWNERSHIP_MISMATCH` | L'appelant n'est pas un des deux joueurs |
-| 409 | `ERROR_BATTLE_INVALID_STATE` | Session déjà terminée |
-| 422 | `ERROR_BATTLE_INVALID_RESULT` | Vainqueur hors participants |
 
 ---
 

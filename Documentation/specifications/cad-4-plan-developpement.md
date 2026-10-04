@@ -86,7 +86,7 @@ Chaque phase liste : objectif, livrables, definition of done (DoD).
 
 ## Phase 4 — Backend : Battle (structure seulement, pas l'arbitrage)
 
-> **Note d'implémentation (2026-10-03)** : terminée. Il n'y a rien à « restaurer » : le combat se joue sur des copies jetables, le Ghost n'est jamais modifié.
+> **Note d'implémentation (2026-10-03)** : terminée. Il n'y a rien à « restaurer » : le combat se joue sur des copies jetables, le Ghost n'est jamais modifié. Les routes `POST /battles` et `POST /battles/{uuid}/result` ont été retirées le 2026-10-04 (SEC-3), remplacées par le combat en direct.
 
 **Objectif** : poser la donnée et les endpoints de session de combat, sans encore le modèle "client hôte" (qui nécessite le client, Phase 8).
 

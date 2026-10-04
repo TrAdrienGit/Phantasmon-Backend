@@ -77,4 +77,34 @@ class PokemonLegalityServiceTest {
 
 		assertThatCode(() -> service.validate(data)).doesNotThrowAnyException();
 	}
+
+	private static void assertRejected(PokemonLegalityService service, Map<String, Object> data, String errorCode) {
+		assertThatThrownBy(() -> service.validate(data))
+				.isInstanceOf(ApiException.class)
+				.satisfies(ex -> assertThat(((ApiException) ex).getErrorCode()).isEqualTo(errorCode));
+	}
+
+	@Test
+	void rejectsANicknameLongerThanTheEditorAllows() {
+		// SEC-5: the nickname is shown above the Ghost to every other player.
+		assertRejected(service, Map.of("ivs", Map.of(), "evs", Map.of(), "nickname", "x".repeat(21)),
+				"ERROR_LEGALITY_NICKNAME_TOO_LONG");
+		assertThatCode(() -> service.validate(Map.of("ivs", Map.of(), "evs", Map.of(), "nickname", "x".repeat(20))))
+				.doesNotThrowAnyException();
+	}
+
+	@Test
+	void rejectsOversizedData() {
+		// SEC-5: data is free JSON stored for up to 480 Pokémon per player.
+		assertRejected(service, Map.of("ivs", Map.of(), "evs", Map.of(), "notes", "x".repeat(20_000)),
+				"ERROR_POKEMON_DATA_TOO_LARGE");
+	}
+
+	@Test
+	void rejectsMalformedStatsWithABusinessErrorInsteadOfA500() {
+		// SEC-9: a ClassCastException / NumberFormatException used to escape as a 500.
+		assertRejected(service, Map.of("ivs", List.of(31), "evs", Map.of()), "ERROR_LEGALITY_INVALID_DATA");
+		assertRejected(service, Map.of("ivs", Map.of(), "evs", Map.of("atk", "lots")), "ERROR_LEGALITY_INVALID_DATA");
+		assertRejected(service, Map.of("ivs", Map.of(), "evs", Map.of(), "nickname", 42), "ERROR_LEGALITY_INVALID_DATA");
+	}
 }
