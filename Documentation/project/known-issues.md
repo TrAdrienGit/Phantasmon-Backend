@@ -24,11 +24,10 @@ Identifiants : `BUG-n` (comportement incorrect), `SEC-n` (sécurité, voir [`sec
 | TODO-7 | moyenne | Machine serveur | Rétablir l'accès SSH (`production-server`) : les déploiements du client retombent sur l'instance locale « Cobblemon 2 ». |
 | TODO-16 | haute | Machine qui héberge la base | Planifier `scripts/backup-database.ps1` (tâche Windows quotidienne, `guides/deployment.md` §3.2) vers un autre disque. **Reporté par Adrien (2026-10-04).** |
 | TODO-17 | haute | Machine de dev | Le disque D: (« URBAN 1TB », USB) qui porte les dépôts, le backend et ses logs s'est déconnecté le 2026-10-04 (erreurs `disk` 51 / `Ntfs` 50, 140, remontages 15h36 et 16h31) : backend tué en plein combat, pics de lag. Vérifier câble / port / mise en veille USB ; faire tourner le backend (et viser les sauvegardes de TODO-16) sur un disque interne. **Reporté par Adrien (2026-10-04).** |
-| TODO-18 | moyenne | Client | Polir l'overlay de l'équipe Ghost (`GhostPartyHud`, touche « Cacher l'équipe » de Cobblemon) : rendu, tailles et finitions à revoir avec Adrien. |
-| TODO-19 | moyenne | Client | PC : double-clic sur un Pokémon d'une boîte = le mettre dans l'équipe ; double-clic sur un Pokémon de l'équipe = le ranger dans le premier emplacement libre du PC. |
 | TODO-20 | moyenne | Client | Animations en combat (à préciser avec Adrien). |
 | TODO-21 | basse | Client | Musique (lobby, cinématique, combat) sans alourdir le mod : piste « resource pack » optionnel (sons déclarés dans `sounds.json` du mod, fichiers `.ogg` fournis à part et chargés seulement s'ils existent), ou streaming ; vérifier les licences. |
 | TODO-22 | basse | Client | Se libérer des touches dédiées (PC, sortie du Ghost, échange, combat) : les regrouper dans un point d'entrée unique (roue d'interaction de Cobblemon, menu radial Phantasmon, ou une seule touche ouvrant un menu) pour éviter les conflits avec Cobblemon et les autres mods. |
+| TODO-23 | moyenne | Client | Reprendre les touches Cobblemon de sélection d'équipe (haut / bas) et d'envoi (R) pour les Ghost quand l'overlay Ghost est affiché : choisir un Ghost dans l'équipe et le sortir, au lieu de toujours sortir celui de l'emplacement 1. |
 
 ## 3. Dette technique
 
@@ -91,3 +90,5 @@ Identifiants : `BUG-n` (comportement incorrect), `SEC-n` (sécurité, voir [`sec
 | — | 2026-10-04 | Combat qui ne démarrait pas quand l'hôte est un client pur (invité LAN) avec un Pokémon portant un objet : `swapHeldItem` publiait un événement qui exige un serveur ; l'objet est désormais posé directement. |
 | — | 2026-10-04 | Match nul si le backend est perdu (CAD Partie 1 §44) : arrêt du backend → combats conclus en nul `BACKEND_LOST` et annoncés avant la fermeture des connexions ; plantage → sessions `ACTIVE` conclues en nul au redémarrage ; client : messages « match nul, aucun vainqueur ». Tests dans `LiveBattleWebSocketIntegrationTest`. |
 | — | 2026-10-04 | Ghost contre Pokémon normal (CAD Partie 1 §31) : chaque joueur combat avec ses Ghost ou une copie de son équipe Cobblemon (décision D-22). Tests dans `LiveBattleWebSocketIntegrationTest`. |
+| TODO-18 | 2026-10-05 | Overlay de l'équipe Ghost repris sur celui de Cobblemon (mêmes cases, positions et éléments) avec ses textures recolorées à la palette Phantasmon ; validé en jeu par Adrien. |
+| TODO-19 | 2026-10-05 | PC : double-clic sur un Pokémon d'une boîte = premier emplacement libre de l'équipe ; sur un membre de l'équipe = premier emplacement libre du PC ; validé en jeu par Adrien. |
