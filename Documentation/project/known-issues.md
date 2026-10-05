@@ -26,8 +26,6 @@ Identifiants : `BUG-n` (comportement incorrect), `SEC-n` (sécurité, voir [`sec
 | TODO-17 | haute | Machine de dev | Le disque D: (« URBAN 1TB », USB) qui porte les dépôts, le backend et ses logs s'est déconnecté le 2026-10-04 (erreurs `disk` 51 / `Ntfs` 50, 140, remontages 15h36 et 16h31) : backend tué en plein combat, pics de lag. Vérifier câble / port / mise en veille USB ; faire tourner le backend (et viser les sauvegardes de TODO-16) sur un disque interne. **Reporté par Adrien (2026-10-04).** |
 | TODO-20 | moyenne | Client | Animations en combat (à préciser avec Adrien). |
 | TODO-21 | basse | Client | Musique (lobby, cinématique, combat) sans alourdir le mod : piste « resource pack » optionnel (sons déclarés dans `sounds.json` du mod, fichiers `.ogg` fournis à part et chargés seulement s'ils existent), ou streaming ; vérifier les licences. |
-| TODO-22 | basse | Client | Se libérer des touches dédiées (PC, sortie du Ghost, échange, combat) : les regrouper dans un point d'entrée unique (roue d'interaction de Cobblemon, menu radial Phantasmon, ou une seule touche ouvrant un menu) pour éviter les conflits avec Cobblemon et les autres mods. |
-| TODO-23 | moyenne | Client | Reprendre les touches Cobblemon de sélection d'équipe (haut / bas) et d'envoi (R) pour les Ghost quand l'overlay Ghost est affiché : choisir un Ghost dans l'équipe et le sortir, au lieu de toujours sortir celui de l'emplacement 1. |
 
 ## 3. Dette technique
 
@@ -92,3 +90,5 @@ Identifiants : `BUG-n` (comportement incorrect), `SEC-n` (sécurité, voir [`sec
 | — | 2026-10-04 | Ghost contre Pokémon normal (CAD Partie 1 §31) : chaque joueur combat avec ses Ghost ou une copie de son équipe Cobblemon (décision D-22). Tests dans `LiveBattleWebSocketIntegrationTest`. |
 | TODO-18 | 2026-10-05 | Overlay de l'équipe Ghost repris sur celui de Cobblemon (mêmes cases, positions et éléments) avec ses textures recolorées à la palette Phantasmon ; validé en jeu par Adrien. |
 | TODO-19 | 2026-10-05 | PC : double-clic sur un Pokémon d'une boîte = premier emplacement libre de l'équipe ; sur un membre de l'équipe = premier emplacement libre du PC ; validé en jeu par Adrien. |
+| TODO-23 | 2026-10-05 | Touches d'équipe de Cobblemon (haut / bas, R) reprises pour l'équipe Ghost quand son overlay est affiché ; verrou de R corrigé ; validé en jeu par Adrien. |
+| TODO-22 | 2026-10-05 | Plus de commande ni de touche pour le PC, les échanges et les combats : roue de Cobblemon pour échanges et combats, touche P pour le PC (D-24). `join` / `decline` / `timer` gardées pour les boutons du chat. |

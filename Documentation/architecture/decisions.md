@@ -36,6 +36,7 @@ Pour ajouter une décision : prendre le numéro suivant, dater, et mettre à jou
 | D-21 | Positions des joueurs visibles par tout leur groupe : limite assumée | Acceptée | 2026-10-04 |
 | D-22 | Ghost contre Pokémon normal = copie de l'équipe Cobblemon d'un joueur | Acceptée | 2026-10-04 |
 | D-23 | Lobby de combat (aperçu d'équipe, lead caché) avant chaque combat en direct | Acceptée | 2026-10-04 |
+| D-24 | Échanges et combats uniquement par la roue, PC uniquement par sa touche | Acceptée | 2026-10-05 |
 
 ---
 
@@ -250,3 +251,13 @@ Pour ajouter une décision : prendre le numéro suivant, dater, et mettre à jou
   Ghost sont rappelés dès l'ouverture du lobby.
 - **Conséquences** : nouveaux messages `BattleLobby*` ; `BattleSessionStarted` part quand les deux sont prêts, équipes
   réordonnées lead en premier. L'animation de lancement et la musique viendront plus tard.
+
+## D-24 — Échanges et combats uniquement par la roue, PC uniquement par sa touche
+
+- **Contexte** : TODO-22, demande d'Adrien (2026-10-05) : se libérer des touches et commandes en double.
+- **Décision** : plus aucune commande ni touche pour ouvrir le PC, inviter à un échange ou à un combat, ni de
+  commande `sendout` / `recall` (touche H et overlay Ghost à la place). Échanges et
+  combats démarrent depuis la roue d'interaction de Cobblemon ; le PC s'ouvre avec sa touche (P). Les commandes
+  `trade join|decline` et `battle join|decline|timer` restent, uniquement pour les boutons cliquables du chat
+  (choix d'Adrien). L'échange asynchrone par commandes est retiré du client ; l'API REST reste.
+- **Conséquences** : touches G et B supprimées ; il faut être assez près de l'autre joueur pour ouvrir la roue sur lui.
