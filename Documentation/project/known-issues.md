@@ -47,6 +47,7 @@ Identifiants : `BUG-n` (comportement incorrect), `SEC-n` (sécurité, voir [`sec
 | LIM-8 | Pas d'archivage WAL : la restauration revient à la dernière sauvegarde (jusqu'à 24 h de pertes avec une sauvegarde quotidienne). |
 | LIM-9 | Positions visibles par tout le groupe (SEC-6, décision D-21) : quiconque connaît l'adresse d'un serveur peut rejoindre son groupe et recevoir chaque seconde la position des joueurs ayant un Ghost sorti. Assumé pour des serveurs entre joueurs de confiance. |
 | LIM-10 | Ghost contre Pokémon normal (D-22) : la copie d'équipe Cobblemon vient du client du joueur ; elle est bornée et validée comme un Ghost, mais un client modifié pourrait annoncer une équipe qu'il ne possède pas (aucun accès aux données du serveur Minecraft). |
+| LIM-11 | Dialga s'affiche à l'envers dans le monde (Ghost sorti, combat), chromatique ou non — aussi un vrai Dialga Cobblemon : vient du modpack (modèle du pack CCC et/ou rendu modifié par DeltaClient), pas de Phantasmon. Rien modifié côté mod (Adrien 2026-10-05). |
 
 ## 5. Résolu
 
