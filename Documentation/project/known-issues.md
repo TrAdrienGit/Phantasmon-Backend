@@ -25,6 +25,11 @@ Identifiants : `BUG-n` (comportement incorrect), `SEC-n` (sécurité, voir [`sec
 | TODO-16 | haute | Machine qui héberge la base | Planifier `scripts/backup-database.ps1` (tâche Windows quotidienne, `guides/deployment.md` §3.2) vers un autre disque. **Reporté par Adrien (2026-10-04).** |
 | TODO-17 | haute | Machine de dev | Le disque D: (« URBAN 1TB », USB) qui porte les dépôts, le backend et ses logs s'est déconnecté le 2026-10-04 (erreurs `disk` 51 / `Ntfs` 50, 140, remontages 15h36 et 16h31) : backend tué en plein combat, pics de lag. Vérifier câble / port / mise en veille USB ; faire tourner le backend (et viser les sauvegardes de TODO-16) sur un disque interne. **Reporté par Adrien (2026-10-04).** |
 | TODO-21 | basse | Client | Effets sonores de combat (la musique est faite, voir journal §4.77) : à placer plutôt dans le mod (sons courts, peu lourds) ou dans le pack de musiques ; à préciser avec Adrien. |
+| TODO-24 | moyenne | Client + Backend | Règles Smogon : vérifier s'il existe une API (ou des données publiques, ex. les formats de Pokémon Showdown) donnant les régulations Smogon (tiers, bannissements) ; intégrer les clauses (Sleep Clause, Species Clause, OHKO, Evasion, etc.) aux combats Ghost — Showdown les gère nativement via le format de combat. |
+| TODO-25 | moyenne | Client + Backend | Menu d'administration (lié à D-20). |
+| TODO-26 | basse | Client | Plusieurs animations d'intro de combat (choix aléatoire ou par contexte). |
+| TODO-27 | basse | Client + Backend | Combats scénarisés : combats uniques préparés par l'admin (maître du jeu) — musique, intro, effets pendant le match choisis à l'avance. |
+| TODO-28 | moyenne | Client | Cristaux Z : les reconnaître comme objets tenus (comme les Méga-Gemmes de DeltaClient) et vérifier les capacités Z en combat Ghost (événement `ZMoveUsedEvent` de Cobblemon). |
 
 ## 3. Dette technique
 
