@@ -58,6 +58,9 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class LiveBattleService {
 
+	/** Number of battle intro cinematics the client knows (TODO-26); {@code BattleSessionStarted.intro} is in [0, INTRO_COUNT). */
+	public static final int INTRO_COUNT = 5;
+
 	static final int TIMER_SECONDS = 90;
 
 	private final Map<UUID, LiveBattle> battlesByPlayer = new HashMap<>();
@@ -542,16 +545,20 @@ public class LiveBattleService {
 		battlesByPlayer.put(guestUuid, battle);
 		log.info("Live battle {} started from lobby {}: host {} vs guest {}", battle.uuid, lobby.uuid, hostUuid, guestUuid);
 
-		sessionRegistry.send(hostUuid, WsMessage.of("BattleSessionStarted", Map.of(
+		// TODO-26: the intro cinematic is drawn here, so that both players watch the same one.
+		int intro = java.util.concurrent.ThreadLocalRandom.current().nextInt(INTRO_COUNT);
+		Map<String, Object> hostView = new HashMap<>(Map.of(
 				"battle_uuid", battle.uuid, "role", "HOST",
 				"opponent_uuid", guestUuid, "opponent_name", nameOf(guestUuid),
 				"own_team", hostTeam, "opponent_team", guestTeam,
-				"own_team_source", hostSource, "opponent_team_source", guestSource, "format", formatData)));
+				"own_team_source", hostSource, "opponent_team_source", guestSource, "format", formatData));
+		hostView.put("intro", intro);
+		sessionRegistry.send(hostUuid, WsMessage.of("BattleSessionStarted", hostView));
 		sessionRegistry.send(guestUuid, WsMessage.of("BattleSessionStarted", Map.of(
 				"battle_uuid", battle.uuid, "role", "GUEST",
 				"opponent_uuid", hostUuid, "opponent_name", nameOf(hostUuid),
 				"own_team", guestTeam, "own_team_source", guestSource, "opponent_team_source", hostSource,
-				"format", formatData)));
+				"format", formatData, "intro", intro)));
 		ghostRecall.recall(hostUuid, "battle started");
 		ghostRecall.recall(guestUuid, "battle started");
 		if (lobby.timerBy != null) {

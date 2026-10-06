@@ -282,6 +282,19 @@ class LiveBattleWebSocketIntegrationTest {
 	}
 
 	@Test
+	void bothPlayersGetTheSameRandomIntro() throws Exception {
+		teamMember(aliceUuid, "pikachu", 1);
+		teamMember(bobUuid, "charmander", 1);
+		readyBoth(openLobby(aliceSession, alice, bobUuid, bobSession, bob).get("lobby_uuid").asString());
+
+		JsonNode aliceView = await(alice, "BattleSessionStarted");
+		JsonNode bobView = await(bob, "BattleSessionStarted");
+		int intro = aliceView.get("intro").asInt();
+		assertThat(intro).isBetween(0, LiveBattleService.INTRO_COUNT - 1);
+		assertThat(bobView.get("intro").asInt()).as("TODO-26: both clients play the same intro").isEqualTo(intro);
+	}
+
+	@Test
 	void anIllegalOrMalformedPartyIsRefused() throws Exception {
 		teamMember(bobUuid, "charmander", 1);
 		for (String party : List.of(
