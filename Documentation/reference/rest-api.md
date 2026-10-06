@@ -39,6 +39,10 @@
 | `GET` | [`/trades/{uuid}`](#get-tradesuuid) | Bearer | Détail |
 | `GET` | [`/players/{uuid}/trades`](#get-playersuuidtrades) | Bearer | Échanges du joueur |
 | `GET` | [`/battles/{uuid}`](#get-battlesuuid) | Bearer | Détail |
+| `GET` | [`/admin/me`](#administration) | Bearer | L'appelant est-il admin ? |
+| `GET` | [`/admin/players/{name}`](#administration) | Admin | Joueur par pseudo |
+| `POST` | [`/admin/battles/stop`](#administration) | Admin | Arrêter le combat / le lobby d'un joueur |
+| `POST` | [`/admin/reboot`](#administration) | Admin | Redémarrer le backend |
 
 ---
 
@@ -375,6 +379,22 @@ Réservé aux deux participants (`403` sinon, `404 ERROR_TRADE_NOT_FOUND`).
 Réservé aux deux joueurs (`403`), `404 ERROR_BATTLE_NOT_FOUND`.
 
 ---
+
+## Administration
+
+TODO-25. Admin = joueur dont le pseudo de dernière connexion figure dans `admins.txt`
+(`phantasmon.admin.file`, un pseudo par ligne, insensible à la casse, `#` pour les commentaires, relu dès qu'il
+change ; créé vide au premier démarrage). Sinon `403 ERROR_ADMIN_REQUIRED`.
+
+- `GET /admin/me` → `{ "admin": bool }`.
+- `GET /admin/players/{name}` → `{ "uuid", "name" }` ; `404 ERROR_PLAYER_NOT_FOUND`.
+- `POST /admin/battles/stop` `{ "player": "<pseudo>" }` → `{ "stopped": "BATTLE" | "LOBBY", "player" }` : combat
+  terminé en match nul (`reason` `ADMIN_STOPPED`) ou lobby annulé ; `404 ERROR_ADMIN_NOTHING_TO_STOP`.
+- `POST /admin/reboot` → `202 { "rebooting": true }` : le contexte Spring est fermé puis relancé dans le même
+  processus une demi-seconde plus tard.
+- PC d'un autre joueur : les routes Pokémon habituelles acceptent un admin — `GET /players/{uuid}/pokemon` et
+  `.../pc` pour n'importe quel joueur ; `PATCH` / `DELETE` / `clone` agissent au nom du propriétaire du Pokémon ;
+  `POST /pokemon?owner={uuid}` crée dans le PC de ce joueur (`403 ERROR_ADMIN_REQUIRED` pour un non-admin).
 
 ## Prévu par le CAD, non implémenté
 

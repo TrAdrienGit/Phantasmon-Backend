@@ -699,6 +699,24 @@ public class LiveBattleService {
 		}
 	}
 
+	/**
+	 * Admin (TODO-25): ends the battle {@code playerUuid} is in as a draw ({@code ADMIN_STOPPED}, no winner), or
+	 * cancels their lobby. Returns {@code "BATTLE"}, {@code "LOBBY"}, or null if there was nothing to stop.
+	 */
+	public synchronized String adminStop(UUID playerUuid) {
+		LiveBattle battle = battlesByPlayer.get(playerUuid);
+		if (battle != null) {
+			finish(battle, null, "ADMIN_STOPPED", BattleStatus.FINISHED);
+			return "BATTLE";
+		}
+		Lobby lobby = lobbiesByPlayer.get(playerUuid);
+		if (lobby != null) {
+			cancelLobby(lobby, "ADMIN_STOPPED", null);
+			return "LOBBY";
+		}
+		return null;
+	}
+
 	/** WebSocket closed: the lobby is cancelled; a battle can't go on — a draw (CAD Partie 1 §44). */
 	public synchronized void onDisconnect(UUID playerUuid) {
 		invites.values().removeIf(invite -> invite.inviterUuid().equals(playerUuid) || invite.inviteeUuid().equals(playerUuid));

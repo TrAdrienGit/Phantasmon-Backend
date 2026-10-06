@@ -38,6 +38,7 @@ Pour ajouter une décision : prendre le numéro suivant, dater, et mettre à jou
 | D-23 | Lobby de combat (aperçu d'équipe, lead caché) avant chaque combat en direct | Acceptée | 2026-10-04 |
 | D-24 | Échanges et combats uniquement par la roue, PC uniquement par sa touche | Acceptée | 2026-10-05 |
 | D-25 | Formats de combat : règles de Pokémon Showdown, vérifiées par le backend | Acceptée | 2026-10-06 |
+| D-26 | Rôle administrateur : fichier de pseudos, commandes client, contrôles côté backend | Acceptée | 2026-10-06 |
 
 ---
 
@@ -276,3 +277,16 @@ Pour ajouter une décision : prendre le numéro suivant, dater, et mettre à jou
   tranché) sont transmis à l'hôte. En 1v1, seul le lead combat.
 - **Limites** : sous-ensemble du validateur de Showdown — les movesets ne sont pas revérifiés contre les learnsets,
   les bannissements combinés (« A + B ») sont ignorés.
+
+## D-26 — Rôle administrateur : fichier de pseudos, commandes client, contrôles côté backend
+
+- **Contexte** : TODO-25 (D-20 avait reporté les fonctions d'administration).
+- **Décision (Adrien)** : comme les ops d'un serveur Minecraft, un fichier `admins.txt` à côté du backend, un pseudo
+  par ligne. Pas de touche, seulement des commandes `/phantasmon admin` : ouvrir et manipuler le PC d'un joueur comme
+  le sien, arrêter le combat ou le lobby d'un joueur (match nul), redémarrer le backend, plus les commandes de
+  ping et de débogage déplacées ici.
+- **Mise en œuvre** : le backend décide (pseudo de dernière connexion ; fichier relu dès qu'il change) et vérifie
+  chaque requête ; le client ne fait que montrer les commandes (`GET /admin/me`). Les modifications d'un admin
+  passent par les règles normales du service, au nom du propriétaire. Redémarrage dans le même processus (le backend
+  est lancé à la main, sans superviseur pour le relancer).
+- **Conséquence** : un pseudo est réattribuable après un changement de nom Mojang ; tenir le fichier à jour.

@@ -70,3 +70,12 @@ vérifie toutes les 60 s avec une marge de 30 s) pour voir le refresh automatiqu
 | `docker-compose.yml` | oui | PostgreSQL 18 en conteneur, lit le même `.env` |
 | `src/main/resources/application.properties` | oui | Propriétés ci-dessus |
 | `.github/workflows/build.yml` | oui | CI : JDK 21 Temurin, build, tests avec `JWT_SECRET` factice, jar en artefact |
+
+## Administration et formats (2026-10-06)
+
+| Propriété | Défaut | Rôle |
+|---|---|---|
+| `phantasmon.admin.file` | `admins.txt` | Fichier des admins (un pseudo Minecraft par ligne), relu à chaque modification (TODO-25) |
+| `phantasmon.showdown.update-on-start` | `true` (`PHANTASMON_SHOWDOWN_UPDATE`) | Télécharger les règles de Pokémon Showdown au démarrage (TODO-24) |
+| `phantasmon.showdown.cache-dir` | `showdown-data` (`PHANTASMON_SHOWDOWN_CACHE_DIR`) | Copie locale des règles |
+

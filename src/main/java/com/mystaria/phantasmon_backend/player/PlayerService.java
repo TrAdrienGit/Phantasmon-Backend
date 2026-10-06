@@ -39,6 +39,12 @@ public class PlayerService {
 				});
 	}
 
+	/** The player who last logged in as {@code name} (case-insensitive), if any. */
+	public Optional<Player> findByName(String name) {
+		return name == null || name.isBlank() ? Optional.empty()
+				: playerRepository.findFirstByLastUsernameIgnoreCaseOrderByLastSeenAtDesc(name.strip());
+	}
+
 	public Optional<Player> findById(UUID uuid) {
 		return playerRepository.findById(uuid);
 	}

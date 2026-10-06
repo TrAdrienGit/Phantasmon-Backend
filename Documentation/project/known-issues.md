@@ -25,7 +25,6 @@ Identifiants : `BUG-n` (comportement incorrect), `SEC-n` (sécurité, voir [`sec
 | TODO-16 | haute | Machine qui héberge la base | Planifier `scripts/backup-database.ps1` (tâche Windows quotidienne, `guides/deployment.md` §3.2) vers un autre disque. **Reporté par Adrien (2026-10-04).** |
 | TODO-17 | haute | Machine de dev | Le disque D: (« URBAN 1TB », USB) qui porte les dépôts, le backend et ses logs s'est déconnecté le 2026-10-04 (erreurs `disk` 51 / `Ntfs` 50, 140, remontages 15h36 et 16h31) : backend tué en plein combat, pics de lag. Vérifier câble / port / mise en veille USB ; faire tourner le backend (et viser les sauvegardes de TODO-16) sur un disque interne. **Reporté par Adrien (2026-10-04).** |
 | TODO-21 | basse | Client | Effets sonores de combat (la musique est faite, voir journal §4.77) : à placer plutôt dans le mod (sons courts, peu lourds) ou dans le pack de musiques ; à préciser avec Adrien. |
-| TODO-25 | moyenne | Client + Backend | Menu d'administration (lié à D-20). |
 | TODO-26 | basse | Client | Plusieurs animations d'intro de combat (choix aléatoire ou par contexte). |
 | TODO-27 | basse | Client + Backend | Combats scénarisés : combats uniques préparés par l'admin (maître du jeu) — musique, intro, effets pendant le match choisis à l'avance. |
 
@@ -98,3 +97,4 @@ Identifiants : `BUG-n` (comportement incorrect), `SEC-n` (sécurité, voir [`sec
 | TODO-20 | 2026-10-05 | Caméra de combat mise en scène (`BattleCameraDirector`) : plans d'ambiance aléatoires pendant les choix, plans d'action sur les attaques, touche K caméra libre ⇄ mise en scène ; validé en jeu par Adrien. |
 | TODO-24 | 2026-10-06 | Formats de combat Smogon (20 formats, National Dex et Gen 9 en simple) choisis en commun dans le lobby, règles de Pokémon Showdown mises à jour à chaque démarrage du backend, Pokémon hors format entourés en rouge (D-25) ; validé en jeu par Adrien. |
 | TODO-28 | 2026-10-06 | Cristaux Z : aucun objet dans le modpack ; tenus « virtuellement » par les Ghost (`GhostZCrystals`, fournisseur d'objet de Cobblemon), choisissables dans l'éditeur, reconnus à l'import, effet de puissance Z en combat. |
+| TODO-25 | 2026-10-06 | Rôle administrateur (D-26) : `admins.txt`, commandes `/phantasmon admin` (PC d'un joueur, arrêt de combat, redémarrage du backend, ping, débogage). |

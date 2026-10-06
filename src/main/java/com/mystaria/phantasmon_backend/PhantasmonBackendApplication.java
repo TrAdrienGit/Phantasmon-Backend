@@ -10,8 +10,16 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 @EnableScheduling
 public class PhantasmonBackendApplication {
 
+	/** Kept for the admin reboot (BackendRestarter), which starts the application again in the same process. */
+	private static String[] arguments = new String[0];
+
 	public static void main(String[] args) {
+		arguments = args.clone();
 		SpringApplication.run(PhantasmonBackendApplication.class, args);
+	}
+
+	public static String[] arguments() {
+		return arguments.clone();
 	}
 
 }

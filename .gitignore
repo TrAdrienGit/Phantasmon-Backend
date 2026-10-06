@@ -75,3 +75,6 @@ docker-compose.override.yml
 
 # Cached Pokémon Showdown data (battle formats, downloaded at startup)
 showdown-data/
+
+# Admin file (TODO-25): created on first start, one Minecraft name per line
+admins.txt

@@ -766,5 +766,26 @@ class LiveBattleWebSocketIntegrationTest {
 		assertThat(start.get("own_team").get(0).get("species").asString()).isEqualTo("blissey");
 		assertThat(start.get("opponent_team")).hasSize(1);
 	}
+
+	@Test
+	void anAdminStopsABattleAsADrawOrCancelsALobby() throws Exception {
+		// TODO-25: the admin command names one of the two players.
+		teamMember(aliceUuid, "pikachu", 1);
+		teamMember(bobUuid, "charmander", 1);
+		String lobby = openLobby(aliceSession, alice, bobUuid, bobSession, bob).get("lobby_uuid").asString();
+		assertThat(liveBattleService.adminStop(bobUuid)).isEqualTo("LOBBY");
+		assertThat(await(alice, "BattleLobbyCancelled").get("reason").asString()).isEqualTo("ADMIN_STOPPED");
+		assertThat(await(bob, "BattleLobbyCancelled").get("lobby_uuid").asString()).isEqualTo(lobby);
+
+		String battle = startBattle(aliceSession, alice, bobUuid, bobSession, bob).get("battle_uuid").asString();
+		assertThat(liveBattleService.adminStop(bobUuid)).isEqualTo("BATTLE");
+		for (RecordingHandler player : List.of(alice, bob)) {
+			JsonNode ended = await(player, "BattleEnded");
+			assertThat(ended.get("reason").asString()).isEqualTo("ADMIN_STOPPED");
+			assertThat(ended.get("winner_uuid").isNull()).isTrue();
+		}
+		assertThat(battleRepository.findById(UUID.fromString(battle)).orElseThrow().getResult()).containsEntry("reason", "ADMIN_STOPPED");
+		assertThat(liveBattleService.adminStop(bobUuid)).isNull();
+	}
 }
 

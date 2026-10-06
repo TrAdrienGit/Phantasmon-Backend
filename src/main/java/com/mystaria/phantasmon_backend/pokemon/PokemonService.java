@@ -174,6 +174,12 @@ public class PokemonService {
 		}, applyNewLocation);
 	}
 
+	/** The owner of a Pokémon, or null if it doesn't exist (admin requests, TODO-25). */
+	@Transactional(readOnly = true)
+	public UUID ownerOf(UUID pokemonUuid) {
+		return pokemonRepository.findById(pokemonUuid).map(Pokemon::getOwnerUuid).orElse(null);
+	}
+
 	@Transactional
 	public void delete(UUID ownerUuid, UUID pokemonUuid) {
 		Pokemon pokemon = findOwned(ownerUuid, pokemonUuid);

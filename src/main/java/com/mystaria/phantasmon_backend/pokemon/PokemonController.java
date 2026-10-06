@@ -28,22 +28,34 @@ import com.mystaria.phantasmon_backend.common.IdempotencyService;
  * a path variable or request body alone.
  */
 @RestController
+@lombok.extern.slf4j.Slf4j
 public class PokemonController {
 
 	private final PokemonService pokemonService;
 	private final IdempotencyService idempotencyService;
+	private final com.mystaria.phantasmon_backend.admin.AdminService adminService;
 
-	public PokemonController(PokemonService pokemonService, IdempotencyService idempotencyService) {
+	public PokemonController(PokemonService pokemonService, IdempotencyService idempotencyService,
+			com.mystaria.phantasmon_backend.admin.AdminService adminService) {
 		this.pokemonService = pokemonService;
 		this.idempotencyService = idempotencyService;
+		this.adminService = adminService;
 	}
 
 	@PostMapping("/pokemon")
-	public ResponseEntity<PokemonResponse> create(@Valid @RequestBody PokemonCreateRequest request, Authentication authentication) {
+	public ResponseEntity<PokemonResponse> create(@Valid @RequestBody PokemonCreateRequest request,
+			@RequestParam(name = "owner", required = false) UUID owner, Authentication authentication) {
 		UUID ownerUuid = playerUuid(authentication);
+		if (owner != null && !owner.equals(ownerUuid)) {
+			// Admin (TODO-25): creates in another player's PC (import from the admin PC screen).
+			adminService.requireAdmin(ownerUuid);
+			log.info("Admin {} creates a Pokémon for {}", ownerUuid, owner);
+			ownerUuid = owner;
+		}
+		UUID finalOwner = ownerUuid;
 		PokemonResponse response = idempotencyService.executeIdempotent(
-				request.requestUuid(), ownerUuid, "POST /pokemon",
-				() -> pokemonService.create(ownerUuid, request), PokemonResponse.class);
+				request.requestUuid(), finalOwner, "POST /pokemon",
+				() -> pokemonService.create(finalOwner, request), PokemonResponse.class);
 		return ResponseEntity.status(HttpStatus.CREATED).body(response);
 	}
 
@@ -61,18 +73,18 @@ public class PokemonController {
 
 	@PatchMapping("/pokemon/{uuid}")
 	public PokemonResponse update(@PathVariable UUID uuid, @Valid @RequestBody PokemonUpdateRequest request, Authentication authentication) {
-		return pokemonService.update(playerUuid(authentication), uuid, request);
+		return pokemonService.update(actingOwner(uuid, authentication), uuid, request);
 	}
 
 	@DeleteMapping("/pokemon/{uuid}")
 	public ResponseEntity<Void> delete(@PathVariable UUID uuid, Authentication authentication) {
-		pokemonService.delete(playerUuid(authentication), uuid);
+		pokemonService.delete(actingOwner(uuid, authentication), uuid);
 		return ResponseEntity.noContent().build();
 	}
 
 	@PostMapping("/pokemon/{uuid}/clone")
 	public ResponseEntity<PokemonResponse> clone(@PathVariable UUID uuid, Authentication authentication) {
-		PokemonResponse response = pokemonService.clone(playerUuid(authentication), uuid);
+		PokemonResponse response = pokemonService.clone(actingOwner(uuid, authentication), uuid);
 		return ResponseEntity.status(HttpStatus.CREATED).body(response);
 	}
 
@@ -80,9 +92,25 @@ public class PokemonController {
 		return (UUID) authentication.getPrincipal();
 	}
 
-	private static void requireSelf(UUID pathUuid, Authentication authentication) {
-		if (!pathUuid.equals(playerUuid(authentication))) {
+	/** Own data, or an admin's (TODO-25): admins see and handle any player's PC as if it were theirs. */
+	private void requireSelf(UUID pathUuid, Authentication authentication) {
+		UUID caller = playerUuid(authentication);
+		if (!pathUuid.equals(caller) && !adminService.isAdmin(caller)) {
 			throw new ApiException(HttpStatus.FORBIDDEN, "ERROR_OWNERSHIP_MISMATCH", Map.of("uuid", pathUuid));
 		}
+	}
+
+	/**
+	 * The owner a change is made for: the caller — or, for an admin touching someone else's Pokémon, that Pokémon's
+	 * owner, so every ownership rule of the service applies as if the owner did it.
+	 */
+	private UUID actingOwner(UUID pokemonUuid, Authentication authentication) {
+		UUID caller = playerUuid(authentication);
+		UUID owner = pokemonService.ownerOf(pokemonUuid);
+		if (owner != null && !owner.equals(caller) && adminService.isAdmin(caller)) {
+			log.info("Admin {} acts on Pokémon {} of {}", caller, pokemonUuid, owner);
+			return owner;
+		}
+		return caller;
 	}
 }
