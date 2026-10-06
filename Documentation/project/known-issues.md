@@ -25,11 +25,9 @@ Identifiants : `BUG-n` (comportement incorrect), `SEC-n` (sécurité, voir [`sec
 | TODO-16 | haute | Machine qui héberge la base | Planifier `scripts/backup-database.ps1` (tâche Windows quotidienne, `guides/deployment.md` §3.2) vers un autre disque. **Reporté par Adrien (2026-10-04).** |
 | TODO-17 | haute | Machine de dev | Le disque D: (« URBAN 1TB », USB) qui porte les dépôts, le backend et ses logs s'est déconnecté le 2026-10-04 (erreurs `disk` 51 / `Ntfs` 50, 140, remontages 15h36 et 16h31) : backend tué en plein combat, pics de lag. Vérifier câble / port / mise en veille USB ; faire tourner le backend (et viser les sauvegardes de TODO-16) sur un disque interne. **Reporté par Adrien (2026-10-04).** |
 | TODO-21 | basse | Client | Effets sonores de combat (la musique est faite, voir journal §4.77) : à placer plutôt dans le mod (sons courts, peu lourds) ou dans le pack de musiques ; à préciser avec Adrien. |
-| TODO-24 | moyenne | Client + Backend | Règles Smogon : vérifier s'il existe une API (ou des données publiques, ex. les formats de Pokémon Showdown) donnant les régulations Smogon (tiers, bannissements) ; intégrer les clauses (Sleep Clause, Species Clause, OHKO, Evasion, etc.) aux combats Ghost — Showdown les gère nativement via le format de combat. |
 | TODO-25 | moyenne | Client + Backend | Menu d'administration (lié à D-20). |
 | TODO-26 | basse | Client | Plusieurs animations d'intro de combat (choix aléatoire ou par contexte). |
 | TODO-27 | basse | Client + Backend | Combats scénarisés : combats uniques préparés par l'admin (maître du jeu) — musique, intro, effets pendant le match choisis à l'avance. |
-| TODO-28 | moyenne | Client | Cristaux Z : les reconnaître comme objets tenus (comme les Méga-Gemmes de DeltaClient) et vérifier les capacités Z en combat Ghost (événement `ZMoveUsedEvent` de Cobblemon). |
 
 ## 3. Dette technique
 
@@ -98,3 +96,5 @@ Identifiants : `BUG-n` (comportement incorrect), `SEC-n` (sécurité, voir [`sec
 | TODO-23 | 2026-10-05 | Touches d'équipe de Cobblemon (haut / bas, R) reprises pour l'équipe Ghost quand son overlay est affiché ; verrou de R corrigé ; validé en jeu par Adrien. |
 | TODO-22 | 2026-10-05 | Plus de commande ni de touche pour le PC, les échanges et les combats : roue de Cobblemon pour échanges et combats, touche P pour le PC (D-24). `join` / `decline` / `timer` gardées pour les boutons du chat. |
 | TODO-20 | 2026-10-05 | Caméra de combat mise en scène (`BattleCameraDirector`) : plans d'ambiance aléatoires pendant les choix, plans d'action sur les attaques, touche K caméra libre ⇄ mise en scène ; validé en jeu par Adrien. |
+| TODO-24 | 2026-10-06 | Formats de combat Smogon (20 formats, National Dex et Gen 9 en simple) choisis en commun dans le lobby, règles de Pokémon Showdown mises à jour à chaque démarrage du backend, Pokémon hors format entourés en rouge (D-25) ; validé en jeu par Adrien. |
+| TODO-28 | 2026-10-06 | Cristaux Z : aucun objet dans le modpack ; tenus « virtuellement » par les Ghost (`GhostZCrystals`, fournisseur d'objet de Cobblemon), choisissables dans l'éditeur, reconnus à l'import, effet de puissance Z en combat. |
