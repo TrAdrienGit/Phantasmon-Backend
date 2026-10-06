@@ -20,10 +20,12 @@ Plan de référence : [`specifications/cad-4-plan-developpement.md`](../specific
 | 6 | Client : PC, équipe, édition, import Showdown | ✅ Terminée | PC graphique et éditeur validés (2026-10-02) ; export Showdown ajouté (2026-10-03) |
 | 7 | Client : rendu des Ghost, sortie/rappel, cycle de vie | ✅ Terminée | Validée à deux comptes (2026-09-29) |
 | 8 | Client : interface d'échange | ✅ Terminée | Échange en direct validé à deux comptes (2026-10-02) |
-| 9 | Client + backend : combat Ghost (client hôte) | ✅ Cœur terminé | Validé à deux comptes, hôte LAN et hôte client pur, animations d'attaque comprises (2026-10-03) |
+| 9 | Client + backend : combat Ghost (client hôte) | ✅ Terminée (2026-10-06) | Cœur validé à deux comptes, hôte LAN et hôte client pur (2026-10-03) ; puis lobby, formats Smogon, intros, caméra, musique, Méga / Z / Téra, rôle admin, tous validés en jeu par Adrien |
 | 10 | Durcissement et publication | ⏳ Non commencée | Voir §3 |
 
-Adrien a confirmé le fonctionnement en jeu des phases 1 à 8 le 2026-10-03.
+Adrien a confirmé le fonctionnement en jeu des phases 1 à 8 le 2026-10-03, et déclaré la phase 9 terminée le
+2026-10-06. Les TODO restants sont mis en suspens (voir `known-issues.md`) : la plupart concernent la machine de
+production (phase 10), qu'Adrien ne monte pas pour l'instant (il reste sur sa machine de développement).
 
 ## 2. Fonctionnalités disponibles
 

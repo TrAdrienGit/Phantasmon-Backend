@@ -1,7 +1,7 @@
 # CAD Phantasmon — Partie 4 : Plan de développement
 
 > **Statut du document** : plan de développement d'origine. Les phases 0 à 9 sont terminées (cœur de la phase 9
-> le 2026-10-03), la phase 10 n'a pas commencé. Avancement détaillé : [`project/status.md`](../project/status.md).
+> le 2026-10-03, phase close le 2026-10-06), la phase 10 n'a pas commencé. Avancement détaillé : [`project/status.md`](../project/status.md).
 > Document identique dans les dépôts Backend et Client (`Documentation/specifications/`).
 >
 > Le dépôt `phantasmon-docs` cité ci-dessous n'a jamais été créé : la documentation vit dans le dossier
@@ -158,6 +158,8 @@ Chaque phase liste : objectif, livrables, definition of done (DoD).
 ## Phase 9 — Client + Backend : Combat Ghost
 
 > **Note d'implémentation (2026-10-03)** : cœur terminé et validé à deux comptes le 2026-10-03 (hôte sur serveur intégré et hôte client pur, animations d'attaque comprises). Alternance de l'hôte implémentée.
+>
+> **Note (2026-10-06)** : phase close par Adrien, après les ajouts validés en jeu (lobby, formats, intros, caméra, musique, Méga / Z / Téra, administration).
 
 **Objectif** : la phase la plus complexe, volontairement en dernier — tout le reste du système doit déjà être stable.
 

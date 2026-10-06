@@ -144,4 +144,4 @@ en cours ne sont pas en base (LIM-5) : rien à restaurer pour eux.
 - [ ] Sauvegarde planifiée (§3.2) sur la machine qui héberge la base, vers un autre disque ; restauration testée (§3.3).
 - [ ] HTTPS/WSS devant le backend si exposé publiquement.
 - [ ] `phantasmon.version.current` / `min-supported` alignés sur la version publiée du client.
-- [ ] Commande `/phantasmon debug fingerprint` retirée du client.
+- [ ] Commande `/phantasmon admin debug fingerprint` retirée du client (TODO-2).

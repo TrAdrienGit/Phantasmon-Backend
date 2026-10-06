@@ -198,7 +198,7 @@ Pour ajouter une décision : prendre le numéro suivant, dater, et mettre à jou
 - **Décision** : `server_fingerprint` = SHA-256 de l'adresse saisie pour rejoindre le serveur, ou
   `"singleplayer"` pour un monde local.
 - **Conséquences** : lors d'un test « Ouvrir au LAN », l'hôte (`singleplayer`) et l'invité (hash) ne sont pas
-  regroupés. Commande de test `/phantasmon debug fingerprint <valeur>` (persistée dans
+  regroupés. Commande de test `/phantasmon debug fingerprint <valeur>` (devenue `/phantasmon admin debug fingerprint`, D-26 ; persistée dans
   `config/phantasmon-fingerprint-override.txt`) ; à retirer quand un vrai serveur dédié sera utilisé. Derrière un
   proxy (Velocity/BungeeCord), deux serveurs partageant la même adresse seraient fusionnés (limite CAD Partie 2 §4).
 

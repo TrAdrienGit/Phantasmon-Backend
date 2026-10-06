@@ -310,7 +310,7 @@ Il n'existe pas de limite globale de création de Ghost Pokémon.
 
 # 13. Accès au Ghost PC
 
-> **Note d'implémentation (2026-10-03)** : solution de remplacement retenue : touche **P** (modifiable) ou `/phantasmon pc`. Un bloc dans le monde nécessiterait du contenu côté serveur (décision D-12).
+> **Note d'implémentation (2026-10-03)** : solution de remplacement retenue : touche **P** (modifiable) ; la commande `/phantasmon pc` a été retirée le 2026-10-05 (TODO-22, le PC ne s'ouvre plus que par la touche). Un bloc dans le monde nécessiterait du contenu côté serveur (décision D-12).
 
 Le fonctionnement privilégié est l'utilisation d'un véritable bloc de type PC Pokémon dans le monde.
 
@@ -472,7 +472,7 @@ La suppression doit également gérer les références existantes dans les équi
 
 # 21. Présence dans le monde
 
-> **Note d'implémentation (2026-10-03)** : implémenté : touche **O** ou `/phantasmon sendout` fait sortir (ou rappelle) le Pokémon en emplacement 1 de l'équipe, avec les animations de Poké Ball de Cobblemon. Le Ghost suit son propriétaire, se promène quand celui-ci est immobile, et disparaît au rappel, à la mort, au changement de dimension ou à la déconnexion.
+> **Note d'implémentation (2026-10-03)** : implémenté, avec les animations de Poké Ball de Cobblemon. Depuis le 2026-10-05 (TODO-23, TODO-22) : la touche « Cacher l'équipe » de Cobblemon (**O**) affiche l'équipe Phantasm, haut / bas choisit un Ghost et **R** le sort ou le rappelle ; les commandes `sendout` / `recall` et leurs touches ont été retirées. Le Ghost suit son propriétaire, se promène quand celui-ci est immobile, et disparaît au rappel, à la mort, au changement de dimension ou à la déconnexion.
 
 Les Ghost Pokémon peuvent être envoyés dans le monde.
 

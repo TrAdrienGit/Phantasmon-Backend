@@ -115,7 +115,7 @@ On réutilise le mécanisme standard d'authentification Minecraft (celui utilis�
 
 ## 4. Sessions de jeu & regroupement des joueurs
 
-> **Note d'implémentation (2026-10-03)** : implémenté : `server_fingerprint` = SHA-256 de l'adresse du serveur, ou `"singleplayer"` en monde local ; position envoyée chaque seconde. Pour les tests « Ouvrir au LAN », une surcharge de l'empreinte existe (`/phantasmon debug fingerprint`, décision D-18).
+> **Note d'implémentation (2026-10-03)** : implémenté : `server_fingerprint` = SHA-256 de l'adresse du serveur, ou `"singleplayer"` en monde local ; position envoyée chaque seconde. Pour les tests « Ouvrir au LAN », une surcharge de l'empreinte existe (`/phantasmon admin debug fingerprint`, réservée aux admins depuis TODO-25, décision D-18).
 
 Puisque le backend ne sait pas nativement "quel serveur Minecraft" héberge quels joueurs, il faut un mécanisme explicite pour regrouper les joueurs qui doivent se voir mutuellement.
 

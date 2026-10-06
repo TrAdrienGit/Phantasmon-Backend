@@ -17,9 +17,12 @@ Identifiants : `BUG-n` (comportement incorrect), `SEC-n` (sécurité, voir [`sec
 
 ## 2. TODO
 
+> **En suspens (Adrien, 2026-10-06)** : TODO-2, 3, 7 et 16 attendent la machine de production (phase 10) ; TODO-21
+> est un polissage au fil de l'eau ; TODO-27 viendra une fois le but du mod atteint (création de lore).
+
 | ID | Priorité | Dépôt | Action |
 |---|---|---|---|
-| TODO-2 | haute | Client | Retirer `/phantasmon debug fingerprint` quand un vrai serveur dédié remplacera les tests « Ouvrir au LAN » (décision D-18). |
+| TODO-2 | haute | Client | Retirer `/phantasmon admin debug fingerprint` quand un vrai serveur dédié remplacera les tests « Ouvrir au LAN » (décision D-18). |
 | TODO-3 | haute | Client | Remplacer les métadonnées factices : `homepage` / `sources` de `fabric.mod.json` (`github.com/your-account/…`), lien de mise à jour `https://modrinth.com/mod/phantasmon` (`AuthService`). |
 | TODO-7 | moyenne | Machine serveur | Rétablir l'accès SSH (`production-server`) : les déploiements du client retombent sur l'instance locale « Cobblemon 2 ». |
 | TODO-16 | haute | Machine qui héberge la base | Planifier `scripts/backup-database.ps1` (tâche Windows quotidienne, `guides/deployment.md` §3.2) vers un autre disque. **Reporté par Adrien (2026-10-04).** |
@@ -38,11 +41,11 @@ Identifiants : `BUG-n` (comportement incorrect), `SEC-n` (sécurité, voir [`sec
 |---|---|
 | LIM-1 | Un client hôte modifié peut fausser le résultat d'un combat (CAD Partie 2 §9.2, décision D-05). |
 | LIM-2 | Sur un client pur, seules les action effects des jars de mods sont chargées, pas celles des datapacks du monde. |
-| LIM-3 | Cobblemon 1.8.1 ne contient ni Méga-Gemmes, ni Cristaux Z, ni Energy Booster ; le sélecteur d'objets les proposera automatiquement si Cobblemon les ajoute. |
+| LIM-3 | Cobblemon 1.8.1 ne contient ni Méga-Gemmes, ni Cristaux Z, ni Energy Booster. Les Méga-Gemmes viennent de DeltaClient (modpack) et sont reconnues ; les Cristaux Z sont tenus « virtuellement » par les Ghost (TODO-28) ; l'Energy Booster reste indisponible (le sélecteur d'objets le proposera si un mod l'ajoute). |
 | LIM-4 | Le Ghost n'a pas de pathfinding, traverse son propriétaire, et peut apparaître à des positions légèrement différentes selon les clients. |
 | LIM-5 | Instance backend unique : présence, échanges en direct et combats en cours sont en mémoire et perdus au redémarrage. |
 | LIM-6 | Derrière un proxy (Velocity/BungeeCord), deux serveurs partageant la même adresse seraient regroupés (empreinte de serveur). |
-| LIM-7 | L'échange asynchrone par commandes exige l'UUID Mojang de l'autre joueur (l'échange en direct évite ce problème). |
+| LIM-7 | Les échanges ne se font qu'en direct (roue d'interaction, joueur présent) : l'échange asynchrone par commandes a été retiré (TODO-22) ; l'API REST `/trades` existe toujours côté backend, sans interface. |
 | LIM-8 | Pas d'archivage WAL : la restauration revient à la dernière sauvegarde (jusqu'à 24 h de pertes avec une sauvegarde quotidienne). |
 | LIM-9 | Positions visibles par tout le groupe (SEC-6, décision D-21) : quiconque connaît l'adresse d'un serveur peut rejoindre son groupe et recevoir chaque seconde la position des joueurs ayant un Ghost sorti. Assumé pour des serveurs entre joueurs de confiance. |
 | LIM-10 | Ghost contre Pokémon normal (D-22) : la copie d'équipe Cobblemon vient du client du joueur ; elle est bornée et validée comme un Ghost, mais un client modifié pourrait annoncer une équipe qu'il ne possède pas (aucun accès aux données du serveur Minecraft). |

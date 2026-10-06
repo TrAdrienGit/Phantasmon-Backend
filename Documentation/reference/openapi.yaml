@@ -7,13 +7,19 @@ info:
     Minecraft n'appelle cette API).
 
 
-    Ce contrat décrit l'implémentation réelle (vérifiée le 2026-10-03). Le protocole
+    Ce contrat décrit l'implémentation réelle (vérifiée le 2026-10-06). Le protocole
     WebSocket (`/ws`) n'est pas décrit ici : voir `websocket-protocol.md`. Exemples et
     comportements détaillés : `rest-api.md`. Catalogue des erreurs : `error-codes.md`.
 
 
     Conventions : JSON en snake_case ; erreurs métier structurées (`ErrorResponse`) ;
     les erreurs de format (400) aussi : ERROR_VALIDATION_FAILED, ERROR_MALFORMED_REQUEST.
+
+
+    Administration (TODO-25) : un admin est un joueur dont le pseudo de dernière connexion figure
+    dans le fichier `admins.txt` du backend. Les routes `/admin/*` (hors `/admin/me`) lui sont
+    réservées (403 ERROR_ADMIN_REQUIRED) ; il peut aussi lire et modifier le PC de n'importe quel
+    joueur avec les routes Pokémon habituelles.
   version: 0.1.0
   license:
     name: GPL-3.0
@@ -27,6 +33,7 @@ tags:
   - name: Pokémon
   - name: Échanges
   - name: Combats
+  - name: Administration
 
 security:
   - bearerAuth: []
@@ -163,7 +170,15 @@ paths:
     post:
       tags: [Pokémon]
       summary: Crée un Pokémon (idempotent via request_uuid)
-      description: Sans emplacement fourni, le Pokémon va dans la première case libre du PC.
+      description: >
+        Sans emplacement fourni, le Pokémon va dans la première case libre du PC. Un admin peut le créer
+        dans le PC d'un autre joueur avec `owner` (import depuis le PC de ce joueur).
+      parameters:
+        - name: owner
+          in: query
+          required: false
+          description: Propriétaire, s'il n'est pas l'appelant — admins uniquement (sinon 403 ERROR_ADMIN_REQUIRED)
+          schema: { type: string, format: uuid }
       requestBody:
         required: true
         content:
@@ -185,7 +200,7 @@ paths:
   /players/{uuid}/pokemon:
     get:
       tags: [Pokémon]
-      summary: Tous les Pokémon du joueur authentifié (PC et équipe)
+      summary: Tous les Pokémon du joueur authentifié (PC et équipe), ou de n'importe quel joueur pour un admin
       parameters:
         - $ref: "#/components/parameters/PlayerUuid"
       responses:
@@ -415,6 +430,99 @@ paths:
         "404":
           $ref: "#/components/responses/Error"
 
+  /admin/me:
+    get:
+      tags: [Administration]
+      summary: L'appelant est-il admin ?
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [admin]
+                properties:
+                  admin: { type: boolean }
+
+  /admin/players/{name}:
+    get:
+      tags: [Administration]
+      summary: Joueur Phantasmon par pseudo (dernier pseudo connu, insensible à la casse)
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminPlayer"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          description: ERROR_PLAYER_NOT_FOUND
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /admin/battles/stop:
+    post:
+      tags: [Administration]
+      summary: Arrête le combat (match nul, raison ADMIN_STOPPED) ou annule le lobby d'un joueur
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [player]
+              properties:
+                player: { type: string, description: Pseudo d'un des deux joueurs }
+      responses:
+        "200":
+          description: Arrêté
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [stopped, player]
+                properties:
+                  stopped: { type: string, enum: [BATTLE, LOBBY] }
+                  player: { type: string }
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          description: ERROR_PLAYER_NOT_FOUND ou ERROR_ADMIN_NOTHING_TO_STOP
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /admin/reboot:
+    post:
+      tags: [Administration]
+      summary: Redémarre le backend dans le même processus
+      description: >
+        Le contexte Spring est fermé puis relancé une demi-seconde après la réponse ; les combats
+        en cours se terminent en match nul (BACKEND_LOST), les clients se reconnectent seuls.
+      responses:
+        "202":
+          description: Redémarrage lancé
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [rebooting]
+                properties:
+                  rebooting: { type: boolean, example: true }
+        "403":
+          $ref: "#/components/responses/Error"
+
 components:
   securitySchemes:
     bearerAuth:
@@ -427,7 +535,7 @@ components:
       name: uuid
       in: path
       required: true
-      description: Doit être le joueur authentifié (sinon 403 ERROR_OWNERSHIP_MISMATCH)
+      description: Doit être le joueur authentifié, sauf pour un admin (sinon 403 ERROR_OWNERSHIP_MISMATCH)
       schema: { type: string, format: uuid }
     PokemonUuid:
       name: uuid
@@ -573,6 +681,13 @@ components:
         status:
           type: string
           enum: [PENDING, ACCEPTED, CANCELLED, COMPLETED]
+
+    AdminPlayer:
+      type: object
+      required: [uuid, name]
+      properties:
+        uuid: { type: string, format: uuid }
+        name: { type: string }
 
     BattleSession:
       type: object
