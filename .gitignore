@@ -72,3 +72,6 @@ docker-compose.override.yml
 /backups/
 *.dump
 *.dump.partial
+
+# Cached Pokémon Showdown data (battle formats, downloaded at startup)
+showdown-data/

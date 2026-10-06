@@ -695,4 +695,76 @@ class LiveBattleWebSocketIntegrationTest {
 		assertThat(battleTimer.get("by_name").asString()).isEqualTo("Bob");
 		await(bob, "BattleTimerEnabled");
 	}
+
+	// ---- Battle formats (TODO-24) ----
+
+	private static void setFormat(WebSocketSession session, String lobby, String format) throws Exception {
+		send(session, "BattleLobbySetFormat", "{\"lobby_uuid\":\"" + lobby + "\",\"format_id\":\"" + format + "\"}");
+	}
+
+	/** Next lobby view whose format is {@code format} (earlier updates are skipped). */
+	private JsonNode awaitFormat(RecordingHandler handler, String format) throws Exception {
+		JsonNode view = await(handler, "BattleLobbyUpdated");
+		while (!format.equals(view.get("format_id").asString())) {
+			view = await(handler, "BattleLobbyUpdated");
+		}
+		return view;
+	}
+
+	@Test
+	void theLobbyOffersTheFormatsAndStartsFree() throws Exception {
+		teamMember(aliceUuid, "garchomp", 1);
+		teamMember(bobUuid, "blissey", 1);
+
+		JsonNode view = openLobby(aliceSession, alice, bobUuid, bobSession, bob);
+
+		assertThat(view.get("format_id").asString()).isEqualTo("free");
+		assertThat(view.get("formats")).hasSize(20);
+		assertThat(view.get("formats").get(1).get("id").asString()).isEqualTo("gen9nationaldex");
+		assertThat(view.get("own_team_issues").get(0)).isEmpty();
+	}
+
+	@Test
+	void eitherPlayerPicksTheFormatAndBrokenRulesAreShownAndBlockReady() throws Exception {
+		teamMember(aliceUuid, "mewtwo", 1);
+		teamMember(bobUuid, "garchomp", 1);
+		String lobby = openLobby(aliceSession, alice, bobUuid, bobSession, bob).get("lobby_uuid").asString();
+		setReady(bobSession, lobby, true);
+
+		setFormat(bobSession, lobby, "gen9nationaldex");
+
+		JsonNode aliceView = awaitFormat(alice, "gen9nationaldex");
+		assertThat(aliceView.get("own_team_issues").get(0).get(0).get("code").asString()).isEqualTo("BANNED");
+		JsonNode bobView = awaitFormat(bob, "gen9nationaldex");
+		assertThat(bobView.get("own_ready").asBoolean()).as("a new format: everyone looks again").isFalse();
+		assertThat(bobView.get("opponent_team_flags").get(0).asBoolean()).as("circled in red, reason not shown").isTrue();
+		assertThat(bobView.toString()).doesNotContain("opponent_team_issues");
+
+		setReady(aliceSession, lobby, true);
+		assertThat(await(alice, "BattleSessionError").get("error_code").asString()).isEqualTo("ERROR_BATTLE_TEAM_NOT_ALLOWED");
+
+		setFormat(aliceSession, lobby, "gen42ultra");
+		assertThat(await(alice, "BattleSessionError").get("error_code").asString()).isEqualTo("ERROR_BATTLE_UNKNOWN_FORMAT");
+	}
+
+	@Test
+	void theBattleCarriesTheFormatAndA1v1SendsOnlyTheLead() throws Exception {
+		teamMember(aliceUuid, "garchomp", 1);
+		teamMember(aliceUuid, "blissey", 2);
+		teamMember(bobUuid, "hippowdon", 1);
+		String lobby = openLobby(aliceSession, alice, bobUuid, bobSession, bob).get("lobby_uuid").asString();
+		setFormat(aliceSession, lobby, "gen9nationaldex1v1");
+		awaitFormat(alice, "gen9nationaldex1v1");
+		setLead(aliceSession, lobby, 1);
+		readyBoth(lobby);
+
+		JsonNode start = await(alice, "BattleSessionStarted");
+		JsonNode format = start.get("format");
+		assertThat(format.get("id").asString()).isEqualTo("gen9nationaldex1v1");
+		assertThat(format.get("adjust_level").asInt()).isEqualTo(100);
+		assertThat(start.get("own_team")).as("1v1: the lead alone").hasSize(1);
+		assertThat(start.get("own_team").get(0).get("species").asString()).isEqualTo("blissey");
+		assertThat(start.get("opponent_team")).hasSize(1);
+	}
 }
+

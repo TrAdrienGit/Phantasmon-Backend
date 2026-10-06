@@ -18,6 +18,8 @@ import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
+import com.mystaria.phantasmon_backend.battle.format.BattleFormats;
+import com.mystaria.phantasmon_backend.battle.format.TeamValidator;
 import com.mystaria.phantasmon_backend.player.Player;
 import com.mystaria.phantasmon_backend.player.PlayerService;
 import com.mystaria.phantasmon_backend.pokemon.PokemonResponse;
@@ -71,9 +73,11 @@ public class LiveBattleService {
 	private final Clock clock;
 	private final Duration inviteTtl;
 	private final Duration lobbyTimer;
+	private final com.mystaria.phantasmon_backend.battle.format.ShowdownDataSource showdown;
 
 	public LiveBattleService(BattleRepository battleRepository, PokemonService pokemonService, PlayerService playerService,
 			SessionRegistry sessionRegistry, GhostRecall ghostRecall, CobblemonPartyParser partyParser, Clock clock,
+			com.mystaria.phantasmon_backend.battle.format.ShowdownDataSource showdown,
 			@Value("${phantasmon.battle.invite-ttl:PT60S}") Duration inviteTtl,
 			@Value("${phantasmon.battle.lobby-timer:PT150S}") Duration lobbyTimer) {
 		this.battleRepository = battleRepository;
@@ -85,6 +89,7 @@ public class LiveBattleService {
 		this.clock = clock;
 		this.inviteTtl = inviteTtl;
 		this.lobbyTimer = lobbyTimer;
+		this.showdown = showdown;
 	}
 
 	private record Invite(UUID uuid, UUID inviterUuid, UUID inviteeUuid, Instant createdAt, BattleTeam inviterTeam) {
@@ -124,6 +129,8 @@ public class LiveBattleService {
 		/** Lobby timer: null while off. */
 		Instant deadline;
 		UUID timerBy;
+		/** Battle format, picked by either player (TODO-24); "free" = no rule. */
+		String formatId = BattleFormats.FREE;
 
 		Lobby(UUID uuid, UUID inviterUuid, UUID inviteeUuid) {
 			this.uuid = uuid;
@@ -274,6 +281,54 @@ public class LiveBattleService {
 		sendLobby(lobby, lobby.other(playerUuid));
 	}
 
+	/**
+	 * Battle format (TODO-24): either player picks it, for both. Everyone is unreadied — what the teams may contain
+	 * changed. Unknown id: {@code ERROR_BATTLE_UNKNOWN_FORMAT}.
+	 */
+	public synchronized void setLobbyFormat(UUID playerUuid, UUID lobbyUuid, String formatId) {
+		Lobby lobby = lobbyOf(playerUuid, lobbyUuid);
+		if (lobby == null) {
+			return;
+		}
+		if (showdown.formats().get(formatId) == null) {
+			sendError(playerUuid, "ERROR_BATTLE_UNKNOWN_FORMAT");
+			return;
+		}
+		if (formatId.equals(lobby.formatId)) {
+			return;
+		}
+		lobby.formatId = formatId;
+		lobby.inviterSide.ready = false;
+		lobby.inviteeSide.ready = false;
+		log.info("Live battle lobby {}: format {} picked by {}", lobby.uuid, formatId, playerUuid);
+		sendLobby(lobby, playerUuid);
+		sendLobby(lobby, lobby.other(playerUuid));
+	}
+
+	private BattleFormats.Format format(Lobby lobby) {
+		BattleFormats.Format format = showdown.formats().get(lobby.formatId);
+		return format != null ? format : showdown.formats().get(BattleFormats.FREE);
+	}
+
+	/** Per member of {@code team}: the rules of the lobby's format it breaks (empty = fine). */
+	private List<List<TeamValidator.Issue>> issues(Lobby lobby, List<PokemonResponse> team) {
+		List<TeamValidator.Member> members = team.stream().map(LiveBattleService::member).toList();
+		return showdown.validator().validate(format(lobby), members);
+	}
+
+	private static boolean breaksRules(List<List<TeamValidator.Issue>> issues) {
+		return issues.stream().anyMatch(list -> !list.isEmpty());
+	}
+
+	private static TeamValidator.Member member(PokemonResponse pokemon) {
+		Map<String, Object> data = pokemon.data() == null ? Map.of() : pokemon.data();
+		List<String> moves = data.get("moves") instanceof List<?> list ? list.stream().map(String::valueOf).toList() : List.of();
+		Object item = data.get("held_item");
+		Object nickname = data.get("nickname");
+		return new TeamValidator.Member(pokemon.species(), pokemon.form(), pokemon.ability(),
+				item == null ? null : item.toString(), moves, nickname == null ? null : nickname.toString());
+	}
+
 	/** Picks the lead. Only the player is told: the opponent must not learn it, nor even that it changed. */
 	public synchronized void setLobbyLead(UUID playerUuid, UUID lobbyUuid, Integer index) {
 		Lobby lobby = lobbyOf(playerUuid, lobbyUuid);
@@ -300,6 +355,10 @@ public class LiveBattleService {
 		LobbySide side = lobby.side(playerUuid);
 		if (ready && side.team.isEmpty()) {
 			sendError(playerUuid, "ERROR_BATTLE_EMPTY_TEAM");
+			return;
+		}
+		if (ready && breaksRules(issues(lobby, side.team))) {
+			sendError(playerUuid, "ERROR_BATTLE_TEAM_NOT_ALLOWED");
 			return;
 		}
 		side.ready = ready;
@@ -343,6 +402,10 @@ public class LiveBattleService {
 			}
 			if (lobby.inviterSide.team.isEmpty() || lobby.inviteeSide.team.isEmpty()) {
 				cancelLobby(lobby, "EMPTY_TEAM", null);
+				continue;
+			}
+			if (breaksRules(issues(lobby, lobby.inviterSide.team)) || breaksRules(issues(lobby, lobby.inviteeSide.team))) {
+				cancelLobby(lobby, "TEAM_NOT_ALLOWED", null);
 				continue;
 			}
 			for (LobbySide side : List.of(lobby.inviterSide, lobby.inviteeSide)) {
@@ -390,6 +453,15 @@ public class LiveBattleService {
 		data.put("timer_seconds_left", lobby.deadline == null ? null
 				: Math.max(0, Duration.between(clock.instant(), lobby.deadline).plusMillis(999).toSeconds()));
 		data.put("timer_by_name", lobby.timerBy == null ? null : nameOf(lobby.timerBy));
+		// Format (TODO-24): the offered list, the picked one, what breaks it — in detail for one's own team, only a
+		// red circle for the opponent's (its items and moves stay hidden).
+		data.put("format_id", lobby.formatId);
+		data.put("formats", showdown.formats().offered().stream()
+				.map(format -> Map.of("id", format.id(), "name", format.name())).toList());
+		data.put("own_team_issues", issues(lobby, own.team).stream()
+				.map(list -> list.stream().map(issue -> Map.of("code", issue.code(), "subject", issue.subject())).toList())
+				.toList());
+		data.put("opponent_team_flags", issues(lobby, opponent.team).stream().map(list -> !list.isEmpty()).toList());
 		sessionRegistry.send(viewerUuid, WsMessage.of("BattleLobbyUpdated", data));
 	}
 
@@ -439,6 +511,19 @@ public class LiveBattleService {
 			cancelLobby(lobby, "EMPTY_TEAM", null);
 			return;
 		}
+		// Ghosts are re-read here: a team changed since "ready" is checked again.
+		if (breaksRules(issues(lobby, inviterTeam)) || breaksRules(issues(lobby, inviteeTeam))) {
+			cancelLobby(lobby, "TEAM_NOT_ALLOWED", null);
+			return;
+		}
+		BattleFormats.Format format = format(lobby);
+		if (format.pickedTeamSize() > 0) {
+			// 1v1: only the lead (first after battleTeam's reordering) goes into the battle.
+			inviterTeam = inviterTeam.subList(0, Math.min(format.pickedTeamSize(), inviterTeam.size()));
+			inviteeTeam = inviteeTeam.subList(0, Math.min(format.pickedTeamSize(), inviteeTeam.size()));
+		}
+		Map<String, Object> formatData = Map.of("id", format.id(), "name", format.name(),
+				"battle_rules", format.battleRules(), "adjust_level", format.adjustLevel());
 		lobbiesByPlayer.remove(inviterUuid);
 		lobbiesByPlayer.remove(inviteeUuid);
 
@@ -461,11 +546,12 @@ public class LiveBattleService {
 				"battle_uuid", battle.uuid, "role", "HOST",
 				"opponent_uuid", guestUuid, "opponent_name", nameOf(guestUuid),
 				"own_team", hostTeam, "opponent_team", guestTeam,
-				"own_team_source", hostSource, "opponent_team_source", guestSource)));
+				"own_team_source", hostSource, "opponent_team_source", guestSource, "format", formatData)));
 		sessionRegistry.send(guestUuid, WsMessage.of("BattleSessionStarted", Map.of(
 				"battle_uuid", battle.uuid, "role", "GUEST",
 				"opponent_uuid", hostUuid, "opponent_name", nameOf(hostUuid),
-				"own_team", guestTeam, "own_team_source", guestSource, "opponent_team_source", hostSource)));
+				"own_team", guestTeam, "own_team_source", guestSource, "opponent_team_source", hostSource,
+				"format", formatData)));
 		ghostRecall.recall(hostUuid, "battle started");
 		ghostRecall.recall(guestUuid, "battle started");
 		if (lobby.timerBy != null) {

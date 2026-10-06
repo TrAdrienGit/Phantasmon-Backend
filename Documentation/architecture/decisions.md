@@ -37,6 +37,7 @@ Pour ajouter une décision : prendre le numéro suivant, dater, et mettre à jou
 | D-22 | Ghost contre Pokémon normal = copie de l'équipe Cobblemon d'un joueur | Acceptée | 2026-10-04 |
 | D-23 | Lobby de combat (aperçu d'équipe, lead caché) avant chaque combat en direct | Acceptée | 2026-10-04 |
 | D-24 | Échanges et combats uniquement par la roue, PC uniquement par sa touche | Acceptée | 2026-10-05 |
+| D-25 | Formats de combat : règles de Pokémon Showdown, vérifiées par le backend | Acceptée | 2026-10-06 |
 
 ---
 
@@ -261,3 +262,17 @@ Pour ajouter une décision : prendre le numéro suivant, dater, et mettre à jou
   `trade join|decline` et `battle join|decline|timer` restent, uniquement pour les boutons cliquables du chat
   (choix d'Adrien). L'échange asynchrone par commandes est retiré du client ; l'API REST reste.
 - **Conséquences** : touches G et B supprimées ; il faut être assez près de l'autre joueur pour ouvrir la roue sur lui.
+
+## D-25 — Formats de combat : règles de Pokémon Showdown, vérifiées par le backend
+
+- **Contexte** : TODO-24 (étude `research/smogon-regulations.md` côté client). Pas d'API Smogon ; Pokémon Showdown
+  publie ses formats, tiers et données en JavaScript public (licence MIT).
+- **Décision (Adrien)** : dans le lobby, les deux joueurs choisissent ensemble un format parmi 20 : « Libre » (défaut,
+  sans règle) puis 8 formats National Dex et 11 formats Gen 9 en simple (OU, Ubers, UU, RU, NU, PU, ZU, LC, Monotype,
+  1v1, Anything Goes). Le backend télécharge les données de Showdown à chaque démarrage (mise à jour journalisée,
+  copie en cache, copie de secours livrée), résout les règles comme Showdown et vérifie les équipes ; les Pokémon qui
+  enfreignent le format sont entourés en rouge et « Prêt » est refusé. Les règles que le moteur applique lui-même
+  (Sleep Clause Mod, Terastal Clause…) et le niveau du format (100, 5 en LC ; choix de Claude, Adrien n'ayant pas
+  tranché) sont transmis à l'hôte. En 1v1, seul le lead combat.
+- **Limites** : sous-ensemble du validateur de Showdown — les movesets ne sont pas revérifiés contre les learnsets,
+  les bannissements combinés (« A + B ») sont ignorés.
