@@ -28,6 +28,9 @@ Identifiants : `BUG-n` (comportement incorrect), `SEC-n` (sécurité, voir [`sec
 | TODO-16 | haute | Machine qui héberge la base | Planifier `scripts/backup-database.ps1` (tâche Windows quotidienne, `guides/deployment.md` §3.2) vers un autre disque. **Reporté par Adrien (2026-10-04).** |
 | TODO-21 | basse | Client | Effets sonores : premiers sons faits (PC, boutons de confirmation, journal §4.87) embarqués dans le mod (`assets/phantasmon/sounds/sfx/`) ; d'autres à venir selon Adrien. |
 | TODO-27 | basse | Client + Backend | Combats scénarisés : combats uniques préparés par l'admin (maître du jeu) — musique, intro, effets pendant le match choisis à l'avance. |
+| TODO-29 | basse | Client + Backend | Network : Hubs privés (Anchor ou Hub réservé à un groupe, par code d'invitation). Jalon 1 = un seul Hub public (cahier des charges Network §5.3). |
+| TODO-30 | basse | Backend | Network : instances multiples du Hub au-delà de 50 joueurs (aujourd'hui : refus `ERROR_HUB_FULL`). |
+| TODO-31 | moyenne | Client + Backend | Network : outils de modération du chat du Hub pour les admins (rendre muet, exclure du Hub) ; jalon 1 = longueur, débit, journalisation seulement. |
 
 ## 3. Dette technique
 

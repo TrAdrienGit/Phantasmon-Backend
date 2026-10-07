@@ -32,6 +32,7 @@ Organisation **par domaine** (pas par couche technique). Racine : `com.mystaria.
 | `battle` | Sessions de combat REST et combats en direct (invitation, hôte, relais, chrono, résultat) | `BattleController`, `BattleService`, `LiveBattleService`, `BattleSession` |
 | `presence` | Présence en mémoire, regroupement par empreinte + dimension, Ghost actif | `PresenceService`, `PlayerPresence`, `Position` |
 | `websocket` | Authentification du handshake, dispatch des messages, registre des sessions, balayage TTL | `PhantasmonWebSocketHandler`, `JwtHandshakeInterceptor`, `SessionRegistry`, `PresenceTtlSweeper`, `GhostRecall`, `WsMessage` |
+| `hub` | Phantasmon Network : Hub Anchors (un par joueur, nom unique par serveur, suppression par créateur ou admin) et Global Hub en mémoire (capacité, avatars, anti-doublon même serveur, chat) | `HubAnchorController`, `HubAnchorService`, `HubAnchor`, `HubService` |
 | `version` | Handshake de version client | `VersionController` |
 | `health` | Sonde `GET /health` (test réel de la base) | `HealthController` |
 | `logging` | Un fichier de log par démarrage, rétention 5 Gio, log de chaque requête REST | `SessionLogFileEnvironmentPostProcessor`, `LogRetentionService`, `RequestLoggingFilter` |

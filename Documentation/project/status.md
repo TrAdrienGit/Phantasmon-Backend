@@ -27,6 +27,20 @@ Adrien a confirmé le fonctionnement en jeu des phases 1 à 8 le 2026-10-03, et 
 2026-10-06. Les TODO restants sont mis en suspens (voir `known-issues.md`) : la plupart concernent la machine de
 production (phase 10), qu'Adrien ne monte pas pour l'instant (il reste sur sa machine de développement).
 
+**2026-10-07 — Core déclaré terminé par Adrien.** Seul du polish (UI, VFX, SFX, animations) continue sur `dev`.
+Le projet passe à **Phantasmon Network** (couche inter-serveurs), développé directement sur `dev`
+([D-27](../architecture/decisions.md#d-27--phantasmon-network-développé-sur-dev)) selon
+[`specifications/network-cahier-des-charges.md`](../specifications/network-cahier-des-charges.md).
+
+| Étape Network | Périmètre | Statut |
+|---|---|---|
+| N0 | Cahier des charges, décisions D-27 à D-29 | ✅ Validé par Adrien (2026-10-07) |
+| N1 | Backend : Hub Anchors (V11, REST, quotas, droits) | ✅ Terminée (2026-10-07) : `hub/`, `V11`, 8 tests d'intégration ; docs de référence à jour |
+| N2 | Backend : `HubService` (capacité 50, `HubJoin` / `HubMove`, chat, TTL) | ✅ Terminée (2026-10-07) : 7 tests WebSocket réels (2 empreintes, capacité, anti-doublon, chat, sorties) |
+| N3 | Client : commandes et affichage des Anchors, consentement, transformation de coordonnées, chat | ⏳ Non commencée |
+| N4 | Client : avatars des joueurs distants | ⏳ Non commencée |
+| N5 | Les deux : Ghost dans le Hub ; validation du jalon 1 en jeu | ⏳ Non commencée |
+
 ## 2. Fonctionnalités disponibles
 
 | Domaine | Fonctionnalité | Accès joueur |
@@ -65,7 +79,7 @@ Suivis dans [`known-issues.md`](known-issues.md) (identifiants `BUG-n`, `TODO-n`
 
 | | Backend | Client |
 |---|---|---|
-| Tests automatisés | ~127 méthodes `@Test` (JUnit 5 + Testcontainers) | 40 méthodes `@Test` (logique pure) |
-| Migrations Flyway | V1 à V8 | — |
+| Tests automatisés | 197 tests (JUnit 5 + Testcontainers, 2026-10-07) | 40 méthodes `@Test` (logique pure) |
+| Migrations Flyway | V1 à V11 | — |
 | Mixins | — | 7 |
 | Langues | — | `fr_fr`, `en_us` (~224 clés) |

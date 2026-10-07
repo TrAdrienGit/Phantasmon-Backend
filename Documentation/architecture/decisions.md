@@ -39,6 +39,9 @@ Pour ajouter une décision : prendre le numéro suivant, dater, et mettre à jou
 | D-24 | Échanges et combats uniquement par la roue, PC uniquement par sa touche | Acceptée | 2026-10-05 |
 | D-25 | Formats de combat : règles de Pokémon Showdown, vérifiées par le backend | Acceptée | 2026-10-06 |
 | D-26 | Rôle administrateur : fichier de pseudos, commandes client, contrôles côté backend | Acceptée | 2026-10-06 |
+| D-27 | Phantasmon Network développé sur `dev` | Acceptée | 2026-10-07 |
+| D-28 | Hub Anchors créables par tout joueur | Acceptée | 2026-10-07 |
+| D-29 | Entrée dans le Global Hub sur consentement explicite | Acceptée | 2026-10-07 |
 
 ---
 
@@ -290,3 +293,35 @@ Pour ajouter une décision : prendre le numéro suivant, dater, et mettre à jou
   passent par les règles normales du service, au nom du propriétaire. Redémarrage dans le même processus (le backend
   est lancé à la main, sans superviseur pour le relancer).
 - **Conséquence** : un pseudo est réattribuable après un changement de nom Mojang ; tenir le fichier à jour.
+
+## D-27 — Phantasmon Network développé sur `dev`
+
+- **Contexte** : Adrien déclare le Core terminé (2026-10-07) ; seul du polish UI / VFX / SFX / animations continue.
+  La note de recherche `Phantasmon_Evolution_InterServeurs.md` prévoyait un « fork » pour expérimenter Network sans
+  déstabiliser le Core.
+- **Décision (Adrien)** : ni nouveaux dépôts, ni branche dédiée ; Network est développé directement sur `dev`, dans
+  `Phantasmon-Client` et `Phantasmon-Backend`, en même temps que le polish du Core.
+- **Conséquences** : pas de fusion ni de report entre branches. Network arrive sur `dev` par étapes ; tant
+  qu'aucun Anchor n'existe, il ne change rien au comportement du Core, donc aucun interrupteur n'est prévu. Chaque
+  étape doit laisser `dev` compilable et ses tests verts. Cahier des charges :
+  [`specifications/network-cahier-des-charges.md`](../specifications/network-cahier-des-charges.md).
+
+## D-28 — Hub Anchors créables par tout joueur
+
+- **Contexte** : sans mod serveur, rien ne permet de vérifier qu'un joueur a le droit de poser un point d'accès au
+  Global Hub sur un serveur donné.
+- **Décision (Adrien)** : tout joueur authentifié peut créer un Anchor, sans rôle particulier, mais **un seul**.
+- **Garde-fous** : un Anchor par joueur, nom unique par serveur, suppression par le créateur ou par un admin
+  (D-26), entrée dans le Hub uniquement sur consentement (D-29).
+- **Limite assumée** : le backend ne peut pas vérifier que le créateur se trouvait réellement sur ce serveur à cette
+  position.
+
+## D-29 — Entrée dans le Global Hub sur consentement explicite
+
+- **Contexte** : conséquence de D-28 ; un Anchor posé par un inconnu ne doit pas suffire à diffuser la présence des
+  joueurs qui le traversent.
+- **Décision (proposée par Claude, retenue dans le cahier des charges Network)** : entrer dans un Anchor affiche une
+  invitation ; le joueur rejoint le Hub seulement s'il accepte, ou s'il a activé l'acceptation automatique pour cet
+  Anchor.
+- **Conséquence** : aucune position n'est transmise au Hub sans action du joueur ; le Hub ne transmet que des
+  coordonnées relatives à l'Anchor, jamais l'adresse du serveur.

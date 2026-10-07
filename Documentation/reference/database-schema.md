@@ -25,6 +25,7 @@ erDiagram
     PLAYERS ||--o{ BATTLE_SESSIONS : "joue (a / b)"
     PLAYERS |o--o{ BATTLE_SESSIONS : "héberge (V8)"
     POKEMON |o..o{ TRADES : "offert / demandé (historique, sans FK depuis V7)"
+    PLAYERS ||--o| HUB_ANCHORS : "crée (V11, un au plus)"
 
     PLAYERS {
         uuid uuid PK
@@ -71,6 +72,18 @@ erDiagram
         timestamptz created_at
         timestamptz finished_at
     }
+    HUB_ANCHORS {
+        uuid uuid PK
+        uuid owner_uuid FK "unique"
+        varchar name
+        varchar server_fingerprint
+        varchar dimension
+        double origin_x
+        double origin_y
+        double origin_z
+        smallint yaw
+        timestamptz created_at
+    }
     IDEMPOTENCY_KEYS {
         uuid request_uuid PK
         uuid player_uuid "sans FK"
@@ -80,8 +93,8 @@ erDiagram
     }
 ```
 
-5 tables : `players`, `pokemon`, `trades`, `battle_sessions`, `idempotency_keys` (plus la table technique
-`flyway_schema_history`). Pas de table `teams` (l'équipe est `pokemon.team_slot`), pas de table de présence.
+6 tables : `players`, `pokemon`, `trades`, `battle_sessions`, `idempotency_keys`, `hub_anchors` (plus la table
+technique `flyway_schema_history`). Pas de table `teams` (l'équipe est `pokemon.team_slot`), pas de table de présence.
 
 ## 3. `players`
 
@@ -215,6 +228,25 @@ Journal technique anti-doublon des `POST` sensibles.
 
 Index : `idx_idempotency_player_endpoint` (`player_uuid`, `endpoint`).
 
+## 7 bis. `hub_anchors` (Phantasmon Network, V11)
+
+Points d'accès au Global Hub posés par les joueurs sur leur serveur
+([`network-cahier-des-charges.md`](../specifications/network-cahier-des-charges.md) §5.2, D-28).
+
+| Colonne | Type | Contraintes | Notes |
+|---|---|---|---|
+| `uuid` | UUID | PK | Généré par le backend |
+| `owner_uuid` | UUID | NOT NULL, FK `players` `ON DELETE RESTRICT`, **unique** | Un Anchor par joueur (`uq_hub_anchor_owner`) |
+| `name` | VARCHAR(32) | NOT NULL | Unique par serveur, casse ignorée (`uq_hub_anchor_server_name` sur `server_fingerprint`, `lower(name)`) |
+| `server_fingerprint` | VARCHAR(128) | NOT NULL | Empreinte du serveur (D-18), jamais l'adresse |
+| `dimension` | VARCHAR(128) | NOT NULL | |
+| `origin_x`, `origin_y`, `origin_z` | DOUBLE PRECISION | NOT NULL | Pieds du créateur ; centre du cube en `x` / `z`, base en `y` |
+| `yaw` | SMALLINT | NOT NULL, ∈ {0, 90, 180, 270} | Arrondi au quart de tour |
+| `created_at` | TIMESTAMPTZ | NOT NULL, défaut `now()` | |
+
+Index : `idx_hub_anchor_server_dimension` (`server_fingerprint`, `dimension`). La taille du cube n'est pas stockée :
+elle est commune à tous les Anchors (`phantasmon.hub.anchor-size`).
+
 ## 8. État hors base
 
 | Structure | Service | Contenu |
@@ -222,6 +254,7 @@ Index : `idx_idempotency_player_endpoint` (`player_uuid`, `endpoint`).
 | `PlayerPresence` | `PresenceService` | `player_uuid`, `server_fingerprint`, `dimension`, `position`, `last_heartbeat_at`, `active_ghost_pokemon_uuid` (un seul Ghost sorti à la fois) |
 | Sessions d'échange en direct | `LiveTradeService` | Participants, offres, drapeaux « prêt », invitations |
 | Combats en cours | `LiveBattleService` | Hôte, invité, chrono, invitations |
+| Membres du Global Hub | `HubService` | Anchor d'entrée, empreinte et dimension, dernier état d'avatar (coordonnées Hub), dernier message de chat |
 
 Tout est perdu au redémarrage du backend (comportement voulu) et n'est pas partagé entre instances.
 
@@ -239,6 +272,7 @@ Tout est perdu au redémarrage du backend (comportement voulu) et n'est pas part
 | V8 | `V8__battle_sessions_host.sql` | 2026-10-03 | Colonne `battle_sessions.host_uuid` et son index |
 | V9 | `V9__pokemon_data_snake_case_keys.sql` | 2026-10-04 | Clés de `pokemon.data` en snake_case : `heldItem` → `held_item`, `teraType` → `tera_type`, aussi dans les réponses mémorisées de `idempotency_keys` (DEBT-1). Rejouable ; aucune autre donnée modifiée (vérifié sur une copie des données réelles : 25 et 10 Pokémon concernés) |
 | V10 | `V10__pokemon_hidden_power_single_id.sql` | 2026-10-04 | Dans `data.moves`, les identifiants de variantes `hiddenpower<type>` (importés avant la correction de l'import) deviennent `hiddenpower`, seule capacité Puissance Cachée de Cobblemon (type tiré des IV). Ordre et autres capacités conservés ; rejouable. 1 Pokémon concerné dans les données réelles (`hiddenpowerice`) |
+| V11 | `V11__init_hub_anchors.sql` | 2026-10-07 | Phantasmon Network (N1) : table `hub_anchors`, un Anchor par joueur, nom unique par serveur |
 
 ## 10. Décisions de schéma
 

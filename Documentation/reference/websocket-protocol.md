@@ -4,7 +4,7 @@
 > met à jour ce fichier dans le même changement. Vérifié contre le code le 2026-10-03.
 >
 > Implémentation : `websocket.PhantasmonWebSocketHandler` (dispatch), `presence.PresenceService`,
-> `trade.LiveTradeService`, `battle.LiveBattleService`. Côté client : `ghost.GhostSession`.
+> `trade.LiveTradeService`, `battle.LiveBattleService`, `hub.HubService`. Côté client : `ghost.GhostSession`.
 
 ## 1. Connexion
 
@@ -35,7 +35,7 @@ Les UUID sont des chaînes. Les noms de champs de `data` sont en snake_case.
 
 | Message | Usage |
 |---|---|
-| `Error` `{ "error_code", "details" }` | Erreurs génériques : `ERROR_WS_MALFORMED_MESSAGE` (JSON illisible ou champ manquant), `ERROR_WS_UNKNOWN_MESSAGE_TYPE`, et refus de `SendOutGhost` |
+| `Error` `{ "error_code", "details" }` | Erreurs génériques : `ERROR_WS_MALFORMED_MESSAGE` (JSON illisible ou champ manquant), `ERROR_WS_UNKNOWN_MESSAGE_TYPE`, refus de `SendOutGhost` et des messages `Hub*` |
 | `TradeSessionError` `{ "error_code" }` | Refus d'une action d'échange en direct (la session continue) |
 | `BattleSessionError` `{ "error_code" }` | Refus d'une action de combat en direct |
 
@@ -193,6 +193,44 @@ Envoyés par `TradeService` après les appels REST, uniquement aux joueurs conne
 | `TradeProposed` | `{ "trade_uuid", "initiator_uuid", "offered_pokemon", "requested_pokemon" }` | Destinataire de `POST /trades` |
 | `TradeAccepted` | `{ "trade_uuid" }` | Les deux, après `POST /trades/{uuid}/accept` |
 | `TradeCancelled` | `{ "trade_uuid" }` | Les deux, après `POST /trades/{uuid}/cancel` |
+
+## 6 bis. Global Hub (Phantasmon Network)
+
+Étape N2 de [`network-cahier-des-charges.md`](../specifications/network-cahier-des-charges.md) (§5.3 à §5.8).
+Implémentation : `hub.HubService` (mémoire, comme la présence). Un seul Hub public, au plus `phantasmon.hub.capacity`
+joueurs (50). On y entre par un Hub Anchor ([`rest-api.md`](rest-api.md#hub-anchors-phantasmon-network)) du serveur
+et de la dimension de sa présence. Les positions du Hub sont **relatives à l'Anchor** : jamais de coordonnées réelles
+ni d'adresse de serveur.
+
+**Visibilité** : deux membres sur la même empreinte **et** la même dimension se voient déjà pour de vrai dans
+Minecraft ; le backend ne leur envoie ni l'avatar ni les mouvements de l'autre (`HubJoined`, `HubPlayerEnter`,
+`HubPlayerMove`, `HubPlayerLeave`). Le chat, lui, va à tous les membres.
+
+| C2S | `data` | Effet |
+|---|---|---|
+| `HubJoin` | `{ "anchor_uuid" }` | Entre dans le Hub. Refus : `ERROR_WS_MALFORMED_MESSAGE` (UUID absent ou invalide), `ERROR_HUB_ANCHOR_NOT_FOUND`, `ERROR_HUB_ANCHOR_WRONG_SERVER` (pas de `JoinServerGroup`, ou Anchor d'un autre serveur ou d'une autre dimension), `ERROR_HUB_FULL` (`details.capacity`). Déjà membre : sortie puis entrée par le nouvel Anchor. |
+| `HubLeave` | `{}` | Sort du Hub ; répond `HubLeft` `LEFT` |
+| `HubMove` | `{ "x", "z", "y_offset", "yaw", "head_yaw", "pitch", "pose", "on_ground" }` | Nouvel état de l'avatar. `x`, `z` : coordonnées Hub (relatives au centre de l'Anchor, après rotation par son `yaw`), \|·\| ≤ 10,5 ; `y_offset` : hauteur au-dessus du sol local, 0 à 21 ; sinon `ERROR_HUB_OUT_OF_BOUNDS` (`details.half_size`). `pose` ∈ `STANDING`, `CROUCHING`, `SWIMMING`, `FALL_FLYING` ; `on_ground` booléen ; champ manquant ou non fini : `ERROR_WS_MALFORMED_MESSAGE`. Hors du Hub : `ERROR_HUB_NOT_JOINED`. À envoyer jusqu'à 10 fois par seconde, seulement quand l'état change. |
+| `HubChat` | `{ "message" }` | Message du chat du Hub : codes `§x` retirés, espaces de bord retirés ; vide → `ERROR_WS_MALFORMED_MESSAGE`, > 256 caractères → `ERROR_HUB_CHAT_TOO_LONG`, moins d'une seconde après le précédent → `ERROR_HUB_CHAT_RATE_LIMITED`, hors du Hub → `ERROR_HUB_NOT_JOINED`. Écrit dans le journal du backend, jamais en base. |
+
+| S2C | `data` | Destinataires |
+|---|---|---|
+| `HubJoined` | `{ "members": [ { "player_uuid", "username", "state" \| null } ] }` | Le joueur qui entre : les membres qu'il doit voir, avec leur dernier état (`null` s'ils n'ont encore envoyé aucun `HubMove`) |
+| `HubPlayerEnter` | `{ "player_uuid", "username", "state": null }` | Membres qui voient le nouvel arrivant |
+| `HubPlayerMove` | `{ "player_uuid", "state": { "x", "z", "y_offset", "yaw", "head_yaw", "pitch", "pose", "on_ground" } }` | Membres qui voient le joueur |
+| `HubPlayerLeave` | `{ "player_uuid" }` | Membres qui voyaient le joueur : sortie, changement de serveur, Anchor supprimé, déconnexion ou TTL |
+| `HubLeft` | `{ "reason": "LEFT" \| "SERVER_CHANGED" \| "ANCHOR_DELETED" }` | Le joueur sorti du Hub (pas d'envoi sur déconnexion ni TTL) |
+| `HubChatMessage` | `{ "player_uuid", "username", "message", "sent_at" }` | Tous les membres, expéditeur compris |
+
+**Sorties automatiques** :
+
+- `JoinServerGroup` vers une autre empreinte ou dimension, `PositionUpdate` avec une autre dimension, ou
+  `LeaveServerGroup` → `HubLeft` `SERVER_CHANGED` (l'Anchor d'entrée ne s'applique plus).
+- Suppression de l'Anchor d'entrée (`DELETE /hub/anchors/{uuid}`, créateur ou admin) → `HubLeft` `ANCHOR_DELETED`
+  pour chaque membre entré par lui.
+- Fermeture de la connexion ou expiration TTL → sortie silencieuse, `HubPlayerLeave` pour les autres.
+
+Les Ghost des membres du Hub (`HubGhostSpawn` / `HubGhostDespawn`) arrivent avec l'étape N5.
 
 ## 7. Écarts avec le CAD
 

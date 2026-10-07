@@ -43,6 +43,10 @@
 | `GET` | [`/admin/players/{name}`](#administration) | Admin | Joueur par pseudo |
 | `POST` | [`/admin/battles/stop`](#administration) | Admin | Arrêter le combat / le lobby d'un joueur |
 | `POST` | [`/admin/reboot`](#administration) | Admin | Redémarrer le backend |
+| `GET` | [`/hub/anchors`](#get-hubanchors) | Bearer | Anchors d'un serveur et d'une dimension |
+| `POST` | [`/hub/anchors`](#post-hubanchors) | Bearer | Créer son Anchor |
+| `GET` | [`/hub/anchors/mine`](#get-hubanchorsmine) | Bearer | Son Anchor |
+| `DELETE` | [`/hub/anchors/{uuid}`](#delete-hubanchorsuuid) | Bearer | Supprimer un Anchor (créateur ou admin) |
 
 ---
 
@@ -395,6 +399,67 @@ change ; créé vide au premier démarrage). Sinon `403 ERROR_ADMIN_REQUIRED`.
 - PC d'un autre joueur : les routes Pokémon habituelles acceptent un admin — `GET /players/{uuid}/pokemon` et
   `.../pc` pour n'importe quel joueur ; `PATCH` / `DELETE` / `clone` agissent au nom du propriétaire du Pokémon ;
   `POST /pokemon?owner={uuid}` crée dans le PC de ce joueur (`403 ERROR_ADMIN_REQUIRED` pour un non-admin).
+
+## Hub Anchors (Phantasmon Network)
+
+Étape N1 de [`specifications/network-cahier-des-charges.md`](../specifications/network-cahier-des-charges.md) (§5.2,
+D-28). Un Anchor est un cube de `size` × `size` × `size` blocs (`phantasmon.hub.anchor-size`, 21) posé sur un
+serveur Minecraft : centré sur `origin` en `x` / `z`, de `origin.y` à `origin.y + size - 1` en hauteur. Le serveur
+n'est connu que par son empreinte (D-18). Tout joueur peut en créer **un**.
+
+### Objet `HubAnchor`
+
+```json
+{
+  "uuid": "…",
+  "owner_uuid": "…",
+  "name": "Place du marché",
+  "server_fingerprint": "3f9a…",
+  "dimension": "minecraft:overworld",
+  "origin": { "x": 120.5, "y": 64.0, "z": -33.5 },
+  "yaw": 90,
+  "size": 21,
+  "created_at": "2026-10-07T15:53:52Z"
+}
+```
+
+`yaw` ∈ `0`, `90`, `180`, `270` : l'orientation envoyée est arrondie au quart de tour le plus proche (les cubes
+restent alignés sur la grille des blocs).
+
+### `GET /hub/anchors`
+
+Paramètres obligatoires `server_fingerprint` et `dimension` → liste des Anchors correspondants, triés par nom.
+Paramètre manquant : `400 ERROR_MALFORMED_REQUEST`.
+
+### `POST /hub/anchors`
+
+```json
+{
+  "request_uuid": "…",
+  "name": "Place du marché",
+  "server_fingerprint": "3f9a…",
+  "dimension": "minecraft:overworld",
+  "origin": { "x": 120.5, "y": 64.0, "z": -33.5 },
+  "yaw": 97.3
+}
+```
+
+`201` + `HubAnchor`. Idempotent (`request_uuid`, comme `POST /pokemon`).
+
+| Statut | `error_code` | Cas |
+|---|---|---|
+| 400 | `ERROR_VALIDATION_FAILED` | Nom hors format (3 à 32 lettres, chiffres, espaces, `-`, `_`, sans espace au bord), empreinte ou dimension vide ou > 128 caractères, coordonnées absentes ou hors limites du monde, `yaw` absent |
+| 409 | `ERROR_HUB_ANCHOR_QUOTA` | L'appelant a déjà un Anchor (`details.anchor_uuid`, `details.name`) |
+| 409 | `ERROR_HUB_ANCHOR_NAME_TAKEN` | Un Anchor de ce serveur porte déjà ce nom, casse ignorée (`details.name`) |
+
+### `GET /hub/anchors/mine`
+
+`200` + `HubAnchor` ; `404 ERROR_HUB_ANCHOR_NOT_FOUND` si l'appelant n'en a pas.
+
+### `DELETE /hub/anchors/{uuid}`
+
+`204`. Réservé au créateur ou à un admin (D-26) : sinon `403 ERROR_HUB_ANCHOR_FORBIDDEN` ; inconnu :
+`404 ERROR_HUB_ANCHOR_NOT_FOUND`. Le créateur peut ensuite en poser un autre.
 
 ## Prévu par le CAD, non implémenté
 

@@ -11,6 +11,7 @@ import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketSession;
 import org.springframework.web.socket.handler.TextWebSocketHandler;
 
+import com.mystaria.phantasmon_backend.hub.HubService;
 import com.mystaria.phantasmon_backend.pokemon.Pokemon;
 import com.mystaria.phantasmon_backend.pokemon.PokemonRepository;
 import com.mystaria.phantasmon_backend.presence.PlayerPresence;
@@ -29,7 +30,7 @@ import tools.jackson.databind.ObjectMapper;
  * here — their logic lives in {@link LiveTradeService}; the asynchronous
  * {@code POST /trades} events are pushed from {@code TradeService}. Ghost
  * battle C2S messages ({@code Battle*}) are routed the same way to
- * {@link LiveBattleService}.
+ * {@link LiveBattleService}, and Global Hub ones ({@code Hub*}, Phantasmon Network) to {@link HubService}.
  *
  * <p>Ghost Entity movement deliberately has no dedicated C2S message: a
  * player's ghost follows its owner (CAD §7), so a {@code GhostEntityMove} is
@@ -52,17 +53,19 @@ public class PhantasmonWebSocketHandler extends TextWebSocketHandler {
 	private final LiveTradeService liveTradeService;
 	private final LiveBattleService liveBattleService;
 	private final GhostRecall ghostRecall;
+	private final HubService hubService;
 	private final ObjectMapper objectMapper;
 
 	public PhantasmonWebSocketHandler(PresenceService presenceService, SessionRegistry sessionRegistry,
 			PokemonRepository pokemonRepository, LiveTradeService liveTradeService, LiveBattleService liveBattleService,
-			GhostRecall ghostRecall, ObjectMapper objectMapper) {
+			GhostRecall ghostRecall, HubService hubService, ObjectMapper objectMapper) {
 		this.presenceService = presenceService;
 		this.sessionRegistry = sessionRegistry;
 		this.pokemonRepository = pokemonRepository;
 		this.liveTradeService = liveTradeService;
 		this.liveBattleService = liveBattleService;
 		this.ghostRecall = ghostRecall;
+		this.hubService = hubService;
 		this.objectMapper = objectMapper;
 	}
 
@@ -87,6 +90,7 @@ public class PhantasmonWebSocketHandler extends TextWebSocketHandler {
 			// A newer connection of the same player replaced this one: its presence, trade and battle carry on (SEC-8).
 			return;
 		}
+		hubService.leave(playerUuid, null);
 		leaveAndDespawnGhost(playerUuid);
 		liveTradeService.onDisconnect(playerUuid);
 		liveBattleService.onDisconnect(playerUuid);
@@ -99,6 +103,7 @@ public class PhantasmonWebSocketHandler extends TextWebSocketHandler {
 	 * follows does nothing more (SEC-8 guard).
 	 */
 	public void expire(UUID playerUuid) {
+		hubService.leave(playerUuid, null);
 		leaveAndDespawnGhost(playerUuid);
 		liveTradeService.onDisconnect(playerUuid);
 		liveBattleService.onDisconnect(playerUuid);
@@ -147,15 +152,21 @@ public class PhantasmonWebSocketHandler extends TextWebSocketHandler {
 					return;
 				}
 				log.info("Player {} joined group fingerprint={} dimension={}", playerUuid, fingerprint, dimension);
+				hubService.onServerGroup(playerUuid, fingerprint, dimension);
 				presenceService.join(playerUuid, fingerprint, dimension);
 				sendGhostCatchUp(session, playerUuid);
 			}
-			case "LeaveServerGroup" -> leaveAndDespawnGhost(playerUuid);
+			case "LeaveServerGroup" -> {
+				hubService.leave(playerUuid, "SERVER_CHANGED");
+				leaveAndDespawnGhost(playerUuid);
+			}
 			case "PositionUpdate" -> {
 				if (!isValidKey(stringField(incoming, "dimension"))) {
 					send(session, WsMessage.error("ERROR_WS_MALFORMED_MESSAGE", Map.of()));
 					return;
 				}
+				presenceService.find(playerUuid).ifPresent(presence -> hubService.onServerGroup(playerUuid,
+						presence.serverFingerprint(), stringField(incoming, "dimension")));
 				presenceService.updatePosition(playerUuid,
 						numberField(incoming, "x"), numberField(incoming, "y"), numberField(incoming, "z"),
 						stringField(incoming, "dimension"));
@@ -191,6 +202,17 @@ public class PhantasmonWebSocketHandler extends TextWebSocketHandler {
 			case "BattleResult" -> liveBattleService.reportResult(playerUuid, uuidField(incoming, "battle_uuid"),
 					uuidField(incoming, "winner_uuid"));
 			case "BattleLeave" -> liveBattleService.leave(playerUuid, uuidField(incoming, "battle_uuid"));
+			case "HubJoin" -> {
+				UUID anchorUuid = uuidField(incoming, "anchor_uuid");
+				if (anchorUuid == null) {
+					send(session, WsMessage.error("ERROR_WS_MALFORMED_MESSAGE", Map.of()));
+					return;
+				}
+				hubService.join(playerUuid, anchorUuid);
+			}
+			case "HubLeave" -> hubService.leave(playerUuid, "LEFT");
+			case "HubMove" -> hubService.move(playerUuid, incoming.data());
+			case "HubChat" -> hubService.chat(playerUuid, incoming.data().get("message"));
 			case "Heartbeat" -> {
 				presenceService.heartbeat(playerUuid);
 				send(session, WsMessage.of("HeartbeatAck", Map.of()));

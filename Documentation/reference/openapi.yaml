@@ -34,6 +34,7 @@ tags:
   - name: Échanges
   - name: Combats
   - name: Administration
+  - name: Hub
 
 security:
   - bearerAuth: []
@@ -523,6 +524,105 @@ paths:
         "403":
           $ref: "#/components/responses/Error"
 
+  /hub/anchors:
+    get:
+      tags: [Hub]
+      summary: Hub Anchors d'un serveur et d'une dimension (Phantasmon Network)
+      parameters:
+        - name: server_fingerprint
+          in: query
+          required: true
+          schema: { type: string, maxLength: 128 }
+        - name: dimension
+          in: query
+          required: true
+          schema: { type: string, maxLength: 128, example: "minecraft:overworld" }
+      responses:
+        "200":
+          description: Anchors triés par nom
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/HubAnchor"
+        "400":
+          $ref: "#/components/responses/Error"
+    post:
+      tags: [Hub]
+      summary: Crée l'Anchor de l'appelant (un par joueur, idempotent via request_uuid)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [request_uuid, name, server_fingerprint, dimension, origin, yaw]
+              properties:
+                request_uuid: { type: string, format: uuid }
+                name:
+                  type: string
+                  minLength: 3
+                  maxLength: 32
+                  description: Lettres, chiffres, espaces, - ou _, sans espace au début ni à la fin ; unique par serveur (casse ignorée)
+                server_fingerprint: { type: string, maxLength: 128 }
+                dimension: { type: string, maxLength: 128 }
+                origin:
+                  type: object
+                  required: [x, y, z]
+                  description: Position des pieds du créateur
+                  properties:
+                    x: { type: number, minimum: -30000000, maximum: 30000000 }
+                    y: { type: number, minimum: -2048, maximum: 2048 }
+                    z: { type: number, minimum: -30000000, maximum: 30000000 }
+                yaw: { type: number, description: "Orientation Minecraft quelconque, arrondie au quart de tour" }
+      responses:
+        "201":
+          description: Anchor créé
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HubAnchor"
+        "400":
+          $ref: "#/components/responses/Error"
+        "409":
+          description: ERROR_HUB_ANCHOR_QUOTA ou ERROR_HUB_ANCHOR_NAME_TAKEN
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /hub/anchors/mine:
+    get:
+      tags: [Hub]
+      summary: L'Anchor de l'appelant
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HubAnchor"
+        "404":
+          $ref: "#/components/responses/Error"
+
+  /hub/anchors/{uuid}:
+    delete:
+      tags: [Hub]
+      summary: Supprime un Anchor (créateur ou admin)
+      parameters:
+        - name: uuid
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "204":
+          description: Supprimé
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+
 components:
   securitySchemes:
     bearerAuth:
@@ -670,6 +770,25 @@ components:
           maxLength: 32
           description: Version de Cobblemon du client qui modifie ; conservée si absente.
 
+    HubAnchor:
+      type: object
+      required: [uuid, owner_uuid, name, server_fingerprint, dimension, origin, yaw, size, created_at]
+      properties:
+        uuid: { type: string, format: uuid }
+        owner_uuid: { type: string, format: uuid }
+        name: { type: string, example: "Place du marché" }
+        server_fingerprint: { type: string }
+        dimension: { type: string, example: "minecraft:overworld" }
+        origin:
+          type: object
+          required: [x, y, z]
+          properties:
+            x: { type: number }
+            y: { type: number }
+            z: { type: number }
+        yaw: { type: integer, enum: [0, 90, 180, 270] }
+        size: { type: integer, example: 21, description: "Arête du cube en blocs (phantasmon.hub.anchor-size)" }
+        created_at: { type: string, format: date-time }
     Trade:
       type: object
       properties:

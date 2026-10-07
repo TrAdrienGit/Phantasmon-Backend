@@ -44,6 +44,8 @@ Lues depuis l'environnement système, ou depuis un fichier `.env` à la racine d
 | `phantasmon.presence.sweep-interval-ms` | `10000` | Période du balayage TTL |
 | `phantasmon.trade.invite-ttl` | `PT60S` | Expiration d'une invitation d'échange |
 | `phantasmon.battle.invite-ttl` | `PT60S` | Expiration d'une invitation de combat |
+| `phantasmon.hub.anchor-size` | `21` | Arête du cube de chaque Hub Anchor, en blocs (Phantasmon Network) |
+| `phantasmon.hub.capacity` | `50` | Joueurs simultanés dans le Global Hub ; au-delà `ERROR_HUB_FULL` |
 
 Constantes du code (non configurables) : chrono de combat 90 s (`LiveBattleService.TIMER_SECONDS`), taille
 maximale d'un message WebSocket 1 Mio, 16 boîtes × 30 cases, équipe de 6, rétention des logs vérifiée toutes les

@@ -1,7 +1,10 @@
 # Phantasmon — Vision d'évolution inter-serveurs
 
 > Document de réflexion — évolution future de Phantasmon  
-> **Statut : idée / roadmap à long terme, non implémentée**
+> **Statut : idée / roadmap à long terme, non implémentée**  
+> **Mise à jour 2026-10-07** : le Core est déclaré terminé ; cette note sert de base au cahier des charges
+> [`specifications/network-cahier-des-charges.md`](../specifications/network-cahier-des-charges.md), qui fait foi
+> en cas de contradiction.
 
 ---
 
