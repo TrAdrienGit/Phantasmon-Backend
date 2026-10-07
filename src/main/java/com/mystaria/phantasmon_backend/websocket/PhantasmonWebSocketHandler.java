@@ -200,6 +200,11 @@ public class PhantasmonWebSocketHandler extends TextWebSocketHandler {
 			case "BattleTimerEnable" -> liveBattleService.enableTimer(playerUuid, uuidField(incoming, "battle_uuid"));
 			case "BattleResult" -> liveBattleService.reportResult(playerUuid, uuidField(incoming, "battle_uuid"),
 					uuidField(incoming, "winner_uuid"));
+			case "BattleSoloStart" -> liveBattleService.startSolo(playerUuid);
+			case "BattleSpectate" -> liveBattleService.spectate(playerUuid, uuidField(incoming, "target_uuid"));
+			case "BattleSpectatorPacket" -> liveBattleService.relaySpectatorPacket(playerUuid, uuidField(incoming, "battle_uuid"),
+					incoming.data());
+			case "BattleSpectateLeave" -> liveBattleService.leaveSpectating(playerUuid, uuidField(incoming, "battle_uuid"));
 			case "BattleLeave" -> liveBattleService.leave(playerUuid, uuidField(incoming, "battle_uuid"));
 			case "HubJoin" -> {
 				UUID anchorUuid = uuidField(incoming, "anchor_uuid");

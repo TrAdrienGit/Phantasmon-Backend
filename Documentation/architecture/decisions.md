@@ -43,6 +43,9 @@ Pour ajouter une décision : prendre le numéro suivant, dater, et mettre à jou
 | D-28 | Hub Anchors créables par tout joueur | Acceptée | 2026-10-07 |
 | D-29 | Entrée dans le Global Hub sur consentement explicite | Acceptée | 2026-10-07 |
 | D-30 | Hub Anchors partagés au sein d'un serveur, jamais entre serveurs | Acceptée | 2026-10-07 |
+| D-31 | Spectateurs d'un combat Ghost | Acceptée | 2026-10-07 |
+| D-32 | Combat solo d'un admin contre un miroir de son équipe | Acceptée | 2026-10-07 |
+| D-33 | Terrain d'un combat Ghost visible par les joueurs alentour | Acceptée | 2026-10-07 |
 
 ---
 
@@ -355,3 +358,52 @@ Pour ajouter une décision : prendre le numéro suivant, dater, et mettre à jou
   - client : l'entité d'un avatar porte un UUID dérivé de celui du joueur, pour ne jamais entrer en conflit avec le
     vrai joueur chargé dans le même monde.
 - **Conséquences** : D-28 et D-29 restent valables telles quelles.
+
+## D-31 — Spectateurs d'un combat Ghost
+
+- **Contexte** : Adrien (2026-10-07) veut qu'on puisse regarder un combat « comme dans Cobblemon ». Cobblemon gère
+  ses spectateurs côté serveur (`SpectateBattleHandler`) ; un combat Ghost tourne sur le client hôte, sans serveur.
+- **Décision** :
+  - entrée « Regarder le combat Ghost » dans la roue d'interaction (R sur un joueur ou sur un avatar du Global Hub),
+    comme l'entrée « Regarder » de Cobblemon ; le backend vérifie que la cible est en combat Ghost ;
+  - le moteur de l'hôte fournit le contenu : son flux spectateur (`PokemonBattle.sendSpectatorUpdate`, intercepté par
+    `PokemonBattleSpectatorMixin`) et, pour chaque nouveau spectateur, le même rattrapage que Cobblemon
+    (`BattleInitializePacket` sans camp + historique du chat) ; le backend recopie à chaque spectateur
+    (`BattleSpectatorPacket`), jamais le relais privé de l'invité ;
+  - le spectateur rejoue ces paquets dans l'interface de Cobblemon, qui s'ouvre en mode spectateur ; la scène (Pokémon
+    devant chaque dresseur, animations, Méga / Z / Téra) est reconstruite localement comme chez les joueurs ; musique
+    de combat du pack ; le bouton Retour de Cobblemon arrête de regarder ;
+  - regarder occupe le joueur (ni invitation ni lobby pendant ce temps) ; les deux joueurs voient « X regarde le
+    combat ».
+- **Choix de Claude** : pas de limite de spectateurs ni de distance au-delà de la portée de la roue (10 blocs, mur
+  exclu) ; l'hôte n'envoie le flux spectateur que s'il y a au moins un spectateur.
+
+## D-32 — Combat solo d'un admin contre un miroir de son équipe
+
+- **Contexte** : Adrien (2026-10-07) veut une commande admin pour « lancer un combat contre soi-même ».
+- **Décision (interprétation de Claude)** : `/phantasmon admin battle solo` démarre un vrai combat Ghost contre un
+  miroir de l'équipe Ghost de l'admin, joué par l'IA aléatoire de Cobblemon sur son client (l'hôte). Sans lobby, format
+  Libre, intro normale. C'est un combat en direct pour le backend (`LiveBattle` dont hôte et invité sont l'admin) :
+  on peut le regarder, l'arrêter (`admin stopbattle`) ; il n'est **pas** stocké (`battle_sessions` interdit un joueur
+  contre lui-même). Le miroir a son propre uuid (dérivé de celui de l'admin) : l'interface de Cobblemon distingue ainsi
+  les deux camps.
+
+## D-33 — Terrain d'un combat Ghost visible par les joueurs alentour
+
+- **Contexte** : bug signalé par Adrien (2026-10-07) : dans le Hub, les Pokémon d'un joueur en combat n'apparaissaient
+  que chez ceux qui regardaient le combat en spectateur. Dans Cobblemon, les Pokémon d'un combat sont de vraies
+  entités que tout joueur proche voit.
+- **Décision (choix d'Adrien entre deux options)** :
+  - sont **témoins** d'un combat les joueurs du même serveur et de la même dimension que l'hôte ou l'invité, et, si
+    l'un des deux est dans le Global Hub, tous les membres du Hub ; ni les deux joueurs ni les spectateurs. Exemple :
+    J1 (serveur S1, dans le Hub) combat J3 (serveur S2) ; J2 sur S1 hors Hub et J4 dans le Hub voient le terrain ;
+  - les témoins voient la **scène complète** — Pokémon devant leur dresseur (ou son avatar du Hub), sorties, rappels,
+    K.O., animations d'attaque, Méga / Primo / Z / Téra — sans écran de combat, caméra, chat ni musique ;
+  - le backend tient la liste des témoins (réévaluée chaque seconde) et recopie le flux spectateur de l'hôte
+    (`BattleFieldPacket`) ; chaque nouveau témoin reçoit de l'hôte le terrain tel qu'il est.
+- **Choix de Claude** : un dresseur absent chez le témoin (autre serveur hors Hub, miroir du combat solo) : ses
+  Pokémon se placent à 7 blocs devant l'autre dresseur, face à lui ; si aucun dresseur n'est chargé, les sorties
+  attendent qu'un des deux le soit. Les Méga / Z / Téra vus de loin se réduisent à leur apogée (éclair, gerbe,
+  changement de modèle, lueur Téra), entendue depuis le Pokémon.
+- **Conséquences** : l'hôte envoie son flux spectateur dès qu'il y a un spectateur **ou** un témoin ; plusieurs
+  combats peuvent être vus en même temps (une scène par combat, `BattleFieldScenes`).

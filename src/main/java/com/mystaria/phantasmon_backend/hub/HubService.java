@@ -268,6 +268,11 @@ public class HubService {
 		return members.containsKey(playerUuid);
 	}
 
+	/** Everyone in the Hub right now (one public Hub: they all see each other). */
+	public Set<UUID> memberUuids() {
+		return Set.copyOf(members.keySet());
+	}
+
 	/** A member as {@code HubJoined} lists them: avatar data, plus their sent-out Ghost or {@code null}. */
 	private Map<String, Object> viewWithGhost(Member member) {
 		Map<String, Object> view = member.view();

@@ -101,6 +101,7 @@ Canaux : **REST**, **WS** (`Error`), **WS-T** (`TradeSessionError` ou `reason` d
 | `ERROR_BATTLE_NOT_IN_BATTLE` | — | WS-B | Action hors combat ou mauvais `battle_uuid` (ignoré silencieusement par le client) | `phantasmon.battle.error.not_battling` |
 | `ERROR_BATTLE_NOT_HOST` | — | WS-B | `BattlePacket` / `BattleResult` envoyé par l'invité | `phantasmon.battle.error.not_host` |
 | `ERROR_BATTLE_NOT_GUEST` | — | WS-B | `BattleChoice` envoyé par l'hôte | `phantasmon.battle.error.not_guest` |
+| `ERROR_BATTLE_SPECTATE_NOT_BATTLING` | — | WS-B | `BattleSpectate` sur un joueur qui n'est pas en combat Ghost | `phantasmon.battle.error.spectate_not_battling` |
 
 Les codes marqués « — » côté client concernent des routes REST que le client actuel n'appelle pas.
 

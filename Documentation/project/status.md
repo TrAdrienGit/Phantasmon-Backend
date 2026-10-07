@@ -58,6 +58,9 @@ validés en jeu le 2026-10-07.**
 | Échange en direct | Invitation, choix des offres, double confirmation, échange atomique | Roue Cobblemon (**R**) uniquement |
 | Échange asynchrone | Offre par UUID, acceptation ou annulation plus tard | Retiré du client (TODO-22) ; API REST conservée |
 | Combat | Combat Ghost contre Ghost avec l'interface de Cobblemon, chrono optionnel, abandon | Roue Cobblemon (**R**) uniquement |
+| Spectateurs | Regarder un combat Ghost en cours, comme dans Cobblemon (D-31), aussi entre serveurs via le Global Hub | Roue Cobblemon (**R**) → « Regarder le combat Ghost » |
+| Terrain visible alentour | Les joueurs du même serveur et, si un joueur y est, du Global Hub voient les Pokémon d'un combat sans le regarder (D-33) | Automatique |
+| Combat solo (admin) | Combat contre un miroir de son équipe, joué par l'IA de Cobblemon, regardable, non stocké (D-32) | `/phantasmon admin battle solo` |
 | Langues | Français et anglais | Langue du jeu |
 
 ## 3. Non implémenté (prévu par le CAD)
@@ -84,7 +87,7 @@ Suivis dans [`known-issues.md`](known-issues.md) (identifiants `BUG-n`, `TODO-n`
 
 | | Backend | Client |
 |---|---|---|
-| Tests automatisés | 199 tests (JUnit 5 + Testcontainers, 2026-10-07) | 64 tests (logique pure, 2026-10-07) |
+| Tests automatisés | 208 tests (JUnit 5 + Testcontainers, 2026-10-07) | 64 tests (logique pure, 2026-10-07) |
 | Migrations Flyway | V1 à V11 | — |
-| Mixins | — | 7 |
+| Mixins | — | 18 (dont 1 accesseur) |
 | Langues | — | `fr_fr`, `en_us` (~224 clés) |

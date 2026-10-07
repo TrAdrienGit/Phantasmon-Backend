@@ -18,12 +18,15 @@ import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
+import com.mystaria.phantasmon_backend.admin.AdminService;
 import com.mystaria.phantasmon_backend.battle.format.BattleFormats;
 import com.mystaria.phantasmon_backend.battle.format.TeamValidator;
+import com.mystaria.phantasmon_backend.hub.HubService;
 import com.mystaria.phantasmon_backend.player.Player;
 import com.mystaria.phantasmon_backend.player.PlayerService;
 import com.mystaria.phantasmon_backend.pokemon.PokemonResponse;
 import com.mystaria.phantasmon_backend.pokemon.PokemonService;
+import com.mystaria.phantasmon_backend.presence.PresenceService;
 import com.mystaria.phantasmon_backend.websocket.GhostRecall;
 import com.mystaria.phantasmon_backend.websocket.SessionRegistry;
 import com.mystaria.phantasmon_backend.websocket.WsMessage;
@@ -64,6 +67,8 @@ public class LiveBattleService {
 	static final int TIMER_SECONDS = 90;
 
 	private final Map<UUID, LiveBattle> battlesByPlayer = new HashMap<>();
+	/** Players watching a battle (spectators), at most one battle each. */
+	private final Map<UUID, LiveBattle> battlesBySpectator = new HashMap<>();
 	private final Map<UUID, Lobby> lobbiesByPlayer = new HashMap<>();
 	private final Map<UUID, Invite> invites = new HashMap<>();
 
@@ -77,9 +82,13 @@ public class LiveBattleService {
 	private final Duration inviteTtl;
 	private final Duration lobbyTimer;
 	private final com.mystaria.phantasmon_backend.battle.format.ShowdownDataSource showdown;
+	private final AdminService adminService;
+	private final PresenceService presenceService;
+	private final HubService hubService;
 
 	public LiveBattleService(BattleRepository battleRepository, PokemonService pokemonService, PlayerService playerService,
-			SessionRegistry sessionRegistry, GhostRecall ghostRecall, CobblemonPartyParser partyParser, Clock clock,
+			SessionRegistry sessionRegistry, GhostRecall ghostRecall, CobblemonPartyParser partyParser, AdminService adminService,
+			PresenceService presenceService, HubService hubService, Clock clock,
 			com.mystaria.phantasmon_backend.battle.format.ShowdownDataSource showdown,
 			@Value("${phantasmon.battle.invite-ttl:PT60S}") Duration inviteTtl,
 			@Value("${phantasmon.battle.lobby-timer:PT150S}") Duration lobbyTimer) {
@@ -93,6 +102,9 @@ public class LiveBattleService {
 		this.inviteTtl = inviteTtl;
 		this.lobbyTimer = lobbyTimer;
 		this.showdown = showdown;
+		this.adminService = adminService;
+		this.presenceService = presenceService;
+		this.hubService = hubService;
 	}
 
 	private record Invite(UUID uuid, UUID inviterUuid, UUID inviteeUuid, Instant createdAt, BattleTeam inviterTeam) {
@@ -102,12 +114,23 @@ public class LiveBattleService {
 		final UUID uuid;
 		final UUID hostUuid;
 		final UUID guestUuid;
+		/** Admin solo battle: host and guest are the same player, the other side is a mirror played by the host's AI. */
+		final boolean solo;
 		boolean timerEnabled;
+		/** Watching players, in arrival order. */
+		final java.util.Set<UUID> spectators = new java.util.LinkedHashSet<>();
+		/** Players who see the field without watching (same server group or Global Hub as a player), see {@link #refreshViewers}. */
+		final java.util.Set<UUID> viewers = new java.util.LinkedHashSet<>();
 
 		LiveBattle(UUID uuid, UUID hostUuid, UUID guestUuid) {
+			this(uuid, hostUuid, guestUuid, false);
+		}
+
+		LiveBattle(UUID uuid, UUID hostUuid, UUID guestUuid, boolean solo) {
 			this.uuid = uuid;
 			this.hostUuid = hostUuid;
 			this.guestUuid = guestUuid;
+			this.solo = solo;
 		}
 
 		UUID other(UUID playerUuid) {
@@ -150,8 +173,10 @@ public class LiveBattleService {
 		}
 	}
 
+	/** In a battle, a lobby, or watching a battle: no other battle, lobby or spectating at the same time. */
 	private boolean isBusy(UUID playerUuid) {
-		return battlesByPlayer.containsKey(playerUuid) || lobbiesByPlayer.containsKey(playerUuid);
+		return battlesByPlayer.containsKey(playerUuid) || lobbiesByPlayer.containsKey(playerUuid)
+				|| battlesBySpectator.containsKey(playerUuid);
 	}
 
 	// ---- Invitation ----
@@ -564,6 +589,52 @@ public class LiveBattleService {
 		if (lobby.timerBy != null) {
 			enableTimer(battle, lobby.timerBy);
 		}
+		refreshViewers(battle);
+	}
+
+	// ---- Admin solo battle ----
+
+	/**
+	 * {@code BattleSoloStart} (admin, Adrien 2026-10-07): a live battle against a mirror of the admin's own Ghost team,
+	 * played by Cobblemon's AI on the admin's client (the host). No lobby, the "Libre" format, never stored
+	 * ({@code battle_sessions} forbids a player against themself) — but a live battle all the same, so spectators can
+	 * watch it: a way to test spectating, battle visuals and set pieces alone.
+	 */
+	public synchronized void startSolo(UUID adminUuid) {
+		if (!adminService.isAdmin(adminUuid)) {
+			sendError(adminUuid, "ERROR_ADMIN_REQUIRED");
+			return;
+		}
+		if (isBusy(adminUuid)) {
+			sendError(adminUuid, "ERROR_BATTLE_ALREADY_IN_BATTLE");
+			return;
+		}
+		List<PokemonResponse> team = resolve(adminUuid, BattleTeam.GHOST);
+		if (team.isEmpty()) {
+			sendError(adminUuid, "ERROR_BATTLE_EMPTY_TEAM");
+			return;
+		}
+		UUID mirrorUuid = mirrorOf(adminUuid);
+		LiveBattle battle = new LiveBattle(UUID.randomUUID(), adminUuid, adminUuid, true);
+		battlesByPlayer.put(adminUuid, battle);
+		log.info("Admin solo battle {} started by {}", battle.uuid, adminUuid);
+		BattleFormats.Format free = showdown.formats().get(BattleFormats.FREE);
+		Map<String, Object> view = new HashMap<>(Map.of(
+				"battle_uuid", battle.uuid, "role", "HOST", "solo", true,
+				"opponent_uuid", mirrorUuid, "opponent_name", nameOf(adminUuid) + " (miroir)",
+				"own_team", team, "opponent_team", team,
+				"own_team_source", BattleTeam.GHOST.source().name(), "opponent_team_source", BattleTeam.GHOST.source().name(),
+				"format", Map.of("id", free.id(), "name", free.name(), "battle_rules", free.battleRules(),
+						"adjust_level", free.adjustLevel())));
+		view.put("intro", java.util.concurrent.ThreadLocalRandom.current().nextInt(INTRO_COUNT));
+		sessionRegistry.send(adminUuid, WsMessage.of("BattleSessionStarted", view));
+		ghostRecall.recall(adminUuid, "battle started");
+		refreshViewers(battle);
+	}
+
+	/** The mirror side of an admin's solo battle: a stable uuid of its own, never a real player's. */
+	static UUID mirrorOf(UUID adminUuid) {
+		return UUID.nameUUIDFromBytes(("phantasmon-mirror:" + adminUuid).getBytes(java.nio.charset.StandardCharsets.UTF_8));
 	}
 
 	/**
@@ -601,6 +672,151 @@ public class LiveBattleService {
 			return;
 		}
 		sessionRegistry.send(battle.guestUuid, WsMessage.of("BattlePacket", data));
+	}
+
+	// ---- Spectators ----
+
+	/**
+	 * {@code BattleSpectate}: watch the battle {@code targetUuid} plays in, like Cobblemon's spectate. The spectator
+	 * is told who plays; both players are told who watches — the host then sends this spectator the battle so far
+	 * ({@code BattleSpectatorPacket} with {@code spectator_uuid}) and streams what its engine shows spectators.
+	 */
+	public synchronized void spectate(UUID spectatorUuid, UUID targetUuid) {
+		if (targetUuid == null) {
+			sendError(spectatorUuid, "ERROR_WS_MALFORMED_MESSAGE");
+			return;
+		}
+		if (spectatorUuid.equals(targetUuid)) {
+			sendError(spectatorUuid, "ERROR_BATTLE_SELF");
+			return;
+		}
+		if (isBusy(spectatorUuid)) {
+			sendError(spectatorUuid, "ERROR_BATTLE_ALREADY_IN_BATTLE");
+			return;
+		}
+		LiveBattle battle = battlesByPlayer.get(targetUuid);
+		if (battle == null) {
+			sendError(spectatorUuid, "ERROR_BATTLE_SPECTATE_NOT_BATTLING");
+			return;
+		}
+		if (battle.viewers.remove(spectatorUuid)) {
+			// Their spectator screen rebuilds the scene: the field view goes first.
+			removeViewer(battle, spectatorUuid, "SPECTATING");
+		}
+		battle.spectators.add(spectatorUuid);
+		battlesBySpectator.put(spectatorUuid, battle);
+		log.info("Player {} watches live battle {}", spectatorUuid, battle.uuid);
+		sessionRegistry.send(spectatorUuid, WsMessage.of("BattleSpectateStarted", Map.of("battle_uuid", battle.uuid,
+				"host_uuid", battle.hostUuid, "host_name", nameOf(battle.hostUuid),
+				"guest_uuid", battle.guestUuid, "guest_name", nameOf(battle.guestUuid))));
+		WsMessage joined = WsMessage.of("BattleSpectatorJoined", Map.of("battle_uuid", battle.uuid,
+				"spectator_uuid", spectatorUuid, "spectator_name", nameOf(spectatorUuid)));
+		sessionRegistry.send(battle.hostUuid, joined);
+		sessionRegistry.send(battle.guestUuid, joined);
+	}
+
+	/**
+	 * Host → spectators: one encoded packet of the engine's spectator stream (public information only — never the
+	 * guest's relay, which carries the guest's own team and requests). With {@code spectator_uuid}, for that
+	 * spectator alone (their catch-up), else for every spectator.
+	 */
+	public synchronized void relaySpectatorPacket(UUID senderUuid, UUID battleUuid, Map<String, Object> data) {
+		LiveBattle battle = battleOf(senderUuid, battleUuid);
+		if (battle == null) {
+			return;
+		}
+		if (!battle.hostUuid.equals(senderUuid)) {
+			sendError(senderUuid, "ERROR_BATTLE_NOT_HOST");
+			return;
+		}
+		Map<String, Object> packet = new HashMap<>(data);
+		Object target = packet.remove("spectator_uuid");
+		WsMessage message = WsMessage.of("BattleSpectatorPacket", packet);
+		WsMessage field = WsMessage.of("BattleFieldPacket", packet);
+		if (target == null) {
+			refreshViewers(battle);
+			battle.spectators.forEach(spectator -> sessionRegistry.send(spectator, message));
+			battle.viewers.forEach(viewer -> sessionRegistry.send(viewer, field));
+			return;
+		}
+		battle.spectators.stream().filter(spectator -> spectator.toString().equals(target.toString())).findFirst()
+				.ifPresent(spectator -> sessionRegistry.send(spectator, message));
+		battle.viewers.stream().filter(viewer -> viewer.toString().equals(target.toString())).findFirst()
+				.ifPresent(viewer -> sessionRegistry.send(viewer, field));
+	}
+
+	// ---- Field viewers ----
+
+	@Scheduled(fixedRate = 1000)
+	public void tickViewers() {
+		refreshAllViewers();
+	}
+
+	public synchronized void refreshAllViewers() {
+		new LinkedHashSet<>(battlesByPlayer.values()).forEach(this::refreshViewers);
+	}
+
+	/**
+	 * Like Cobblemon, where everyone around sees the Pokémon of a battle (Adrien 2026-10-07): the players of either
+	 * player's server group ({@code server_fingerprint + dimension}) and, when either player is in the Global Hub,
+	 * every Hub member see the field — the Pokémon, send-outs, recalls, move animations, gimmicks — without the battle
+	 * screen. Neither player nor a spectator is a viewer. Newcomers are announced to the host
+	 * ({@code BattleFieldViewerJoined}), which sends them the field as it stands ({@code BattleSpectatorPacket} with
+	 * their uuid) then its spectator stream, forwarded as {@code BattleFieldPacket}; those who leave get
+	 * {@code BattleFieldEnded}. Re-evaluated every second and before each streamed packet.
+	 */
+	private void refreshViewers(LiveBattle battle) {
+		java.util.Set<UUID> wanted = new LinkedHashSet<>();
+		wanted.addAll(presenceService.groupMembers(battle.hostUuid));
+		wanted.addAll(presenceService.groupMembers(battle.guestUuid));
+		if (hubService.isMember(battle.hostUuid) || hubService.isMember(battle.guestUuid)) {
+			wanted.addAll(hubService.memberUuids());
+		}
+		wanted.remove(battle.hostUuid);
+		wanted.remove(battle.guestUuid);
+		wanted.removeAll(battle.spectators);
+		for (UUID viewer : List.copyOf(battle.viewers)) {
+			if (!wanted.contains(viewer)) {
+				battle.viewers.remove(viewer);
+				removeViewer(battle, viewer, "OUT_OF_RANGE");
+			}
+		}
+		for (UUID viewer : wanted) {
+			if (battle.viewers.add(viewer)) {
+				sessionRegistry.send(battle.hostUuid, WsMessage.of("BattleFieldViewerJoined",
+						Map.of("battle_uuid", battle.uuid, "viewer_uuid", viewer)));
+			}
+		}
+	}
+
+	/**
+	 * {@code viewer} no longer sees the field ({@code reason}: {@code OUT_OF_RANGE}, {@code SPECTATING} — their battle
+	 * screen takes over); they clear it, the host stops counting them.
+	 */
+	private void removeViewer(LiveBattle battle, UUID viewer, String reason) {
+		sessionRegistry.send(viewer, WsMessage.of("BattleFieldEnded", Map.of("battle_uuid", battle.uuid, "reason", reason)));
+		sessionRegistry.send(battle.hostUuid, WsMessage.of("BattleFieldViewerLeft",
+				Map.of("battle_uuid", battle.uuid, "viewer_uuid", viewer)));
+	}
+
+	/** {@code BattleSpectateLeave}: stops watching (Cobblemon's back button on the battle screen). */
+	public synchronized void leaveSpectating(UUID spectatorUuid, UUID battleUuid) {
+		LiveBattle battle = battlesBySpectator.get(spectatorUuid);
+		if (battle == null || battleUuid == null || !battle.uuid.equals(battleUuid)) {
+			sendError(spectatorUuid, "ERROR_BATTLE_NOT_IN_BATTLE");
+			return;
+		}
+		stopSpectating(spectatorUuid, battle);
+		sessionRegistry.send(spectatorUuid, WsMessage.of("BattleSpectateEnded", Map.of("battle_uuid", battle.uuid, "reason", "LEFT")));
+	}
+
+	private void stopSpectating(UUID spectatorUuid, LiveBattle battle) {
+		battle.spectators.remove(spectatorUuid);
+		battlesBySpectator.remove(spectatorUuid);
+		log.info("Player {} stopped watching live battle {}", spectatorUuid, battle.uuid);
+		WsMessage left = WsMessage.of("BattleSpectatorLeft", Map.of("battle_uuid", battle.uuid, "spectator_uuid", spectatorUuid));
+		sessionRegistry.send(battle.hostUuid, left);
+		sessionRegistry.send(battle.guestUuid, left);
 	}
 
 	/** Guest → host: the guest's encoded choice, forwarded as is. */
@@ -645,7 +861,8 @@ public class LiveBattleService {
 			sendError(senderUuid, "ERROR_BATTLE_NOT_HOST");
 			return;
 		}
-		if (winnerUuid != null && !winnerUuid.equals(battle.hostUuid) && !winnerUuid.equals(battle.guestUuid)) {
+		boolean mirrorWon = battle.solo && mirrorOf(battle.hostUuid).equals(winnerUuid);
+		if (winnerUuid != null && !mirrorWon && !winnerUuid.equals(battle.hostUuid) && !winnerUuid.equals(battle.guestUuid)) {
 			sendError(senderUuid, "ERROR_BATTLE_INVALID_RESULT");
 			return;
 		}
@@ -727,6 +944,10 @@ public class LiveBattleService {
 	/** WebSocket closed: the lobby is cancelled; a battle can't go on — a draw (CAD Partie 1 §44). */
 	public synchronized void onDisconnect(UUID playerUuid) {
 		invites.values().removeIf(invite -> invite.inviterUuid().equals(playerUuid) || invite.inviteeUuid().equals(playerUuid));
+		LiveBattle watched = battlesBySpectator.get(playerUuid);
+		if (watched != null) {
+			stopSpectating(playerUuid, watched);
+		}
 		Lobby lobby = lobbiesByPlayer.get(playerUuid);
 		if (lobby != null) {
 			cancelLobby(lobby, "PARTNER_DISCONNECTED", playerUuid);
@@ -755,7 +976,18 @@ public class LiveBattleService {
 		data.put("winner_uuid", winnerUuid);
 		data.put("reason", reason);
 		sessionRegistry.send(battle.hostUuid, WsMessage.of("BattleEnded", data));
-		sessionRegistry.send(battle.guestUuid, WsMessage.of("BattleEnded", data));
+		if (!battle.guestUuid.equals(battle.hostUuid)) {
+			sessionRegistry.send(battle.guestUuid, WsMessage.of("BattleEnded", data));
+		}
+		WsMessage spectateEnded = WsMessage.of("BattleSpectateEnded", data);
+		for (UUID spectator : battle.spectators) {
+			battlesBySpectator.remove(spectator);
+			sessionRegistry.send(spectator, spectateEnded);
+		}
+		battle.spectators.clear();
+		WsMessage fieldEnded = WsMessage.of("BattleFieldEnded", Map.of("battle_uuid", battle.uuid, "reason", reason));
+		battle.viewers.forEach(viewer -> sessionRegistry.send(viewer, fieldEnded));
+		battle.viewers.clear();
 	}
 
 	private LiveBattle battleOf(UUID playerUuid, UUID battleUuid) {

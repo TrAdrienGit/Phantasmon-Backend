@@ -184,6 +184,52 @@ s'arrête, chaque combat en cours devient un **nul** (`FINISHED`, sans vainqueur
 joueurs avant la fermeture des connexions ; s'il plante, les sessions restées `ACTIVE` sont conclues de la même façon
 à son redémarrage (CAD Partie 1 §44). Un client qui perd la connexion termine lui-même le combat et l'annonce nul.
 
+### Spectateurs (2026-10-07)
+
+Regarder un combat Ghost « comme dans Cobblemon » ([D-31](../architecture/decisions.md#d-31--spectateurs-dun-combat-ghost)).
+Le moteur de Cobblemon de l'hôte produit déjà un flux pour ses spectateurs (`PokemonBattle.sendSpectatorUpdate`,
+informations publiques uniquement) : l'hôte le relaie par le backend, qui le recopie à chaque spectateur. Le relais
+de l'invité (`BattlePacket`) n'est jamais recopié : il porte l'équipe et les demandes privées de l'invité.
+
+| C2S | `data` | Effet |
+|---|---|---|
+| `BattleSpectate` | `{ "target_uuid" }` | Regarder le combat que joue `target_uuid` (hôte ou invité). Refus (`BattleSessionError`) : `ERROR_WS_MALFORMED_MESSAGE`, `ERROR_BATTLE_SELF`, `ERROR_BATTLE_ALREADY_IN_BATTLE` (l'appelant joue, est en lobby ou regarde déjà), `ERROR_BATTLE_SPECTATE_NOT_BATTLING` |
+| `BattleSpectatorPacket` | `{ "battle_uuid", "id", "payload", "spectator_uuid"? }` | **Hôte seulement** (`ERROR_BATTLE_NOT_HOST`) : un paquet du flux spectateur (mêmes `id` / `payload` que `BattlePacket`). Avec `spectator_uuid` : pour ce spectateur seul (son rattrapage), sinon pour tous |
+| `BattleSpectateLeave` | `{ "battle_uuid" }` | Arrêter de regarder (bouton Retour de l'écran de combat de Cobblemon) |
+
+| S2C | `data` | Destinataires |
+|---|---|---|
+| `BattleSpectateStarted` | `{ "battle_uuid", "host_uuid", "host_name", "guest_uuid", "guest_name" }` | Le spectateur |
+| `BattleSpectatorJoined` | `{ "battle_uuid", "spectator_uuid", "spectator_name" }` | Les deux joueurs ; l'hôte envoie alors au spectateur le rattrapage (`BattleInitializePacket` sans camp + historique du chat), puis le flux |
+| `BattleSpectatorLeft` | `{ "battle_uuid", "spectator_uuid" }` | Les deux joueurs (départ ou déconnexion du spectateur) |
+| `BattleSpectatorPacket` | `{ "battle_uuid", "id", "payload" }` | Le ou les spectateurs |
+| `BattleSpectateEnded` | `{ "battle_uuid", "reason", "winner_uuid"? }` | Le spectateur : `LEFT` après `BattleSpectateLeave`, sinon la fin du combat (mêmes `reason` / `winner_uuid` que `BattleEnded`) |
+
+Regarder occupe le joueur comme un combat : il ne peut ni inviter ni être invité, ni entrer dans un lobby, tant
+qu'il regarde.
+
+### Terrain vu par les joueurs alentour (2026-10-07)
+
+Comme dans Cobblemon, où tout joueur proche voit les Pokémon d'un combat, sans le regarder
+([D-33](../architecture/decisions.md#d-33--terrain-dun-combat-ghost-visible-par-les-joueurs-alentour)). Sont
+**témoins** d'un combat : les membres du groupe serveur (`server_fingerprint + dimension`) de l'hôte ou de l'invité
+et, si l'un des deux est dans le Global Hub, tous les membres du Hub — sauf les deux joueurs et les spectateurs. La
+liste est réévaluée chaque seconde et avant chaque paquet du flux. Aucun message C2S nouveau : l'hôte réutilise
+`BattleSpectatorPacket` (avec `spectator_uuid` = le témoin pour son rattrapage, sans pour tous).
+
+| S2C | `data` | Destinataires |
+|---|---|---|
+| `BattleFieldViewerJoined` | `{ "battle_uuid", "viewer_uuid" }` | L'hôte : il envoie au témoin le terrain tel qu'il est (`BattleInitializePacket` sans camp, sans historique du chat), puis le flux |
+| `BattleFieldViewerLeft` | `{ "battle_uuid", "viewer_uuid" }` | L'hôte : ce témoin ne reçoit plus rien |
+| `BattleFieldPacket` | `{ "battle_uuid", "id", "payload" }` | Le ou les témoins : un paquet du flux spectateur (Pokémon, sorties, rappels, K.O., animations, Méga / Z / Téra) |
+| `BattleFieldEnded` | `{ "battle_uuid", "reason" }` | Le témoin : `OUT_OF_RANGE` (autre serveur ou dimension, sortie du Hub, déconnexion), `SPECTATING` (il regarde désormais ce combat), sinon la fin du combat (même `reason` que `BattleEnded`) |
+
+### Combat solo d'un admin (2026-10-07)
+
+| C2S | `data` | Effet |
+|---|---|---|
+| `BattleSoloStart` | `{}` | **Admin** ([D-32](../architecture/decisions.md#d-32--combat-solo-dun-admin-contre-un-miroir-de-son-équipe)) : combat contre un miroir de son équipe Ghost. Refus : `ERROR_ADMIN_REQUIRED`, `ERROR_BATTLE_ALREADY_IN_BATTLE`, `ERROR_BATTLE_EMPTY_TEAM`. Réponse : `BattleSessionStarted` avec `role` `HOST`, `"solo": true`, `opponent_uuid` = uuid du miroir (stable, propre à cet admin), `opponent_name` = « pseudo (miroir) », `opponent_team` = `own_team`, format Libre. Le reste comme un combat normal (spectateurs compris) ; `BattleResult` accepte le miroir comme vainqueur ; un seul `BattleEnded` ; **rien n'est stocké** dans `battle_sessions` |
+
 ## 6. Échanges asynchrones (notifications)
 
 Envoyés par `TradeService` après les appels REST, uniquement aux joueurs connectés :

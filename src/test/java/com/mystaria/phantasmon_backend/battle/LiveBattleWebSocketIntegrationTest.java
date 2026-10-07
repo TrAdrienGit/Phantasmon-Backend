@@ -435,6 +435,206 @@ class LiveBattleWebSocketIntegrationTest {
 		assertNothing(bob, "BattleTimerEnabled");
 	}
 
+	// ---- Spectators (watching a Ghost battle, like Cobblemon's spectate) ----
+
+	/** A third player, Carol, connected for a spectator test. */
+	private WebSocketSession carolSession;
+	private RecordingHandler carol;
+	private UUID carolUuid;
+
+	private void connectCarol() throws Exception {
+		carolUuid = UUID.randomUUID();
+		playerService.recordConnection(carolUuid, "Carol");
+		carol = new RecordingHandler();
+		carolSession = connect(carolUuid, "Carol", carol);
+	}
+
+	@AfterEach
+	void closeCarol() throws Exception {
+		if (carolSession != null && carolSession.isOpen()) {
+			carolSession.close();
+		}
+		carolSession = null;
+	}
+
+	private static String spectatorPacket(String battle, String spectator, String payload) {
+		return "{\"battle_uuid\":\"" + battle + "\",\"id\":\"cobblemon:battle_message\",\"payload\":\"" + payload + "\""
+				+ (spectator == null ? "" : ",\"spectator_uuid\":\"" + spectator + "\"") + "}";
+	}
+
+	@Test
+	void aSpectatorWatchesTheHostsPublicStreamUntilTheEnd() throws Exception {
+		teamMember(aliceUuid, "pikachu", 1);
+		teamMember(bobUuid, "charmander", 1);
+		String battle = startBattle(aliceSession, alice, bobUuid, bobSession, bob).get("battle_uuid").asString();
+		connectCarol();
+
+		// Carol aims at Bob (the guest) and asks to watch: everyone is told, the host learns who to catch up.
+		send(carolSession, "BattleSpectate", "{\"target_uuid\":\"" + bobUuid + "\"}");
+		JsonNode started = await(carol, "BattleSpectateStarted");
+		assertThat(started.get("battle_uuid").asString()).isEqualTo(battle);
+		assertThat(started.get("host_uuid").asString()).isEqualTo(aliceUuid.toString());
+		assertThat(started.get("guest_uuid").asString()).isEqualTo(bobUuid.toString());
+		assertThat(started.get("host_name").asString()).isEqualTo("Alice");
+		assertThat(started.get("guest_name").asString()).isEqualTo("Bob");
+		JsonNode joined = await(alice, "BattleSpectatorJoined");
+		assertThat(joined.get("spectator_uuid").asString()).isEqualTo(carolUuid.toString());
+		assertThat(joined.get("spectator_name").asString()).isEqualTo("Carol");
+		assertThat(await(bob, "BattleSpectatorJoined").get("spectator_name").asString()).isEqualTo("Carol");
+
+		// The host's catch-up for Carol alone, then its public stream for every spectator — never to the guest.
+		send(aliceSession, "BattleSpectatorPacket", spectatorPacket(battle, carolUuid.toString(), "AAEC"));
+		JsonNode catchUp = await(carol, "BattleSpectatorPacket");
+		assertThat(catchUp.get("battle_uuid").asString()).isEqualTo(battle);
+		assertThat(catchUp.get("id").asString()).isEqualTo("cobblemon:battle_message");
+		assertThat(catchUp.get("payload").asString()).isEqualTo("AAEC");
+		assertThat(catchUp.has("spectator_uuid")).isFalse();
+		send(aliceSession, "BattleSpectatorPacket", spectatorPacket(battle, null, "BAUG"));
+		assertThat(await(carol, "BattleSpectatorPacket").get("payload").asString()).isEqualTo("BAUG");
+		assertNothing(bob, "BattleSpectatorPacket");
+
+		send(aliceSession, "BattleResult", "{\"battle_uuid\":\"" + battle + "\",\"winner_uuid\":\"" + bobUuid + "\"}");
+		JsonNode ended = await(carol, "BattleSpectateEnded");
+		assertThat(ended.get("battle_uuid").asString()).isEqualTo(battle);
+		assertThat(ended.get("reason").asString()).isEqualTo("FINISHED");
+		assertThat(ended.get("winner_uuid").asString()).isEqualTo(bobUuid.toString());
+	}
+
+	@Test
+	void spectatingFollowsTheRules() throws Exception {
+		teamMember(aliceUuid, "pikachu", 1);
+		teamMember(bobUuid, "charmander", 1);
+		connectCarol();
+
+		send(carolSession, "BattleSpectate", "{\"target_uuid\":\"" + aliceUuid + "\"}");
+		assertThat(await(carol, "BattleSessionError").get("error_code").asString()).isEqualTo("ERROR_BATTLE_SPECTATE_NOT_BATTLING");
+		send(carolSession, "BattleSpectate", "{\"target_uuid\":\"" + carolUuid + "\"}");
+		assertThat(await(carol, "BattleSessionError").get("error_code").asString()).isEqualTo("ERROR_BATTLE_SELF");
+		send(carolSession, "BattleSpectate", "{}");
+		assertThat(await(carol, "BattleSessionError").get("error_code").asString()).isEqualTo("ERROR_WS_MALFORMED_MESSAGE");
+
+		String battle = startBattle(aliceSession, alice, bobUuid, bobSession, bob).get("battle_uuid").asString();
+		// A player of the battle cannot watch it; only the host streams to spectators.
+		send(bobSession, "BattleSpectate", "{\"target_uuid\":\"" + aliceUuid + "\"}");
+		assertThat(await(bob, "BattleSessionError").get("error_code").asString()).isEqualTo("ERROR_BATTLE_ALREADY_IN_BATTLE");
+		send(carolSession, "BattleSpectate", "{\"target_uuid\":\"" + aliceUuid + "\"}");
+		await(carol, "BattleSpectateStarted");
+		send(bobSession, "BattleSpectatorPacket", spectatorPacket(battle, null, "AA"));
+		assertThat(await(bob, "BattleSessionError").get("error_code").asString()).isEqualTo("ERROR_BATTLE_NOT_HOST");
+		assertNothing(carol, "BattleSpectatorPacket");
+
+		// Watching keeps a player busy, like a battle: no invitation reaches them meanwhile.
+		send(aliceSession, "BattleSpectate", "{\"target_uuid\":\"" + bobUuid + "\"}");
+		await(alice, "BattleSessionError");
+		send(carolSession, "BattleInvite", "{\"target_uuid\":\"" + aliceUuid + "\"}");
+		assertThat(await(carol, "BattleSessionError").get("error_code").asString()).isEqualTo("ERROR_BATTLE_ALREADY_IN_BATTLE");
+	}
+
+	@Test
+	void aSpectatorLeavesByChoiceOrByDisconnecting() throws Exception {
+		teamMember(aliceUuid, "pikachu", 1);
+		teamMember(bobUuid, "charmander", 1);
+		String battle = startBattle(aliceSession, alice, bobUuid, bobSession, bob).get("battle_uuid").asString();
+		connectCarol();
+
+		send(carolSession, "BattleSpectate", "{\"target_uuid\":\"" + aliceUuid + "\"}");
+		await(carol, "BattleSpectateStarted");
+		await(alice, "BattleSpectatorJoined");
+		send(carolSession, "BattleSpectateLeave", "{\"battle_uuid\":\"" + battle + "\"}");
+		assertThat(await(carol, "BattleSpectateEnded").get("reason").asString()).isEqualTo("LEFT");
+		assertThat(await(alice, "BattleSpectatorLeft").get("spectator_uuid").asString()).isEqualTo(carolUuid.toString());
+		send(aliceSession, "BattleSpectatorPacket", spectatorPacket(battle, null, "AA"));
+		assertNothing(carol, "BattleSpectatorPacket");
+
+		send(carolSession, "BattleSpectate", "{\"target_uuid\":\"" + aliceUuid + "\"}");
+		await(carol, "BattleSpectateStarted");
+		await(alice, "BattleSpectatorJoined");
+		carolSession.close();
+		assertThat(await(alice, "BattleSpectatorLeft").get("spectator_uuid").asString()).isEqualTo(carolUuid.toString());
+	}
+
+	// ---- Field viewers (everyone around sees the battle's Pokémon, like Cobblemon) ----
+
+	@Autowired
+	private com.mystaria.phantasmon_backend.hub.HubAnchorService hubAnchorService;
+
+	@Test
+	void playersOfTheServerGroupSeeTheFieldWithoutWatching() throws Exception {
+		teamMember(aliceUuid, "pikachu", 1);
+		teamMember(bobUuid, "charmander", 1);
+		String group = "fp-battle-field-" + UUID.randomUUID();
+		joinGroup(aliceSession, group);
+		joinGroup(bobSession, group);
+		connectCarol();
+		joinGroup(carolSession, group);
+
+		String battle = startBattle(aliceSession, alice, bobUuid, bobSession, bob).get("battle_uuid").asString();
+		// The host learns that Carol sees the field, catches her up, then streams to her — never to the guest.
+		JsonNode joined = await(alice, "BattleFieldViewerJoined");
+		assertThat(joined.get("battle_uuid").asString()).isEqualTo(battle);
+		assertThat(joined.get("viewer_uuid").asString()).isEqualTo(carolUuid.toString());
+		send(aliceSession, "BattleSpectatorPacket", spectatorPacket(battle, carolUuid.toString(), "AAEC"));
+		JsonNode catchUp = await(carol, "BattleFieldPacket");
+		assertThat(catchUp.get("battle_uuid").asString()).isEqualTo(battle);
+		assertThat(catchUp.get("payload").asString()).isEqualTo("AAEC");
+		assertThat(catchUp.has("spectator_uuid")).isFalse();
+		send(aliceSession, "BattleSpectatorPacket", spectatorPacket(battle, null, "BAUG"));
+		assertThat(await(carol, "BattleFieldPacket").get("payload").asString()).isEqualTo("BAUG");
+		assertNothing(bob, "BattleFieldPacket");
+
+		// Watching replaces the field view; stopping brings it back.
+		send(carolSession, "BattleSpectate", "{\"target_uuid\":\"" + aliceUuid + "\"}");
+		assertThat(await(carol, "BattleFieldEnded").get("reason").asString()).isEqualTo("SPECTATING");
+		assertThat(await(alice, "BattleFieldViewerLeft").get("viewer_uuid").asString()).isEqualTo(carolUuid.toString());
+		send(aliceSession, "BattleSpectatorPacket", spectatorPacket(battle, null, "AA"));
+		await(carol, "BattleSpectatorPacket");
+		send(carolSession, "BattleSpectateLeave", "{\"battle_uuid\":\"" + battle + "\"}");
+		assertThat(await(alice, "BattleFieldViewerJoined").get("viewer_uuid").asString()).isEqualTo(carolUuid.toString());
+
+		// Leaving the server group ends the view; the battle's end ends it for everyone.
+		joinGroup(carolSession, "fp-elsewhere-" + UUID.randomUUID());
+		JsonNode outOfRange = await(carol, "BattleFieldEnded");
+		assertThat(outOfRange.get("battle_uuid").asString()).isEqualTo(battle);
+		assertThat(outOfRange.get("reason").asString()).isEqualTo("OUT_OF_RANGE");
+		await(alice, "BattleFieldViewerLeft");
+		joinGroup(carolSession, group);
+		await(alice, "BattleFieldViewerJoined");
+		send(aliceSession, "BattleResult", "{\"battle_uuid\":\"" + battle + "\",\"winner_uuid\":\"" + bobUuid + "\"}");
+		assertThat(await(carol, "BattleFieldEnded").get("reason").asString()).isEqualTo("FINISHED");
+	}
+
+	@Test
+	void hubMembersSeeTheFieldOfABattleFoughtByAMember() throws Exception {
+		teamMember(aliceUuid, "pikachu", 1);
+		teamMember(bobUuid, "charmander", 1);
+		// Alice is in the Hub from server 1, Bob plays alone on server 2, Carol is in the Hub from server 3.
+		String server1 = "fp-hub-field-1-" + UUID.randomUUID();
+		joinGroup(aliceSession, server1);
+		send(aliceSession, "HubJoin", "{\"anchor_uuid\":\"" + anchorOn(aliceUuid, server1) + "\"}");
+		await(alice, "HubJoined");
+		joinGroup(bobSession, "fp-hub-field-2-" + UUID.randomUUID());
+		connectCarol();
+		String server3 = "fp-hub-field-3-" + UUID.randomUUID();
+		joinGroup(carolSession, server3);
+		send(carolSession, "HubJoin", "{\"anchor_uuid\":\"" + anchorOn(carolUuid, server3) + "\"}");
+		await(carol, "HubJoined");
+
+		String battle = startBattle(aliceSession, alice, bobUuid, bobSession, bob).get("battle_uuid").asString();
+		assertThat(await(alice, "BattleFieldViewerJoined").get("viewer_uuid").asString()).isEqualTo(carolUuid.toString());
+		send(aliceSession, "BattleSpectatorPacket", spectatorPacket(battle, null, "BAUG"));
+		assertThat(await(carol, "BattleFieldPacket").get("payload").asString()).isEqualTo("BAUG");
+
+		send(carolSession, "HubLeave", "{}");
+		assertThat(await(carol, "BattleFieldEnded").get("battle_uuid").asString()).isEqualTo(battle);
+		send(aliceSession, "HubLeave", "{}");
+	}
+
+	private UUID anchorOn(UUID owner, String fingerprint) {
+		return hubAnchorService.create(owner, new com.mystaria.phantasmon_backend.hub.HubAnchorCreateRequest(UUID.randomUUID(),
+				"Anchor " + owner.toString().substring(0, 8), fingerprint, "minecraft:overworld",
+				new com.mystaria.phantasmon_backend.hub.HubAnchorCreateRequest.Origin(0.0, 64.0, 0.0), 0.0)).uuid();
+	}
+
 	@Test
 	void theHostReportsTheResultWhichIsStoredAndBroadcast() throws Exception {
 		teamMember(aliceUuid, "pikachu", 1);
