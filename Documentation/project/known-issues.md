@@ -31,6 +31,7 @@ Identifiants : `BUG-n` (comportement incorrect), `SEC-n` (sécurité, voir [`sec
 | TODO-29 | basse | Client + Backend | Network : Hubs privés (Anchor ou Hub réservé à un groupe, par code d'invitation). Jalon 1 = un seul Hub public (cahier des charges Network §5.3). |
 | TODO-30 | basse | Backend | Network : instances multiples du Hub au-delà de 50 joueurs (aujourd'hui : refus `ERROR_HUB_FULL`). |
 | TODO-31 | moyenne | Client + Backend | Network : outils de modération du chat du Hub pour les admins (rendre muet, exclure du Hub) ; jalon 1 = longueur, débit, journalisation seulement. |
+| TODO-32 | basse | Client + Backend | Network : émotes dans le Hub (écartées du jalon 2 par Adrien le 2026-10-07). Pistes : bulles au-dessus de la tête, ou vraies animations du corps (Mixin de rendu ou mod d'animation). |
 
 ## 3. Dette technique
 
@@ -52,6 +53,8 @@ Identifiants : `BUG-n` (comportement incorrect), `SEC-n` (sécurité, voir [`sec
 | LIM-8 | Pas d'archivage WAL : la restauration revient à la dernière sauvegarde (jusqu'à 24 h de pertes avec une sauvegarde quotidienne). |
 | LIM-9 | Positions visibles par tout le groupe (SEC-6, décision D-21) : quiconque connaît l'adresse d'un serveur peut rejoindre son groupe et recevoir chaque seconde la position des joueurs ayant un Ghost sorti. Assumé pour des serveurs entre joueurs de confiance. |
 | LIM-10 | Ghost contre Pokémon normal (D-22) : la copie d'équipe Cobblemon vient du client du joueur ; elle est bornée et validée comme un Ghost, mais un client modifié pourrait annoncer une équipe qu'il ne possède pas (aucun accès aux données du serveur Minecraft). |
+| LIM-12 | Network : un joueur qui quitte le Hub (sort du cube de l'Anchor) pendant un échange ou un combat avec un joueur d'un autre serveur n'a plus d'avatar chez l'autre ; la session continue, l'affichage retombe sur « adversaire non chargé » (pas de placement face à lui, caméra sur soi). |
+| LIM-13 | Network : les modèles affichés (Ghost, combat, Méga, formes) viennent des packs de ressources de **chaque** client. Deux joueurs de serveurs différents peuvent avoir des modpacks ou des packs différents : un modèle absent chez l'un s'y affiche avec le modèle de base (cas du 2026-10-07 : pack CCC 2.2 non activé sur l'instance de TheMashen → Méga-Tyranitar et Kyurem au modèle de base chez lui). |
 | LIM-11 | Dialga s'affiche à l'envers dans le monde (Ghost sorti, combat), chromatique ou non — aussi un vrai Dialga Cobblemon : vient du modpack (modèle du pack CCC et/ou rendu modifié par DeltaClient), pas de Phantasmon. Rien modifié côté mod (Adrien 2026-10-05). |
 
 ## 5. Résolu

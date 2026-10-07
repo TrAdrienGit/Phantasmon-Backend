@@ -366,6 +366,24 @@ class HubWebSocketIntegrationTest {
 	}
 
 	@Test
+	void playersOfTwoServersMetInTheHubCanInviteEachOtherToTradeAndBattle() throws Exception {
+		// Milestone 2: live trade and battle invites never depended on the server group, only on the target being
+		// connected — what lets the wheel opened on an avatar invite a player of another Minecraft server.
+		Client alice = inAnchor("Al", server());
+		alice.await("HubJoined");
+		Client bob = inAnchor("Bo", server());
+		bob.await("HubJoined");
+
+		alice.send("TradeInvite", "{\"target_uuid\":\"" + bob.uuid + "\"}");
+		JsonNode tradeInvite = bob.await("TradeInviteReceived");
+		assertThat(tradeInvite.get("from_uuid").asString()).isEqualTo(alice.uuid.toString());
+		assertThat(tradeInvite.get("from_name").asString()).startsWith("Al");
+
+		alice.send("BattleInvite", "{\"target_uuid\":\"" + bob.uuid + "\",\"team\":\"GHOST\"}");
+		assertThat(bob.await("BattleInviteReceived").get("from_uuid").asString()).isEqualTo(alice.uuid.toString());
+	}
+
+	@Test
 	void theHubRefusesPlayersBeyondItsCapacity() throws Exception {
 		inAnchor("Al", server()).await("HubJoined");
 		inAnchor("Bo", server()).await("HubJoined");

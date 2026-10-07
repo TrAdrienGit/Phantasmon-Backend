@@ -7,7 +7,7 @@
 > [`research/Phantasmon_Evolution_InterServeurs.md`](../research/Phantasmon_Evolution_InterServeurs.md), puis
 > complété le même jour avec les réponses d'Adrien (taille, capacité, quota, chat, branche).
 > **Précisé le 2026-10-07 (D-30)** : les Anchors sont partagés entre les joueurs d'un même serveur, jamais entre serveurs.
-> **Statut : jalon 1 (« Hub social minimal ») terminé et validé en jeu le 2026-10-07.** Les jalons suivants sont seulement esquissés.
+> **Statut : jalons 1 (« Hub social minimal ») et 2 (« Interactions ») terminés et validés en jeu le 2026-10-07.** Les jalons suivants sont seulement esquissés.
 
 ---
 
@@ -282,18 +282,55 @@ de le masquer derrière un interrupteur, même s'il arrive sur `dev` avant d'êt
 **Environnement de test nécessaire** : deux serveurs Minecraft + Cobblemon locaux (ports distincts, donc deux
 empreintes) et deux comptes Mojang, comme pour les validations à deux comptes des phases 7 à 9.
 
-## 7. Jalons suivants (esquisse, non engagés)
+## 7. Jalon 2 — Interactions (terminé le 2026-10-07)
+
+Adrien : échange et combat avec l'avatar d'un joueur d'un autre serveur ; **pas d'émotes pour l'instant** (TODO-32).
+
+### 7.1 Expérience joueur
+
+1. Dans le Hub, le joueur vise l'avatar d'un joueur et appuie sur **R** (touche d'envoi de Cobblemon) : la roue
+   d'interaction s'ouvre avec seulement **Échange Ghost** et **Combat Ghost** (les entrées de Cobblemon agissent sur le
+   serveur Minecraft, qui ne connaît pas ce joueur).
+2. L'invitation, l'écran d'échange, le lobby, l'intro et le combat sont ceux du Core : rien ne change pour l'invité,
+   qui accepte par les boutons du chat.
+3. En combat, l'avatar tient la place de l'adversaire : placement des Pokémon, caméra, intro (skin et couches de
+   l'avatar), modèle 3D du lobby.
+
+### 7.2 Conception
+
+- **Backend : rien à changer.** Les invitations d'échange et de combat en direct ne vérifient que la connexion de la
+  cible, jamais le groupe serveur ; un test WebSocket le fixe désormais (deux joueurs de deux empreintes, rencontrés
+  dans le Hub, s'invitent).
+- **Roue sur un avatar** (client) : la touche R de Cobblemon demande au serveur Minecraft les options d'un joueur
+  visé ; pour un avatar, le serveur ne répondrait jamais. `PartySendBindingMixin` repère d'abord un avatar visé
+  (10 blocs, bloc intermédiaire exclu) et ouvre localement `InteractWheelGUI` avec les deux entrées Ghost
+  (`GhostWheelOptions.openOnAvatar`). L'avatar reste non ciblable par Minecraft (ni coup ni clic droit envoyés au
+  serveur).
+- **Adversaire d'un autre serveur** (client) : partout où le combat cherchait l'adversaire par
+  `level.getPlayerByUUID` (`BattleVisuals`, `BattleCinematic`, lobby, intro), `HubAvatars.playerOrAvatar` rend le vrai
+  joueur s'il est chargé, sinon son avatar.
+- **Limite** : un joueur qui sort du Hub en plein combat (il quitte le cube de l'Anchor) n'a plus d'avatar chez
+  l'autre ; le combat continue, l'affichage retombe sur les cas « adversaire non chargé » du Core (LIM-12).
+
+### 7.3 Étapes
+
+| Étape | Dépôt | Contenu | Critère de fin |
+|---|---|---|---|
+| N6 | Client | Roue Ghost sur un avatar ; test backend des invitations entre serveurs | Invitation reçue par un joueur d'un autre serveur |
+| N7 | Client | Avatar comme adversaire : combat, caméra, lobby, intro | Combat complet contre un joueur d'un autre serveur |
+| N8 | Les deux | Validation en jeu par Adrien : un échange et un combat entre deux serveurs | Jalon 2 terminé |
+
+## 8. Jalons suivants (esquisse, non engagés)
 
 | Jalon | Idée | Réutilise |
 |---|---|---|
-| 2 — Interactions | Échange et combat avec un avatar distant par la roue (D-24) ; émotes | Échange en direct, lobby et combat client hôte (inchangés : ils ne dépendent déjà pas du serveur Minecraft) |
 | 3 — Sessions | Modèle de session générique (`WAITING` → `READY` → `ACTIVE` → `FINISHED`) dont le combat devient un cas ; **spectateurs** d'un combat inter-serveurs | `LiveBattleService`, relais `BattlePacket` |
 | 4 — Événements | Tournois inter-serveurs : inscriptions, appariement, arbre, statistiques | Sessions, `battle_sessions` |
 | 5 — Identité | Profil Phantasmon, historique, amis, succès | Identité Mojang déjà vérifiée (auth `hasJoined`) ; à concevoir séparément (sécurité, confiance) |
 | 6 — Hubs multiples | Hubs privés (TODO-29), instances au-delà de 50 joueurs (TODO-30), types de Hub (social, training, event), verticalité, décors virtuels | |
 | Hors champ | Voix de proximité ; reconstruction de mondes distants ; physique virtuelle | — |
 
-## 8. Questions ouvertes
+## 9. Questions ouvertes
 
 Aucune pour le jalon 1. Réponses d'Adrien intégrées le 2026-10-07 : cube de 21 × 21 × 21, 50 joueurs, un Anchor par
 joueur ; un seul Hub, public (Hubs privés en TODO-29) ; chat du Hub dans le jalon 1 ; développement sur `dev` ;

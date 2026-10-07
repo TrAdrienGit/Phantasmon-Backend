@@ -31,7 +31,8 @@ production (phase 10), qu'Adrien ne monte pas pour l'instant (il reste sur sa ma
 Le projet passe à **Phantasmon Network** (couche inter-serveurs), développé directement sur `dev`
 ([D-27](../architecture/decisions.md#d-27--phantasmon-network-développé-sur-dev)) selon
 [`specifications/network-cahier-des-charges.md`](../specifications/network-cahier-des-charges.md).
-**Jalon 1 (« Hub social minimal ») terminé et validé en jeu le 2026-10-07.**
+**Jalon 1 (« Hub social minimal ») et jalon 2 (« Interactions » : échange et combat entre serveurs) terminés et
+validés en jeu le 2026-10-07.**
 
 | Étape Network | Périmètre | Statut |
 |---|---|---|
@@ -41,6 +42,9 @@ Le projet passe à **Phantasmon Network** (couche inter-serveurs), développé d
 | N3 | Client : commandes et affichage des Anchors, consentement, transformation de coordonnées, chat | ✅ Terminée, validée en jeu par Adrien (2026-10-07) |
 | N4 | Client : avatars des joueurs distants | ✅ Validée en jeu par Adrien (2026-10-07), avec skin complet, cape et collisions |
 | N5 | Les deux : Ghost dans le Hub ; validation du jalon 1 en jeu | ✅ Terminée, validée en jeu par Adrien (2026-10-07) — **jalon 1 terminé** |
+| N6 | Client : roue Ghost sur un avatar (jalon 2) | ✅ Terminée, validée en jeu par Adrien (2026-10-07) |
+| N7 | Client : avatar comme adversaire (combat, caméra, lobby, intro) | ✅ Terminée, validée en jeu par Adrien (2026-10-07) |
+| N8 | Les deux : validation du jalon 2 (échange et combat entre deux serveurs) | ✅ Validée par Adrien (2026-10-07) — **jalon 2 terminé** |
 
 ## 2. Fonctionnalités disponibles
 
