@@ -14,7 +14,7 @@ réécrit au fil de l'eau : chaque écart d'implémentation est signalé par une
 | [Partie 2 — Architecture technique](cad-2-architecture-technique.md) | Pas de mod serveur, auth Mojang, présence, rendu client, combat « client hôte », API | Principes valides ; détails à lire avec les notes |
 | [Partie 3 — Compléments](cad-3-complements.md) | Légalité, échanges, handshake de version, TTL, sauvegardes, distribution, i18n | Valide ; prime sur la Partie 1 |
 | [Partie 4 — Plan de développement](cad-4-plan-developpement.md) | Phases 0 à 10 et critères de fin | Phases 0 à 9 terminées, phase 10 à faire |
-| [Phantasmon Network](network-cahier-des-charges.md) | Couche inter-serveurs : Hub Anchors, Global Hub, avatars distants ; jalons et étapes N0 à N5 | Rédigé le 2026-10-07 ; jalon 1 non commencé (sur `dev`) |
+| [Phantasmon Network](network-cahier-des-charges.md) | Couche inter-serveurs : Hub Anchors, Global Hub, avatars distants ; jalons et étapes N0 à N5 | Jalon 1 (Hub social minimal) terminé le 2026-10-07 ; jalons suivants esquissés |
 
 ## Ordre de priorité en cas de contradiction
 

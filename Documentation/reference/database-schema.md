@@ -230,21 +230,22 @@ Index : `idx_idempotency_player_endpoint` (`player_uuid`, `endpoint`).
 
 ## 7 bis. `hub_anchors` (Phantasmon Network, V11)
 
-Points d'accès au Global Hub posés par les joueurs sur leur serveur
+Points d'accès au Global Hub posés par les joueurs, partagés par tous les joueurs de leur serveur (D-30)
 ([`network-cahier-des-charges.md`](../specifications/network-cahier-des-charges.md) §5.2, D-28).
 
 | Colonne | Type | Contraintes | Notes |
 |---|---|---|---|
 | `uuid` | UUID | PK | Généré par le backend |
 | `owner_uuid` | UUID | NOT NULL, FK `players` `ON DELETE RESTRICT`, **unique** | Un Anchor par joueur (`uq_hub_anchor_owner`) |
-| `name` | VARCHAR(32) | NOT NULL | Unique par serveur, casse ignorée (`uq_hub_anchor_server_name` sur `server_fingerprint`, `lower(name)`) |
+| `name` | VARCHAR(32) | NOT NULL | Unique par serveur, casse ignorée (`uq_hub_anchor_server_name` sur `server_fingerprint`, `lower(name)`, recréé par V13) |
 | `server_fingerprint` | VARCHAR(128) | NOT NULL | Empreinte du serveur (D-18), jamais l'adresse |
 | `dimension` | VARCHAR(128) | NOT NULL | |
 | `origin_x`, `origin_y`, `origin_z` | DOUBLE PRECISION | NOT NULL | Pieds du créateur ; centre du cube en `x` / `z`, base en `y` |
 | `yaw` | SMALLINT | NOT NULL, ∈ {0, 90, 180, 270} | Arrondi au quart de tour |
 | `created_at` | TIMESTAMPTZ | NOT NULL, défaut `now()` | |
 
-Index : `idx_hub_anchor_server_dimension` (`server_fingerprint`, `dimension`). La taille du cube n'est pas stockée :
+Index : `idx_hub_anchor_server_dimension` (`server_fingerprint`, `dimension`) : un Anchor est partagé par les joueurs
+de son serveur (D-30), qui le listent par empreinte et dimension. La taille du cube n'est pas stockée :
 elle est commune à tous les Anchors (`phantasmon.hub.anchor-size`).
 
 ## 8. État hors base
@@ -273,6 +274,8 @@ Tout est perdu au redémarrage du backend (comportement voulu) et n'est pas part
 | V9 | `V9__pokemon_data_snake_case_keys.sql` | 2026-10-04 | Clés de `pokemon.data` en snake_case : `heldItem` → `held_item`, `teraType` → `tera_type`, aussi dans les réponses mémorisées de `idempotency_keys` (DEBT-1). Rejouable ; aucune autre donnée modifiée (vérifié sur une copie des données réelles : 25 et 10 Pokémon concernés) |
 | V10 | `V10__pokemon_hidden_power_single_id.sql` | 2026-10-04 | Dans `data.moves`, les identifiants de variantes `hiddenpower<type>` (importés avant la correction de l'import) deviennent `hiddenpower`, seule capacité Puissance Cachée de Cobblemon (type tiré des IV). Ordre et autres capacités conservés ; rejouable. 1 Pokémon concerné dans les données réelles (`hiddenpowerice`) |
 | V11 | `V11__init_hub_anchors.sql` | 2026-10-07 | Phantasmon Network (N1) : table `hub_anchors`, un Anchor par joueur, nom unique par serveur |
+| V12 | `V12__hub_anchors_personal.sql` | 2026-10-07 | Contresens sur D-30 (Anchors rendus personnels) : retrait de `uq_hub_anchor_server_name` et de `idx_hub_anchor_server_dimension`. Déjà appliquée sur la base de dev, donc conservée ; annulée par V13 |
+| V13 | `V13__hub_anchors_shared_per_server.sql` | 2026-10-07 | D-30 corrigée (Anchors partagés par serveur) : noms en double numérotés (« Nom 2 »…), puis `uq_hub_anchor_server_name` et `idx_hub_anchor_server_dimension` recréés |
 
 ## 10. Décisions de schéma
 

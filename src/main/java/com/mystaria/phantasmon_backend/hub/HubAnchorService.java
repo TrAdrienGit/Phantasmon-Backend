@@ -13,9 +13,9 @@ import com.mystaria.phantasmon_backend.admin.AdminService;
 import com.mystaria.phantasmon_backend.common.ApiException;
 
 /**
- * Hub Anchors (network-cahier-des-charges.md §5.2, D-28): any player creates one, at most; names are unique per
- * server, ignoring case; the owner or an admin (D-26) deletes it. Without a server mod nothing proves the creator
- * really stands there — a limit D-29 (joining the Hub needs consent) makes harmless.
+ * Hub Anchors (network-cahier-des-charges.md §5.2, D-28, D-30): any player creates one, at most; an anchor is shared
+ * by all the players of its server and dimension (listed and usable by them), never seen from another server; names
+ * are unique per server, ignoring case; the owner or an admin (D-26) deletes it.
  */
 @Service
 public class HubAnchorService {
@@ -48,6 +48,7 @@ public class HubAnchorService {
 		return HubAnchorResponse.from(anchor, anchorSize);
 	}
 
+	/** The anchors of one server and dimension: what its players see and may enter the Hub through. */
 	@Transactional(readOnly = true)
 	public List<HubAnchorResponse> listForServer(String serverFingerprint, String dimension) {
 		return repository.findByServerFingerprintAndDimensionOrderByNameAsc(serverFingerprint, dimension).stream()

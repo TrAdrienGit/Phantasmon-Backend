@@ -106,15 +106,13 @@ Les codes marqués « — » côté client concernent des routes REST que le cli
 
 ## Hub (Phantasmon Network)
 
-Les clés de traduction seront ajoutées au client avec l'étape N3.
-
 | Code | Statut | Canal | Signification | Clé de traduction client |
 |---|---|---|---|---|
 | `ERROR_HUB_ANCHOR_QUOTA` | 409 | REST | Le joueur a déjà un Anchor (un par joueur) | `phantasmon.hub.error.anchor_quota` |
 | `ERROR_HUB_ANCHOR_NAME_TAKEN` | 409 | REST | Nom déjà utilisé sur ce serveur (casse ignorée) | `phantasmon.hub.error.anchor_name_taken` |
-| `ERROR_HUB_ANCHOR_NOT_FOUND` | 404 | REST | Anchor inconnu, ou le joueur n'en a pas | `phantasmon.hub.error.anchor_not_found` |
+| `ERROR_HUB_ANCHOR_NOT_FOUND` | 404 | REST, WS | Anchor inconnu, ou le joueur n'en a pas | `phantasmon.hub.error.anchor_not_found` |
 | `ERROR_HUB_ANCHOR_FORBIDDEN` | 403 | REST | Suppression par un autre que le créateur ou un admin | `phantasmon.hub.error.anchor_forbidden` |
-| `ERROR_HUB_ANCHOR_WRONG_SERVER` | — | WS | `HubJoin` sans présence, ou par un Anchor d'un autre serveur ou d'une autre dimension | `phantasmon.hub.error.anchor_wrong_server` |
+| `ERROR_HUB_ANCHOR_WRONG_SERVER` | — | WS | `HubJoin` sans présence, ou par un Anchor d'un autre serveur ou d'une autre dimension (D-30) | `phantasmon.hub.error.anchor_wrong_server` |
 | `ERROR_HUB_FULL` | — | WS | Le Hub compte déjà `details.capacity` joueurs (50) | `phantasmon.hub.error.full` |
 | `ERROR_HUB_NOT_JOINED` | — | WS | `HubMove` / `HubChat` hors du Hub | `phantasmon.hub.error.not_joined` |
 | `ERROR_HUB_OUT_OF_BOUNDS` | — | WS | `HubMove` hors du carré (\|x\|, \|z\| > 10,5) ou `y_offset` hors de 0 à 21 | `phantasmon.hub.error.out_of_bounds` |

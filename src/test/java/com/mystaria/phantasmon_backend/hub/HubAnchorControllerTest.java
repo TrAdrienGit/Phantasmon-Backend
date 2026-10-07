@@ -29,8 +29,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * Phantasmon Network, step N1 — Hub Anchors (network-cahier-des-charges.md §5.2, D-28): any player may create one
- * anchor, a 21×21×21 cube, named uniquely per server; the owner or an admin deletes it.
+ * Phantasmon Network — Hub Anchors (network-cahier-des-charges.md §5.2, D-28, D-30): any player may create one
+ * anchor, a 21×21×21 cube, shared by the players of its server (listed per server and dimension, never across servers),
+ * named uniquely per server; the owner or an admin deletes it.
  */
 @Import(TestcontainersConfiguration.class)
 // Same properties as AdminControllerTest, so both share one cached Spring context (and one admin file).
@@ -166,7 +167,7 @@ class HubAnchorControllerTest {
 	}
 
 	@Test
-	void anchorsAreListedPerServerAndDimension() throws Exception {
+	void theAnchorsOfAServerAreListedToItsPlayersButNotAcrossServers() throws Exception {
 		create(aliceToken, UUID.randomUUID(), "Overworld", server, "minecraft:overworld", 0);
 		create(bobToken, UUID.randomUUID(), "Nether", server, "minecraft:the_nether", 0);
 		create(tokenFor(UUID.randomUUID(), "Ca"), "Elsewhere", "srv-" + UUID.randomUUID(), 0);

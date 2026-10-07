@@ -7,13 +7,15 @@ import java.util.function.Predicate;
 
 import org.springframework.stereotype.Component;
 
+import com.mystaria.phantasmon_backend.hub.HubService;
 import com.mystaria.phantasmon_backend.presence.PresenceService;
 
 import lombok.extern.slf4j.Slf4j;
 
 /**
  * Takes a player's Ghost back in (CAD Partie 2 §7/§8): clears it from the presence and broadcasts
- * {@code GhostEntityDespawn} to the player's group <b>and</b> the player (same audience as the spawn). Shared by
+ * {@code GhostEntityDespawn} to the player's group <b>and</b> the player (same audience as the spawn), and
+ * {@code HubGhostDespawn} to the Global Hub if the player is in it. Shared by
  * {@code RecallGhost}, a live trade that gives the Ghost away, and the start of a Ghost battle (TODO-14).
  */
 @Component
@@ -22,10 +24,12 @@ public class GhostRecall {
 
 	private final PresenceService presenceService;
 	private final SessionRegistry sessionRegistry;
+	private final HubService hubService;
 
-	public GhostRecall(PresenceService presenceService, SessionRegistry sessionRegistry) {
+	public GhostRecall(PresenceService presenceService, SessionRegistry sessionRegistry, HubService hubService) {
 		this.presenceService = presenceService;
 		this.sessionRegistry = sessionRegistry;
+		this.hubService = hubService;
 	}
 
 	/** Recalls whatever Ghost the player has out; no-op if none. */
@@ -46,6 +50,7 @@ public class GhostRecall {
 							Map.of("player_uuid", playerUuid, "pokemon_uuid", pokemonUuid));
 					groupMembers.forEach(member -> sessionRegistry.send(member, despawn));
 					sessionRegistry.send(playerUuid, despawn);
+					hubService.onGhostRecalled(playerUuid, pokemonUuid);
 				});
 	}
 }

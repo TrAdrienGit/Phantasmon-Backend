@@ -405,7 +405,8 @@ change ; créé vide au premier démarrage). Sinon `403 ERROR_ADMIN_REQUIRED`.
 Étape N1 de [`specifications/network-cahier-des-charges.md`](../specifications/network-cahier-des-charges.md) (§5.2,
 D-28). Un Anchor est un cube de `size` × `size` × `size` blocs (`phantasmon.hub.anchor-size`, 21) posé sur un
 serveur Minecraft : centré sur `origin` en `x` / `z`, de `origin.y` à `origin.y + size - 1` en hauteur. Le serveur
-n'est connu que par son empreinte (D-18). Tout joueur peut en créer **un**.
+n'est connu que par son empreinte (D-18). Tout joueur peut en créer **un** ; un Anchor est partagé par tous les
+joueurs de son serveur et de sa dimension, jamais visible depuis un autre serveur (D-30).
 
 ### Objet `HubAnchor`
 
@@ -428,8 +429,8 @@ restent alignés sur la grille des blocs).
 
 ### `GET /hub/anchors`
 
-Paramètres obligatoires `server_fingerprint` et `dimension` → liste des Anchors correspondants, triés par nom.
-Paramètre manquant : `400 ERROR_MALFORMED_REQUEST`.
+Paramètres obligatoires `server_fingerprint` et `dimension` → liste des Anchors correspondants, triés par nom : ce
+que voient les joueurs de ce serveur. Paramètre manquant : `400 ERROR_MALFORMED_REQUEST`.
 
 ### `POST /hub/anchors`
 

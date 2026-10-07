@@ -527,7 +527,7 @@ paths:
   /hub/anchors:
     get:
       tags: [Hub]
-      summary: Hub Anchors d'un serveur et d'une dimension (Phantasmon Network)
+      summary: Hub Anchors d'un serveur et d'une dimension, partagés par ses joueurs (D-30)
       parameters:
         - name: server_fingerprint
           in: query

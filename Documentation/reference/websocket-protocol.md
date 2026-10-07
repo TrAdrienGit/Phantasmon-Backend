@@ -202,24 +202,27 @@ joueurs (50). On y entre par un Hub Anchor ([`rest-api.md`](rest-api.md#hub-anch
 et de la dimension de sa présence. Les positions du Hub sont **relatives à l'Anchor** : jamais de coordonnées réelles
 ni d'adresse de serveur.
 
-**Visibilité** : deux membres sur la même empreinte **et** la même dimension se voient déjà pour de vrai dans
-Minecraft ; le backend ne leur envoie ni l'avatar ni les mouvements de l'autre (`HubJoined`, `HubPlayerEnter`,
-`HubPlayerMove`, `HubPlayerLeave`). Le chat, lui, va à tous les membres.
+**Anchors** (D-30) : on entre par n'importe quel Anchor du serveur et de la dimension où l'on est, jamais par celui
+d'un autre serveur. **Visibilité** : chaque membre reçoit tous les autres, joueurs du même serveur compris (ils
+peuvent être entrés par un autre Anchor) ; le client masque lui-même un avatar qui ferait doublon avec le vrai
+joueur. Le chat va à tous les membres.
 
 | C2S | `data` | Effet |
 |---|---|---|
-| `HubJoin` | `{ "anchor_uuid" }` | Entre dans le Hub. Refus : `ERROR_WS_MALFORMED_MESSAGE` (UUID absent ou invalide), `ERROR_HUB_ANCHOR_NOT_FOUND`, `ERROR_HUB_ANCHOR_WRONG_SERVER` (pas de `JoinServerGroup`, ou Anchor d'un autre serveur ou d'une autre dimension), `ERROR_HUB_FULL` (`details.capacity`). Déjà membre : sortie puis entrée par le nouvel Anchor. |
+| `HubJoin` | `{ "anchor_uuid" }` | Entre dans le Hub par cet Anchor, quel que soit son créateur. Refus : `ERROR_WS_MALFORMED_MESSAGE` (UUID absent ou invalide), `ERROR_HUB_ANCHOR_NOT_FOUND`, `ERROR_HUB_ANCHOR_WRONG_SERVER` (pas de `JoinServerGroup`, ou Anchor d'un autre serveur ou d'une autre dimension), `ERROR_HUB_FULL` (`details.capacity`). Déjà membre : sortie puis entrée par le nouvel Anchor. |
 | `HubLeave` | `{}` | Sort du Hub ; répond `HubLeft` `LEFT` |
-| `HubMove` | `{ "x", "z", "y_offset", "yaw", "head_yaw", "pitch", "pose", "on_ground" }` | Nouvel état de l'avatar. `x`, `z` : coordonnées Hub (relatives au centre de l'Anchor, après rotation par son `yaw`), \|·\| ≤ 10,5 ; `y_offset` : hauteur au-dessus du sol local, 0 à 21 ; sinon `ERROR_HUB_OUT_OF_BOUNDS` (`details.half_size`). `pose` ∈ `STANDING`, `CROUCHING`, `SWIMMING`, `FALL_FLYING` ; `on_ground` booléen ; champ manquant ou non fini : `ERROR_WS_MALFORMED_MESSAGE`. Hors du Hub : `ERROR_HUB_NOT_JOINED`. À envoyer jusqu'à 10 fois par seconde, seulement quand l'état change. |
+| `HubMove` | `{ "x", "z", "y_offset", "yaw", "head_yaw", "pitch", "pose", "on_ground", "skin_parts"? }` | Nouvel état de l'avatar. `x`, `z` : coordonnées Hub (relatives au centre de l'Anchor, après rotation par son `yaw`), \|·\| ≤ 10,5 ; `y_offset` : hauteur au-dessus du sol local, 0 à 21 ; sinon `ERROR_HUB_OUT_OF_BOUNDS` (`details.half_size`). `pose` ∈ `STANDING`, `CROUCHING`, `SWIMMING`, `FALL_FLYING` ; `on_ground` booléen ; `skin_parts` facultatif : masque `PlayerModelPart` de Minecraft (couches extérieures du skin et cape affichées), entier de 0 à 127 ; champ manquant, non fini ou hors limites : `ERROR_WS_MALFORMED_MESSAGE`. Hors du Hub : `ERROR_HUB_NOT_JOINED`. À envoyer jusqu'à 10 fois par seconde, seulement quand l'état change. |
 | `HubChat` | `{ "message" }` | Message du chat du Hub : codes `§x` retirés, espaces de bord retirés ; vide → `ERROR_WS_MALFORMED_MESSAGE`, > 256 caractères → `ERROR_HUB_CHAT_TOO_LONG`, moins d'une seconde après le précédent → `ERROR_HUB_CHAT_RATE_LIMITED`, hors du Hub → `ERROR_HUB_NOT_JOINED`. Écrit dans le journal du backend, jamais en base. |
 
 | S2C | `data` | Destinataires |
 |---|---|---|
-| `HubJoined` | `{ "members": [ { "player_uuid", "username", "state" \| null } ] }` | Le joueur qui entre : les membres qu'il doit voir, avec leur dernier état (`null` s'ils n'ont encore envoyé aucun `HubMove`) |
-| `HubPlayerEnter` | `{ "player_uuid", "username", "state": null }` | Membres qui voient le nouvel arrivant |
-| `HubPlayerMove` | `{ "player_uuid", "state": { "x", "z", "y_offset", "yaw", "head_yaw", "pitch", "pose", "on_ground" } }` | Membres qui voient le joueur |
-| `HubPlayerLeave` | `{ "player_uuid" }` | Membres qui voyaient le joueur : sortie, changement de serveur, Anchor supprimé, déconnexion ou TTL |
+| `HubJoined` | `{ "members": [ { "player_uuid", "username", "state" \| null, "ghost" \| null } ] }` | Le joueur qui entre : tous les autres membres, avec leur dernier état (`null` s'ils n'ont encore envoyé aucun `HubMove`) et leur Ghost sorti (mêmes champs que `HubGhostSpawn`, `null` sinon) |
+| `HubPlayerEnter` | `{ "player_uuid", "username", "state": null }` | Tous les autres membres |
+| `HubPlayerMove` | `{ "player_uuid", "state": { "x", "z", "y_offset", "yaw", "head_yaw", "pitch", "pose", "on_ground", "skin_parts"? } }` | Tous les autres membres |
+| `HubPlayerLeave` | `{ "player_uuid" }` | Tous les autres membres : sortie, changement de serveur, Anchor supprimé, déconnexion ou TTL |
 | `HubLeft` | `{ "reason": "LEFT" \| "SERVER_CHANGED" \| "ANCHOR_DELETED" }` | Le joueur sorti du Hub (pas d'envoi sur déconnexion ni TTL) |
+| `HubGhostSpawn` | `{ "player_uuid", "pokemon_uuid", "species", "form" \| null, "is_shiny", "level", "gender" \| null, "nickname" \| null }` | Tous les autres membres : un membre sort un Ghost dans le Hub, ou entre dans le Hub avec un Ghost déjà sorti. Mêmes champs que `GhostEntitySpawn`, **sans `position`** : le client le fait suivre l'avatar |
+| `HubGhostDespawn` | `{ "player_uuid", "pokemon_uuid" }` | Tous les autres membres : rappel, Ghost échangé, début d'un combat Ghost (tout ce qui envoie `GhostEntityDespawn` au groupe) ; la sortie du Hub suffit sinon (`HubPlayerLeave`) |
 | `HubChatMessage` | `{ "player_uuid", "username", "message", "sent_at" }` | Tous les membres, expéditeur compris |
 
 **Sorties automatiques** :
@@ -230,7 +233,9 @@ Minecraft ; le backend ne leur envoie ni l'avatar ni les mouvements de l'autre (
   pour chaque membre entré par lui.
 - Fermeture de la connexion ou expiration TTL → sortie silencieuse, `HubPlayerLeave` pour les autres.
 
-Les Ghost des membres du Hub (`HubGhostSpawn` / `HubGhostDespawn`) arrivent avec l'étape N5.
+Les Ghost suivent toujours leur propriétaire : `SendOutGhost` / `RecallGhost` (et les rappels automatiques) envoient
+à la fois `GhostEntity*` au groupe serveur et `HubGhost*` au Hub (`GhostRecall`, `HubService.onGhostSentOut` /
+`onGhostRecalled`).
 
 ## 7. Écarts avec le CAD
 

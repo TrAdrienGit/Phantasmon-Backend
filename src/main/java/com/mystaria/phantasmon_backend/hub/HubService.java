@@ -18,8 +18,11 @@ import org.springframework.stereotype.Service;
 
 import com.mystaria.phantasmon_backend.player.Player;
 import com.mystaria.phantasmon_backend.player.PlayerService;
+import com.mystaria.phantasmon_backend.pokemon.Pokemon;
+import com.mystaria.phantasmon_backend.pokemon.PokemonRepository;
 import com.mystaria.phantasmon_backend.presence.PlayerPresence;
 import com.mystaria.phantasmon_backend.presence.PresenceService;
+import com.mystaria.phantasmon_backend.websocket.GhostPayloads;
 import com.mystaria.phantasmon_backend.websocket.SessionRegistry;
 import com.mystaria.phantasmon_backend.websocket.WsMessage;
 
@@ -28,9 +31,13 @@ import lombok.extern.slf4j.Slf4j;
 /**
  * The Global Hub (network-cahier-des-charges.md §5.3 to §5.8): one public space, in memory like
  * {@link PresenceService}, holding at most {@code phantasmon.hub.capacity} players who entered it through a Hub
- * Anchor of the server they are on. Positions are relative to the anchor (never real coordinates) and relayed as
- * they come; two members on the same server and dimension see each other for real, so neither is sent the other's
- * avatar — the Hub chat reaches every member.
+ * Anchor of the server and dimension they are on — any anchor of that server, theirs or another player's (D-30).
+ * Positions are relative to the anchor (never real coordinates) and relayed to every other member as they come; a
+ * client that sees a member for real where their avatar would stand hides that avatar itself.
+ *
+ * <p>A member's sent-out Ghost (N5) follows them into the Hub: {@code HubGhostSpawn} / {@code HubGhostDespawn} to
+ * every other member, and in {@code HubJoined} for a late joiner — the same rendering data as
+ * {@code GhostEntitySpawn}, without any position (the receiving client makes it follow the avatar).
  */
 @Service
 @Slf4j
@@ -38,16 +45,14 @@ public class HubService {
 
 	static final int CHAT_MAX_LENGTH = 256;
 	static final Duration CHAT_INTERVAL = Duration.ofSeconds(1);
+	/** Cape, jacket, both sleeves, both pant legs, hat: Minecraft's {@code PlayerModelPart} masks. */
+	static final int MAX_SKIN_PARTS = 0x7F;
 	private static final Set<String> POSES = Set.of("STANDING", "CROUCHING", "SWIMMING", "FALL_FLYING");
 	private static final List<String> NUMBERS = List.of("x", "z", "y_offset", "yaw", "head_yaw", "pitch");
 
 	/** One player in the Hub; {@code state} is null until their first {@code HubMove}. */
 	private record Member(UUID playerUuid, String username, UUID anchorUuid, String serverFingerprint, String dimension,
 			Map<String, Object> state, Instant lastChatAt) {
-
-		boolean sameWorldAs(Member other) {
-			return serverFingerprint.equals(other.serverFingerprint) && dimension.equals(other.dimension);
-		}
 
 		Map<String, Object> view() {
 			Map<String, Object> view = new HashMap<>();
@@ -62,6 +67,7 @@ public class HubService {
 	private final HubAnchorRepository anchorRepository;
 	private final PresenceService presenceService;
 	private final PlayerService playerService;
+	private final PokemonRepository pokemonRepository;
 	private final SessionRegistry sessionRegistry;
 	private final Clock clock;
 	private final int capacity;
@@ -69,11 +75,12 @@ public class HubService {
 	private final int anchorSize;
 
 	public HubService(HubAnchorRepository anchorRepository, PresenceService presenceService, PlayerService playerService,
-			SessionRegistry sessionRegistry, Clock clock, @Value("${phantasmon.hub.capacity:50}") int capacity,
+			PokemonRepository pokemonRepository, SessionRegistry sessionRegistry, Clock clock, @Value("${phantasmon.hub.capacity:50}") int capacity,
 			@Value("${phantasmon.hub.anchor-size:21}") int anchorSize) {
 		this.anchorRepository = anchorRepository;
 		this.presenceService = presenceService;
 		this.playerService = playerService;
+		this.pokemonRepository = pokemonRepository;
 		this.sessionRegistry = sessionRegistry;
 		this.clock = clock;
 		this.capacity = capacity;
@@ -82,8 +89,8 @@ public class HubService {
 	}
 
 	/**
-	 * {@code HubJoin}: the anchor must exist and belong to the server and dimension of the player's presence group.
-	 * Joining again (through another anchor) is a leave followed by a join.
+	 * {@code HubJoin}: the anchor must exist and stand on the server and dimension of the player's presence group —
+	 * anchors are shared within a server, never across servers (D-30). Joining again is a leave followed by a join.
 	 */
 	public synchronized void join(UUID playerUuid, UUID anchorUuid) {
 		HubAnchor anchor = anchorRepository.findById(anchorUuid).orElse(null);
@@ -112,9 +119,13 @@ public class HubService {
 		log.info("Player {} joined the Hub through anchor {} ({} / {} players)", username, anchor.getName(),
 				members.size(), capacity);
 		sessionRegistry.send(playerUuid, WsMessage.of("HubJoined",
-				Map.of("members", others.stream().map(Member::view).toList())));
+				Map.of("members", others.stream().map(this::viewWithGhost).toList())));
 		WsMessage enter = WsMessage.of("HubPlayerEnter", member.view());
 		others.forEach(other -> sessionRegistry.send(other.playerUuid(), enter));
+		ghostOf(playerUuid).ifPresent(ghost -> {
+			WsMessage spawn = WsMessage.of("HubGhostSpawn", ghost);
+			others.forEach(other -> sessionRegistry.send(other.playerUuid(), spawn));
+		});
 	}
 
 	/**
@@ -153,8 +164,8 @@ public class HubService {
 
 	/**
 	 * {@code HubMove}: Hub coordinates (relative to the anchor, rotated by its yaw on the client) must stay in the
-	 * square, {@code y_offset} (height above the local ground) inside the cube. Relayed to the members who see the
-	 * player.
+	 * square, {@code y_offset} (height above the local ground) inside the cube; optional {@code skin_parts} (outer skin
+	 * layers and cape shown, 0 to 127). Relayed to every other member.
 	 */
 	public void move(UUID playerUuid, Map<String, Object> data) {
 		Member member = members.get(playerUuid);
@@ -177,6 +188,15 @@ public class HubService {
 		}
 		state.put("pose", pose);
 		state.put("on_ground", onGround);
+		// Optional: which outer skin layers and cape the player shows (Minecraft's 7-bit model-part mask).
+		Object skinParts = data.get("skin_parts");
+		if (skinParts != null) {
+			if (!(skinParts instanceof Integer parts) || parts < 0 || parts > MAX_SKIN_PARTS) {
+				error(playerUuid, "ERROR_WS_MALFORMED_MESSAGE", Map.of());
+				return;
+			}
+			state.put("skin_parts", parts);
+		}
 		double x = (double) state.get("x");
 		double z = (double) state.get("z");
 		double yOffset = (double) state.get("y_offset");
@@ -226,15 +246,48 @@ public class HubService {
 		members.keySet().forEach(recipient -> sessionRegistry.send(recipient, chat));
 	}
 
+	/** The member just sent a Ghost out: every other member sees it follow their avatar. */
+	public void onGhostSentOut(UUID playerUuid, Pokemon pokemon) {
+		Member member = members.get(playerUuid);
+		if (member != null) {
+			WsMessage spawn = WsMessage.of("HubGhostSpawn", GhostPayloads.withoutPosition(playerUuid, pokemon));
+			visibleTo(member).forEach(other -> sessionRegistry.send(other.playerUuid(), spawn));
+		}
+	}
+
+	/** The member's Ghost went back in (recall, trade, battle): gone for every other member. */
+	public void onGhostRecalled(UUID playerUuid, UUID pokemonUuid) {
+		Member member = members.get(playerUuid);
+		if (member != null) {
+			WsMessage despawn = WsMessage.of("HubGhostDespawn", Map.of("player_uuid", playerUuid, "pokemon_uuid", pokemonUuid));
+			visibleTo(member).forEach(other -> sessionRegistry.send(other.playerUuid(), despawn));
+		}
+	}
+
 	public boolean isMember(UUID playerUuid) {
 		return members.containsKey(playerUuid);
 	}
 
-	/** The other members who should see {@code member}'s avatar: everyone but themselves and those on their world. */
+	/** A member as {@code HubJoined} lists them: avatar data, plus their sent-out Ghost or {@code null}. */
+	private Map<String, Object> viewWithGhost(Member member) {
+		Map<String, Object> view = member.view();
+		view.put("ghost", ghostOf(member.playerUuid()).orElse(null));
+		return view;
+	}
+
+	/** The rendering data of the Ghost {@code playerUuid} has out (from their presence), without any position. */
+	private java.util.Optional<Map<String, Object>> ghostOf(UUID playerUuid) {
+		return presenceService.find(playerUuid)
+				.map(PlayerPresence::activeGhostPokemonUuid)
+				.flatMap(pokemonRepository::findById)
+				.map(pokemon -> GhostPayloads.withoutPosition(playerUuid, pokemon));
+	}
+
+	/** Every other member: they all get {@code member}'s avatar (a client seeing them for real hides it itself). */
 	private List<Member> visibleTo(Member member) {
 		List<Member> visible = new ArrayList<>();
 		for (Member other : members.values()) {
-			if (!Objects.equals(other.playerUuid(), member.playerUuid()) && !other.sameWorldAs(member)) {
+			if (!Objects.equals(other.playerUuid(), member.playerUuid())) {
 				visible.add(other);
 			}
 		}

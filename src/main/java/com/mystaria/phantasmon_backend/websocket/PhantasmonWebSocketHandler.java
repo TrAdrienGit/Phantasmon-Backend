@@ -1,6 +1,5 @@
 package com.mystaria.phantasmon_backend.websocket;
 
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -248,6 +247,7 @@ public class PhantasmonWebSocketHandler extends TextWebSocketHandler {
 					playerUuid, pokemonUuid, pokemon.getSpecies(), groupMembers.size());
 			broadcastToGroupAndSelf(playerUuid, WsMessage.of("GhostEntitySpawn",
 					ghostSpawnData(playerUuid, pokemon, position)));
+			hubService.onGhostSentOut(playerUuid, pokemon);
 		});
 		if (!sentOut) {
 			// Ghosts stay in for the whole battle (TODO-14).
@@ -274,30 +274,8 @@ public class PhantasmonWebSocketHandler extends TextWebSocketHandler {
 		}
 	}
 
-	/**
-	 * {@code position} may still be null right after {@code SendOutGhost} if the
-	 * player hasn't sent a {@code PositionUpdate} yet — {@code Map.of} would NPE
-	 * on that, so build the map manually. Includes the Pokémon's rendering-
-	 * relevant identifiers (species/form/shiny/level/gender) because the *receiving*
-	 * client has no way to look up someone else's Pokémon over REST (ownership-
-	 * gated routes only expose the caller's own) — this WS payload is the only
-	 * place that data can come from.
-	 */
 	private static Map<String, Object> ghostSpawnData(UUID playerUuid, Pokemon pokemon, Position position) {
-		Map<String, Object> data = new HashMap<>();
-		data.put("player_uuid", playerUuid);
-		data.put("pokemon_uuid", pokemon.getUuid());
-		data.put("species", pokemon.getSpecies());
-		data.put("form", pokemon.getForm());
-		data.put("is_shiny", pokemon.isShiny());
-		data.put("level", pokemon.getLevel());
-		// "M"/"F" as stored by the editor/Showdown import, null when not set — some models differ by gender
-		// (Meowstic, Pikachu...) and the receiving client can't look it up either.
-		data.put("gender", pokemon.getData() == null ? null : pokemon.getData().get("gender"));
-		// Shown as "[Ghost] <nickname>" above the Ghost (CAD Partie 1 §5); null when the Pokémon has none.
-		data.put("nickname", pokemon.getData() == null ? null : pokemon.getData().get("nickname"));
-		data.put("position", position);
-		return data;
+		return GhostPayloads.withPosition(playerUuid, pokemon, position);
 	}
 
 	private void broadcast(List<UUID> recipients, WsMessage message) {

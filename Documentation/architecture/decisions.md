@@ -42,6 +42,7 @@ Pour ajouter une décision : prendre le numéro suivant, dater, et mettre à jou
 | D-27 | Phantasmon Network développé sur `dev` | Acceptée | 2026-10-07 |
 | D-28 | Hub Anchors créables par tout joueur | Acceptée | 2026-10-07 |
 | D-29 | Entrée dans le Global Hub sur consentement explicite | Acceptée | 2026-10-07 |
+| D-30 | Hub Anchors partagés au sein d'un serveur, jamais entre serveurs | Acceptée | 2026-10-07 |
 
 ---
 
@@ -325,3 +326,32 @@ Pour ajouter une décision : prendre le numéro suivant, dater, et mettre à jou
   Anchor.
 - **Conséquence** : aucune position n'est transmise au Hub sans action du joueur ; le Hub ne transmet que des
   coordonnées relatives à l'Anchor, jamais l'adresse du serveur.
+
+## D-30 — Hub Anchors partagés au sein d'un serveur, jamais entre serveurs
+
+- **Contexte** : précision d'Adrien (2026-10-07) après le premier test des avatars. Exemple : quatre joueurs, deux
+  serveurs ; J1 et J2 sur S1, J3 et J4 sur S2. Chacun pose son Anchor (J1 pose A1 sur S1, etc.).
+- **Décision (Adrien)** :
+  - J2 voit l'Anchor de J1 et peut l'utiliser pour entrer dans le Hub : **un serveur partage ses Anchors entre ses
+    joueurs** ;
+  - J3 et J4 ne voient pas A1 : **deux serveurs ne se partagent jamais leurs Anchors** ; de même, l'Anchor créé par
+    J4 sur S2 sert à J3 et J4 ;
+  - chaque joueur ne pose qu'un Anchor (D-28).
+- **Ce que cela corrige** : la première version (N2) n'envoyait jamais l'avatar d'un joueur aux membres de même
+  empreinte et même dimension, en supposant qu'ils se voyaient déjà pour de vrai. Au test du 2026-10-07, les deux
+  comptes partageaient l'empreinte `testsession` : aucun avatar. Or deux joueurs d'un même serveur peuvent être dans
+  le Hub par deux Anchors différents, loin l'un de l'autre. Une première correction, le même jour, avait rendu les
+  Anchors strictement personnels (migration `V12`) : c'était un contresens, annulé par `V13`.
+- **Mise en œuvre** :
+  - backend : `GET /hub/anchors?server_fingerprint=…&dimension=…` liste les Anchors du serveur ; `HubJoin
+    { anchor_uuid }` accepte n'importe quel Anchor du serveur et de la dimension de la présence du joueur
+    (`ERROR_HUB_ANCHOR_WRONG_SERVER` sinon) ; nom unique par serveur (`V12` avait retiré les index, `V13` les remet,
+    en numérotant d'abord les noms en double) ;
+  - visibilité : chaque membre du Hub reçoit **tous** les autres. Un avatar montre où son joueur se tient dans le
+    Hub ; le client ne le masque (avec son Ghost) que si le vrai joueur est chargé et se tient dans le cube de
+    l'Anchor par lequel ce client est entré : ils sont alors dans le même Anchor et se voient pour de vrai — choix de
+    Claude (la règle « à moins de 2 blocs de l'emplacement de l'avatar » du premier jet ratait ce cas, voir le journal
+    client §4.96) ;
+  - client : l'entité d'un avatar porte un UUID dérivé de celui du joueur, pour ne jamais entrer en conflit avec le
+    vrai joueur chargé dans le même monde.
+- **Conséquences** : D-28 et D-29 restent valables telles quelles.

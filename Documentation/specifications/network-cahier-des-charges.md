@@ -6,7 +6,8 @@
 > **Rédigé le 2026-10-07**, sur la base de la note de recherche
 > [`research/Phantasmon_Evolution_InterServeurs.md`](../research/Phantasmon_Evolution_InterServeurs.md), puis
 > complété le même jour avec les réponses d'Adrien (taille, capacité, quota, chat, branche).
-> **Statut : jalon 1 (« Hub social minimal ») spécifié, non commencé.** Les jalons suivants sont seulement esquissés.
+> **Précisé le 2026-10-07 (D-30)** : les Anchors sont partagés entre les joueurs d'un même serveur, jamais entre serveurs.
+> **Statut : jalon 1 (« Hub social minimal ») terminé et validé en jeu le 2026-10-07.** Les jalons suivants sont seulement esquissés.
 
 ---
 
@@ -30,6 +31,7 @@ erreurs structurées, i18n, TDD) reste régi par le CAD Core et par [`decisions.
 | Branche | Network est développé directement sur `dev`, comme le polish du Core ; pas de fork ni de branche dédiée. | [D-27](../architecture/decisions.md#d-27--phantasmon-network-développé-sur-dev) |
 | Premier jalon | Hub social minimal : Anchors, Global Hub, avatars des joueurs distants, leurs Ghost, chat du Hub. | §4 |
 | Création des Anchors | **Tout joueur** authentifié peut créer un Anchor, **un seul par joueur** ; suppression par le créateur ou un admin (D-26). | [D-28](../architecture/decisions.md#d-28--hub-anchors-créables-par-tout-joueur) |
+| Partage des Anchors | Un serveur **partage** ses Anchors entre ses joueurs (tous les voient et peuvent les utiliser) ; deux serveurs ne se les partagent **jamais**. | [D-30](../architecture/decisions.md#d-30--hub-anchors-partagés-au-sein-dun-serveur-jamais-entre-serveurs) |
 | Entrée dans le Hub | Jamais automatique : entrer dans un Anchor **propose** de rejoindre le Hub ; le joueur accepte explicitement (ou active l'acceptation automatique pour cet Anchor). | [D-29](../architecture/decisions.md#d-29--entrée-dans-le-global-hub-sur-consentement-explicite) |
 | Forme et capacité | Anchor = **cube de 21 × 21 × 21 blocs** ; **un seul Hub, public**, limité à **50 joueurs** simultanés. | §5.2, §5.3 |
 
@@ -53,7 +55,7 @@ Nouveaux :
 7. **Le Hub ne divulgue jamais l'adresse d'un serveur ni des coordonnées réelles.** Les autres membres du Hub ne
    reçoivent que des coordonnées relatives à l'Anchor.
 8. **Présence en deux contextes.** Un joueur dans le Hub reste membre du groupe de son serveur (Core) ; les deux
-   audiences sont servies séparément et sans doublon (§5.6).
+   audiences sont servies séparément ; un avatar n'est masqué que s'il ferait doublon avec le vrai joueur (§5.6).
 9. **Rien ne transite par le serveur Minecraft**, pas même le chat du Hub (§5.8).
 
 ## 4. Jalon 1 — Hub social minimal
@@ -63,10 +65,13 @@ Nouveaux :
 1. Sur son serveur, un joueur se place sur une zone dégagée et tape `/phantasmon hub anchor create <nom>`. Un Anchor
    cubique de 21 × 21 × 21 est créé : centré sur lui horizontalement, posé au niveau de ses pieds, orienté selon son
    regard.
-2. Tout joueur Phantasmon du même serveur voit l'Anchor : contour du carré au sol en particules, nom flottant.
-3. En entrant dans le cube, il reçoit une invitation : « Rejoindre le Global Hub ? [Oui] [Non] [Toujours ici] ».
-4. Une fois dans le Hub, il voit les **avatars** des joueurs qui se trouvent dans un Anchor sur d'autres serveurs :
-   skin, pseudo, marche, saut, orientation de la tête, accroupissement, et leur Ghost s'ils en ont sorti un.
+2. Tous les joueurs Phantasmon **du même serveur** voient l'Anchor et peuvent l'utiliser ; ceux d'un autre serveur ne
+   le voient jamais (D-30). Contour du carré au sol en particules, nom flottant.
+3. En entrant dans le cube d'un Anchor de son serveur, un joueur reçoit une invitation : « Rejoindre le Global Hub ?
+   [Oui] [Non] [Toujours ici] ».
+4. Une fois dans le Hub, il voit les **avatars** de tous les autres membres, chacun placé dans l'Anchor local selon
+   sa position dans le Hub : skin, pseudo, marche, saut, orientation de la tête, accroupissement, et leur Ghost s'ils
+   en ont sorti un.
 5. Il peut **écrire dans le chat du Hub** ; les messages s'affichent dans le chat local, préfixés `[Hub]`, et ne
    sont jamais envoyés au serveur Minecraft.
 6. En sortant du cube (ou avec `/phantasmon hub leave`), il quitte le Hub et les avatars disparaissent.
@@ -79,7 +84,8 @@ Hors jalon 1 : échange et combat avec un avatar distant, spectateurs, émotes, 
   se voient mutuellement dans le Hub, se déplacent de façon fluide, avec leur skin et leur Ghost.
 - Ils s'écrivent par le chat du Hub ; un joueur hors du Hub, ou sans le mod, ne voit pas ces messages, et le
   serveur Minecraft ne les reçoit pas.
-- Deux joueurs sur le **même serveur** et dans le même Anchor ne voient pas de doublon de l'autre.
+- Deux joueurs du **même serveur** dans le même Anchor se voient pour de vrai, sans doublon ; par deux Anchors
+  différents de ce serveur, ils se voient en avatar.
 - Le 51ᵉ joueur est refusé proprement (`ERROR_HUB_FULL`, message traduit).
 - Aucune correction de position (rubber-banding) ni refus anti-cheat côté serveur : rien n'est envoyé au serveur.
 - Quitter le Hub, se déconnecter ou perdre le backend fait disparaître proprement avatars et Ghost distants.
@@ -131,6 +137,8 @@ Donnée **persistante** (nouvelle table, migration `V11`), propriété du backen
 - **Quota** : un Anchor par joueur (contrainte d'unicité) → `ERROR_HUB_ANCHOR_QUOTA` ; pour en poser un ailleurs, le
   joueur supprime d'abord le sien.
 - **Suppression** : par le créateur ou un admin (D-26) → sinon `ERROR_HUB_ANCHOR_FORBIDDEN`.
+- **Partage** (D-30) : listé et utilisable par tous les joueurs de son serveur et de sa dimension, jamais depuis un
+  autre serveur.
 - **Pas de vérification physique possible** : sans mod serveur, le backend ne peut pas vérifier que le créateur se
   trouve réellement sur ce serveur à cette position. Limite assumée, compensée par D-29 (consentement) et la
   suppression par un admin.
@@ -195,15 +203,22 @@ Ainsi un avatar marche toujours sur le sol de l'Anchor local, quel que soit le r
 - Le joueur reste dans son **groupe serveur** (Core) : son Ghost reste visible des joueurs de son serveur, en
   coordonnées réelles, exactement comme aujourd'hui.
 - Dans le **Hub**, son avatar et son Ghost sont diffusés aux autres membres, en coordonnées Hub.
-- Deux membres du Hub qui partagent **la même empreinte de serveur et la même dimension** se voient déjà pour de
-  vrai : le backend ne leur envoie pas leurs avatars ni leurs Ghost respectifs. Le chat du Hub, lui, leur parvient.
+- Le backend envoie à chaque membre **tous** les autres. Un avatar montre où son joueur se trouve dans le Hub, pas
+  dans le monde : deux joueurs du même serveur entrés par deux Anchors différents se voient donc en avatar.
+- Seul cas de doublon : le vrai joueur est chargé dans le monde local et se tient dans le cube de l'Anchor par lequel
+  ce client est entré — les deux sont dans le même Anchor, son avatar serait exactement à sa place. Le client masque
+  alors l'avatar et son Ghost du Hub (son vrai Ghost est déjà affiché par le groupe serveur), et les réaffiche quand
+  ce n'est plus le cas.
+- > **Note d'implémentation (2026-10-07, D-30)** : la première version faisait l'inverse (aucun avatar entre joueurs
+  > de même empreinte et même dimension, côté backend) ; elle cachait tout dès que deux comptes partageaient un serveur.
 
 ### 5.7 Protocole WebSocket
 
 > **Note d'implémentation (2026-10-07, N2)** : le contrat réel est dans `reference/websocket-protocol.md` §6 bis
-> (dépôt Backend). Écarts avec l'ébauche ci-dessous : `HubJoin` prend `anchor_uuid` ; l'état d'un avatar est un
+> (dépôt Backend). Écarts avec l'ébauche ci-dessous : `HubJoin` prend `anchor_uuid` (un Anchor du serveur du joueur) ; l'état d'un avatar est un
 > objet `state` (`HubJoined`, `HubPlayerEnter`, `HubPlayerMove`) ; un message `HubLeft { reason }` confirme la
-> sortie au joueur concerné ; les messages Ghost du Hub restent pour N5.
+> sortie au joueur concerné ; le Ghost d'un membre déjà présent arrive dans son entrée de `HubJoined` (`ghost`) ;
+> `HubMove` porte en plus `skin_parts` (couches du skin et cape).
 
 | Sens | Message | `data` | Effet |
 |---|---|---|---|
@@ -243,7 +258,7 @@ Ainsi un avatar marche toujours sur le sol de l'Anchor local, quel que soit le r
 |---|---|
 | Anchor posé par un inconnu au spawn d'un serveur, pour exposer les joueurs qui passent | D-29 : entrée seulement sur consentement ; aucune position n'est diffusée hors du Hub |
 | Fuite de la base d'un joueur | Le Hub ne transmet que des coordonnées relatives à l'Anchor, jamais l'adresse du serveur. Amélioration par rapport à LIM-9 pour le Hub ; LIM-9 reste vrai pour le groupe serveur Core |
-| Spam d'Anchors | Un Anchor par joueur, nom unique par serveur, suppression par admin |
+| Spam d'Anchors | Un Anchor par joueur, nom unique par serveur, visible seulement sur son serveur (D-30), suppression par admin |
 | Abus du chat | Longueur, débit, formatage retiré, journalisation ; outils de modération en TODO-31 |
 | Téléportation ou vitesse impossible dans le Hub | Le backend borne les coordonnées au carré ; pas d'anti-triche de vitesse au jalon 1 (cohérent avec le Core) |
 | Charge (10 Hz × 50²) | Capacité de 50, envoi seulement sur changement ; à mesurer en N2 |
@@ -256,7 +271,7 @@ Les étapes s'enchaînent comme dans le CAD Core : backend d'abord (TDD), puis c
 |---|---|---|---|
 | N0 | Les deux | Ce cahier des charges ; décisions D-27 à D-29 | Validé par Adrien |
 | N1 | Backend | `hub_anchors` (V11), REST anchors, quota, droits, idempotence, codes d'erreur | Tests d'intégration verts, docs de référence |
-| N2 | Backend | `HubService` : capacité, `HubJoin`/`HubLeave`/`HubMove`, anti-doublon même serveur, chat, TTL et fermeture de session | Tests WebSocket réels à 3 clients simulés sur 2 empreintes |
+| N2 | Backend | `HubService` : capacité, `HubJoin`/`HubLeave`/`HubMove`, chat, TTL et fermeture de session (anti-doublon revu par D-30 : côté client) | Tests WebSocket réels à 3 clients simulés sur 2 empreintes |
 | N3 | Client | Commandes Anchor, affichage du cube, détection d'entrée/sortie, invitation de consentement, transformation de coordonnées (tests purs), chat du Hub | Anchor créé et visible en jeu ; chat fonctionnel |
 | N4 | Client | Avatars distants : entité client, skin, interpolation, poses, étiquette ; envoi `HubMove` à 10 Hz | Deux comptes sur deux serveurs se voient bouger |
 | N5 | Les deux | Ghost dans le Hub (`HubGhostSpawn`/`Despawn`, suivi de l'avatar) | Critères §4.2 tous remplis, validation en jeu par Adrien |

@@ -2,6 +2,7 @@ package com.mystaria.phantasmon_backend.hub;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -21,6 +22,8 @@ import org.springframework.web.socket.handler.TextWebSocketHandler;
 import com.mystaria.phantasmon_backend.TestcontainersConfiguration;
 import com.mystaria.phantasmon_backend.auth.JwtService;
 import com.mystaria.phantasmon_backend.player.PlayerService;
+import com.mystaria.phantasmon_backend.pokemon.Pokemon;
+import com.mystaria.phantasmon_backend.pokemon.PokemonRepository;
 import com.mystaria.phantasmon_backend.websocket.PhantasmonWebSocketHandler;
 
 import tools.jackson.databind.JsonNode;
@@ -30,7 +33,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Phantasmon Network, step N2 — the Global Hub over real WebSocket connections (network-cahier-des-charges.md §5.3 to
- * §5.8). Two Minecraft servers are simulated by two fingerprints; the Hub holds 2 players here so the capacity rule is
+ * §5.8). Anchors are shared within a server, never across servers (D-30). Two Minecraft servers are simulated by two fingerprints; the Hub holds 2 players here so the capacity rule is
  * testable with three clients.
  */
 @Import(TestcontainersConfiguration.class)
@@ -54,6 +57,9 @@ class HubWebSocketIntegrationTest {
 
 	@Autowired
 	private PhantasmonWebSocketHandler webSocketHandler;
+
+	@Autowired
+	private PokemonRepository pokemonRepository;
 
 	@Autowired
 	private ObjectMapper objectMapper;
@@ -133,8 +139,9 @@ class HubWebSocketIntegrationTest {
 	/** A connected player standing in a fresh anchor of their own on {@code fingerprint}. */
 	private Client inAnchor(String prefix, String fingerprint) throws Exception {
 		Client client = connect(prefix);
+		UUID anchor = anchorOf(client, fingerprint);
 		client.joinServer(fingerprint);
-		client.joinHub(anchorOf(client, fingerprint));
+		client.joinHub(anchor);
 		return client;
 	}
 
@@ -173,7 +180,8 @@ class HubWebSocketIntegrationTest {
 		assertThat(enter.get("username").asString()).startsWith("Bo");
 
 		bob.send("HubMove", """
-				{"x":3.5,"z":-2.0,"y_offset":0.4,"yaw":45,"head_yaw":50,"pitch":10,"pose":"CROUCHING","on_ground":false}""");
+				{"x":3.5,"z":-2.0,"y_offset":0.4,"yaw":45,"head_yaw":50,"pitch":10,"pose":"CROUCHING","on_ground":false,
+				 "skin_parts":95}""");
 		JsonNode move = alice.await("HubPlayerMove");
 		assertThat(move.get("player_uuid").asString()).isEqualTo(bob.uuid.toString());
 		JsonNode state = move.get("state");
@@ -185,6 +193,7 @@ class HubWebSocketIntegrationTest {
 		assertThat(state.get("pitch").asDouble()).isEqualTo(10);
 		assertThat(state.get("pose").asString()).isEqualTo("CROUCHING");
 		assertThat(state.get("on_ground").asBoolean()).isFalse();
+		assertThat(state.get("skin_parts").asInt()).as("hat, jacket, sleeves... shown by the remote player").isEqualTo(95);
 
 		bob.send("HubLeave", "{}");
 		assertThat(bob.await("HubLeft").get("reason").asString()).isEqualTo("LEFT");
@@ -207,21 +216,24 @@ class HubWebSocketIntegrationTest {
 	}
 
 	@Test
-	void playersOfTheSameServerGetNoAvatarOfEachOtherButShareTheChat() throws Exception {
+	void playersOfTheSameServerShareItsAnchorsAndAreSentEachOther() throws Exception {
+		// J1 and J2 on S1: J2 enters through J1's anchor. The backend sends every member to every other one; a client
+		// seeing the player for real where the avatar would stand hides the avatar itself.
 		String server = server();
 		Client alice = inAnchor("Al", server);
 		alice.await("HubJoined");
 		Client carol = connect("Ca");
 		carol.joinServer(server);
-		// Carol enters through Alice's anchor: any player of that server may.
 		carol.joinHub(hubAnchorService.findMine(alice.uuid).uuid());
 
-		assertThat(carol.await("HubJoined").get("members")).as("Alice is really there on Carol's server").isEmpty();
-		alice.expectNo("HubPlayerEnter");
+		JsonNode members = carol.await("HubJoined").get("members");
+		assertThat(members).hasSize(1);
+		assertThat(members.get(0).get("player_uuid").asString()).isEqualTo(alice.uuid.toString());
+		assertThat(alice.await("HubPlayerEnter").get("player_uuid").asString()).isEqualTo(carol.uuid.toString());
 
 		carol.send("HubMove", """
 				{"x":1,"z":1,"y_offset":0,"yaw":0,"head_yaw":0,"pitch":0,"pose":"STANDING","on_ground":true}""");
-		alice.expectNo("HubPlayerMove");
+		assertThat(alice.await("HubPlayerMove").get("player_uuid").asString()).isEqualTo(carol.uuid.toString());
 
 		carol.send("HubChat", "{\"message\":\"  Salut §ctout le monde  \"}");
 		JsonNode chat = alice.await("HubChatMessage");
@@ -233,7 +245,7 @@ class HubWebSocketIntegrationTest {
 	}
 
 	@Test
-	void joiningNeedsAnAnchorOfTheServerThePlayerIsOn() throws Exception {
+	void anAnchorIsUsableOnlyFromItsOwnServerAndDimension() throws Exception {
 		Client alice = connect("Al");
 		String server = server();
 		UUID anchor = anchorOf(alice, server);
@@ -241,15 +253,17 @@ class HubWebSocketIntegrationTest {
 		alice.joinHub(anchor);
 		assertThat(alice.awaitError()).as("no server group yet").isEqualTo("ERROR_HUB_ANCHOR_WRONG_SERVER");
 
-		alice.joinServer(server());
-		alice.joinHub(anchor);
-		assertThat(alice.awaitError()).isEqualTo("ERROR_HUB_ANCHOR_WRONG_SERVER");
+		// J3 on S2 cannot use S1's anchor, even knowing its UUID.
+		Client dave = connect("Da");
+		dave.joinServer(server());
+		dave.joinHub(anchor);
+		assertThat(dave.awaitError()).isEqualTo("ERROR_HUB_ANCHOR_WRONG_SERVER");
 
-		alice.joinHub(UUID.randomUUID());
-		assertThat(alice.awaitError()).isEqualTo("ERROR_HUB_ANCHOR_NOT_FOUND");
+		dave.joinHub(UUID.randomUUID());
+		assertThat(dave.awaitError()).isEqualTo("ERROR_HUB_ANCHOR_NOT_FOUND");
 
-		alice.send("HubJoin", "{}");
-		assertThat(alice.awaitError()).isEqualTo("ERROR_WS_MALFORMED_MESSAGE");
+		dave.send("HubJoin", "{}");
+		assertThat(dave.awaitError()).isEqualTo("ERROR_WS_MALFORMED_MESSAGE");
 	}
 
 	@Test
@@ -261,8 +275,9 @@ class HubWebSocketIntegrationTest {
 		assertThat(alice.awaitError()).isEqualTo("ERROR_HUB_NOT_JOINED");
 
 		String server = server();
+		UUID anchor = anchorOf(alice, server);
 		alice.joinServer(server);
-		alice.joinHub(anchorOf(alice, server));
+		alice.joinHub(anchor);
 		alice.await("HubJoined");
 
 		alice.send("HubMove", "{\"x\":10.6,\"z\":0,\"y_offset\":0,\"yaw\":0,\"head_yaw\":0,\"pitch\":0,\"pose\":\"STANDING\",\"on_ground\":true}");
@@ -273,6 +288,8 @@ class HubWebSocketIntegrationTest {
 		assertThat(alice.awaitError()).isEqualTo("ERROR_WS_MALFORMED_MESSAGE");
 		alice.send("HubMove", "{\"x\":0,\"z\":0}");
 		assertThat(alice.awaitError()).isEqualTo("ERROR_WS_MALFORMED_MESSAGE");
+		alice.send("HubMove", "{\"x\":0,\"z\":0,\"y_offset\":0,\"yaw\":0,\"head_yaw\":0,\"pitch\":0,\"pose\":\"STANDING\",\"on_ground\":true,\"skin_parts\":128}");
+		assertThat(alice.awaitError()).as("skin_parts is a 7-bit mask").isEqualTo("ERROR_WS_MALFORMED_MESSAGE");
 
 		alice.send("HubChat", "{\"message\":\"" + "a".repeat(257) + "\"}");
 		assertThat(alice.awaitError()).isEqualTo("ERROR_HUB_CHAT_TOO_LONG");
@@ -282,6 +299,70 @@ class HubWebSocketIntegrationTest {
 		alice.await("HubChatMessage");
 		alice.send("HubChat", "{\"message\":\"too soon\"}");
 		assertThat(alice.awaitError()).isEqualTo("ERROR_HUB_CHAT_RATE_LIMITED");
+	}
+
+	/** A Pokémon in the first slot of {@code owner}'s team, ready to be sent out as a Ghost. */
+	private Pokemon teamMon(Client owner, String species) {
+		return pokemonRepository.saveAndFlush(new Pokemon(UUID.randomUUID(), owner.uuid, species, null, (short) 42,
+				"timid", "static", true, null, null, (short) 1, "1.8.1",
+				Map.of("ivs", Map.of(), "evs", Map.of(), "nickname", "Sparky", "gender", "F")));
+	}
+
+	@Test
+	void membersGhostsAreSharedThroughTheHubWithoutRealCoordinates() throws Exception {
+		Client alice = inAnchor("Al", server());
+		alice.await("HubJoined");
+		Client bob = inAnchor("Bo", server());
+		bob.await("HubJoined");
+		alice.await("HubPlayerEnter");
+
+		// Alice sends her Ghost out while in the Hub: Bob, on another server, gets it — never her real position.
+		Pokemon pikachu = teamMon(alice, "pikachu");
+		alice.send("PositionUpdate", "{\"x\":1234.5,\"y\":70,\"z\":-987.5,\"dimension\":\"" + OVERWORLD + "\"}");
+		alice.send("SendOutGhost", "{\"pokemon_uuid\":\"" + pikachu.getUuid() + "\"}");
+		JsonNode spawn = bob.await("HubGhostSpawn");
+		assertThat(spawn.get("player_uuid").asString()).isEqualTo(alice.uuid.toString());
+		assertThat(spawn.get("pokemon_uuid").asString()).isEqualTo(pikachu.getUuid().toString());
+		assertThat(spawn.get("species").asString()).isEqualTo("pikachu");
+		assertThat(spawn.get("is_shiny").asBoolean()).isTrue();
+		assertThat(spawn.get("level").asInt()).isEqualTo(42);
+		assertThat(spawn.get("gender").asString()).isEqualTo("F");
+		assertThat(spawn.get("nickname").asString()).isEqualTo("Sparky");
+		assertThat(spawn.has("position")).as("real coordinates never reach the Hub").isFalse();
+		alice.expectNo("HubGhostSpawn");
+
+		// Coming back later (the Hub holds 2 here), Bob finds Alice's Ghost in HubJoined.
+		bob.send("HubLeave", "{}");
+		bob.await("HubLeft");
+		bob.joinHub(hubAnchorService.findMine(bob.uuid).uuid());
+		JsonNode aliceEntry = bob.await("HubJoined").get("members").get(0);
+		assertThat(aliceEntry.get("player_uuid").asString()).isEqualTo(alice.uuid.toString());
+		assertThat(aliceEntry.get("ghost").get("species").asString()).isEqualTo("pikachu");
+		assertThat(aliceEntry.get("ghost").has("position")).isFalse();
+
+		// Recalled: gone for every other member.
+		alice.send("RecallGhost", "{}");
+		JsonNode despawn = bob.await("HubGhostDespawn");
+		assertThat(despawn.get("player_uuid").asString()).isEqualTo(alice.uuid.toString());
+		assertThat(despawn.get("pokemon_uuid").asString()).isEqualTo(pikachu.getUuid().toString());
+	}
+
+	@Test
+	void aGhostAlreadyOutEntersTheHubWithItsOwner() throws Exception {
+		Client alice = inAnchor("Al", server());
+		alice.await("HubJoined");
+
+		Client bob = connect("Bo");
+		String server = server();
+		UUID anchor = anchorOf(bob, server);
+		bob.joinServer(server);
+		Pokemon eevee = teamMon(bob, "eevee");
+		bob.send("SendOutGhost", "{\"pokemon_uuid\":\"" + eevee.getUuid() + "\"}");
+		bob.await("GhostEntitySpawn");
+		bob.joinHub(anchor);
+
+		assertThat(alice.await("HubPlayerEnter").get("player_uuid").asString()).isEqualTo(bob.uuid.toString());
+		assertThat(alice.await("HubGhostSpawn").get("species").asString()).isEqualTo("eevee");
 	}
 
 	@Test
