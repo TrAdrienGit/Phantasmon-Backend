@@ -229,6 +229,7 @@ def main():
     sponge(os.path.join(fixtures, "room_v3.schem"), room, (3, 2, 4), 3)
     litematic(os.path.join(fixtures, "room.litematic"), room, (3, 2, 4))
     litematic(os.path.join(fixtures, "arena.litematic"), full, (21, 21, 21))
+    litematic(os.path.join(fixtures, "cube.litematic"), {(1, 0, 1): "minecraft:stone"}, (3, 3, 3))
     sponge(os.path.join(fixtures, "arena_v3.schem"), full, (21, 21, 21), 3)
     if os.path.isdir(os.path.join(os.path.dirname(ROOT), "Phantasmon-Client", "src", "test")):
         os.makedirs(CLIENT_TEST, exist_ok=True)

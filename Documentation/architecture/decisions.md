@@ -47,6 +47,7 @@ Pour ajouter une décision : prendre le numéro suivant, dater, et mettre à jou
 | D-32 | Combat solo d'un admin contre un miroir de son équipe | Acceptée | 2026-10-07 |
 | D-33 | Terrain d'un combat Ghost visible par les joueurs alentour | Acceptée | 2026-10-07 |
 | D-34 | Construction du Global Hub par un schematic en blocs client | Acceptée | 2026-10-08 |
+| D-35 | Plusieurs hubs créés par les admins, chacun espace séparé | Acceptée | 2026-10-08 |
 
 ---
 
@@ -428,3 +429,27 @@ Pour ajouter une décision : prendre le numéro suivant, dater, et mettre à jou
 - **Conséquences** : le backend ne démarre pas sans schematic valide ; les blocs ne dépendent que de la liste des
   Anchors (restent affichés si le backend devient injoignable) ; deux mixins client (`ClientLevelHubBuildMixin`,
   `MultiPlayerGameModeHubBuildMixin`) ; LIM-14.
+
+## D-35 — Plusieurs hubs créés par les admins, chacun espace séparé
+
+- **Contexte** : Adrien (2026-10-08) veut que les admins créent des hubs (nom, longueur, largeur, hauteur), chacun avec
+  son dossier de schematics, et que les joueurs posent un Anchor **par hub** avec `hub anchor create <hub>`, les noms
+  des hubs apparaissant dans la commande dès leur création ; les admins suppriment un hub par son nom.
+- **Décision (choix d'Adrien)** :
+  - commande admin `/phantasmon admin hub create <nom> <longueur> <largeur> <hauteur>` : hub en base (table `hubs`)
+    et dossier `hub_schematics/hub_<nom>/` ; `delete <nom>` ; `reload <nom>` relit le dossier sans redémarrer ;
+  - un hub sans schematic fonctionne sans construction ; le backend ne refuse de démarrer que pour un dossier avec
+    plusieurs fichiers, un fichier illisible ou de mauvaise taille ; un rechargement refusé garde l'ancienne
+    construction ;
+  - **espaces séparés** : chaque hub a ses membres, avatars, Ghost, chat et sa limite de 50 joueurs ;
+  - un Anchor par joueur et par hub ; deux Anchors (tous hubs confondus) ne se chevauchent jamais ;
+  - supprimer un hub supprime ses Anchors (membres sortis) et archive son dossier en `hub_<nom>.deleted-<date>`.
+- **Choix de Claude** : l'ancien Global Hub devient le hub `global` (21 × 21 × 21, Anchors existants rattachés, V14) ;
+  noms de hub en minuscules, chiffres et `_` (2 à 32, c'est un nom de dossier) ; tailles de 3 à 64 ; largeur = en
+  travers de l'Anchor (x), longueur = vers son avant (z) ; centre = bloc `taille / 2` ; nom d'Anchor facultatif
+  (par défaut `<hub>-<joueur>`) ; suggestions de la commande tirées de `GET /hubs`, relu toutes les 10 s au plus et à
+  chaque `HubCatalogChanged` (diffusé à tous les clients) ; `/phantasmon hub list` ; un combat vu de loin (D-33) l'est
+  par les membres du hub de chaque joueur seulement.
+- **Conséquences** : `phantasmon.hub.anchor-size` disparaît ; `GET /hub/schematic` est remplacé par `GET /hubs` et
+  `/hubs/{name}/schematic/file` ; `GET /hub/anchors/mine` renvoie une liste ; `HubCoordinates`/`HubBuildLayout`
+  acceptent des zones non cubiques.

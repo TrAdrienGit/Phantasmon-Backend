@@ -45,10 +45,13 @@
 | `POST` | [`/admin/reboot`](#administration) | Admin | Redémarrer le backend |
 | `GET` | [`/hub/anchors`](#get-hubanchors) | Bearer | Anchors d'un serveur et d'une dimension |
 | `POST` | [`/hub/anchors`](#post-hubanchors) | Bearer | Créer son Anchor |
-| `GET` | [`/hub/anchors/mine`](#get-hubanchorsmine) | Bearer | Son Anchor |
+| `GET` | [`/hub/anchors/mine`](#get-hubanchorsmine) | Bearer | Ses Anchors (un par hub au plus) |
 | `DELETE` | [`/hub/anchors/{uuid}`](#delete-hubanchorsuuid) | Bearer | Supprimer un Anchor (créateur ou admin) |
-| `GET` | [`/hub/schematic`](#get-hubschematic) | Bearer | Construction du Global Hub : description |
-| `GET` | [`/hub/schematic/file`](#get-hubschematicfile) | Bearer | Construction du Global Hub : le fichier |
+| `GET` | [`/hubs`](#get-hubs) | Bearer | Les hubs : taille, construction |
+| `GET` | [`/hubs/{name}/schematic/file`](#get-hubsnameschematicfile) | Bearer | Construction d'un hub : le fichier |
+| `POST` | [`/admin/hubs`](#post-adminhubs) | Bearer admin | Créer un hub |
+| `DELETE` | [`/admin/hubs/{name}`](#delete-adminhubsname) | Bearer admin | Supprimer un hub et ses Anchors |
+| `POST` | [`/admin/hubs/{name}/reload`](#post-adminhubsnamereload) | Bearer admin | Relire le dossier de schematics d'un hub |
 
 ---
 
@@ -405,10 +408,11 @@ change ; créé vide au premier démarrage). Sinon `403 ERROR_ADMIN_REQUIRED`.
 ## Hub Anchors (Phantasmon Network)
 
 Étape N1 de [`specifications/network-cahier-des-charges.md`](../specifications/network-cahier-des-charges.md) (§5.2,
-D-28). Un Anchor est un cube de `size` × `size` × `size` blocs (`phantasmon.hub.anchor-size`, 21) posé sur un
-serveur Minecraft : centré sur `origin` en `x` / `z`, de `origin.y` à `origin.y + size - 1` en hauteur. Le serveur
-n'est connu que par son empreinte (D-18). Tout joueur peut en créer **un** ; un Anchor est partagé par tous les
-joueurs de son serveur et de sa dimension, jamais visible depuis un autre serveur (D-30).
+D-28, D-35). Un Anchor mène à un **hub** ; c'est une zone de la taille de ce hub (`size.x` de large, `size.y` de haut,
+`size.z` de long vers l'avant de l'Anchor) posée sur un serveur Minecraft : centrée sur le bloc de `origin` en `x` /
+`z`, à partir de `origin.y` (arrondi au bloc supérieur) en hauteur, tournée par `yaw`. Le serveur n'est connu que par
+son empreinte (D-18). Tout joueur peut en créer **un par hub** ; un Anchor est partagé par tous les joueurs de son
+serveur et de sa dimension, jamais visible depuis un autre serveur (D-30) ; deux Anchors ne se chevauchent jamais.
 
 ### Objet `HubAnchor`
 
@@ -416,12 +420,13 @@ joueurs de son serveur et de sa dimension, jamais visible depuis un autre serveu
 {
   "uuid": "…",
   "owner_uuid": "…",
+  "hub": "global",
   "name": "Place du marché",
   "server_fingerprint": "3f9a…",
   "dimension": "minecraft:overworld",
   "origin": { "x": 120.5, "y": 64.0, "z": -33.5 },
   "yaw": 90,
-  "size": 21,
+  "size": { "x": 21, "y": 21, "z": 21 },
   "created_at": "2026-10-07T15:53:52Z"
 }
 ```
@@ -439,6 +444,7 @@ que voient les joueurs de ce serveur. Paramètre manquant : `400 ERROR_MALFORMED
 ```json
 {
   "request_uuid": "…",
+  "hub": "global",
   "name": "Place du marché",
   "server_fingerprint": "3f9a…",
   "dimension": "minecraft:overworld",
@@ -452,32 +458,72 @@ que voient les joueurs de ce serveur. Paramètre manquant : `400 ERROR_MALFORMED
 | Statut | `error_code` | Cas |
 |---|---|---|
 | 400 | `ERROR_VALIDATION_FAILED` | Nom hors format (3 à 32 lettres, chiffres, espaces, `-`, `_`, sans espace au bord), empreinte ou dimension vide ou > 128 caractères, coordonnées absentes ou hors limites du monde, `yaw` absent |
-| 409 | `ERROR_HUB_ANCHOR_QUOTA` | L'appelant a déjà un Anchor (`details.anchor_uuid`, `details.name`) |
+| 404 | `ERROR_HUB_NOT_FOUND` | Aucun hub de ce nom (`details.hub`) |
+| 409 | `ERROR_HUB_ANCHOR_QUOTA` | L'appelant a déjà un Anchor dans ce hub (`details.anchor_uuid`, `details.name`, `details.hub`) |
 | 409 | `ERROR_HUB_ANCHOR_NAME_TAKEN` | Un Anchor de ce serveur porte déjà ce nom, casse ignorée (`details.name`) |
+| 409 | `ERROR_HUB_ANCHOR_OVERLAP` | La zone chevaucherait celle d'un Anchor du même serveur et de la même dimension, quel que soit son hub (`details.anchor_uuid`, `details.name`, `details.hub`) |
 
 ### `GET /hub/anchors/mine`
 
-`200` + `HubAnchor` ; `404 ERROR_HUB_ANCHOR_NOT_FOUND` si l'appelant n'en a pas.
+`200` + liste de `HubAnchor` (un par hub au plus, triés par nom), vide si l'appelant n'en a pas.
 
 ### `DELETE /hub/anchors/{uuid}`
 
 `204`. Réservé au créateur ou à un admin (D-26) : sinon `403 ERROR_HUB_ANCHOR_FORBIDDEN` ; inconnu :
 `404 ERROR_HUB_ANCHOR_NOT_FOUND`. Le créateur peut ensuite en poser un autre.
 
-### `GET /hub/schematic`
+## Hubs (D-35)
 
-La construction que chaque client bâtit dans les Anchors du Global Hub ([D-34](../architecture/decisions.md#d-34--construction-du-global-hub-par-un-schematic-en-blocs-client)) :
-le fichier unique de `hub_schematics/hub_global/`, lu et vérifié au démarrage.
+Les hubs sont créés par les admins, chacun avec sa taille et sa construction (D-34) : un dossier
+`hub_schematics/hub_<name>/` qui contient au plus un `.schem` (Sponge v1 à v3) ou `.litematic` de la taille du hub.
+Un hub sans construction fonctionne (zone seule). Chaque création, suppression ou rechargement est annoncé à tous les
+clients connectés (`HubCatalogChanged`, [`websocket-protocol.md`](websocket-protocol.md)).
+
+### `GET /hubs`
 
 ```json
-{ "name": "phantasmon_default_hub.schem", "format": "SCHEM", "sha256": "9f2c…", "size": { "x": 21, "y": 21, "z": 21 }, "bytes": 540 }
+[
+  { "name": "global", "size": { "x": 21, "y": 21, "z": 21 },
+    "schematic": { "name": "phantasmon_default_hub.schem", "format": "SCHEM", "sha256": "9f2c…", "bytes": 540 } },
+  { "name": "arene", "size": { "x": 31, "y": 12, "z": 41 }, "schematic": null }
+]
 ```
 
-`format` : `SCHEM` (Sponge v1 à v3) ou `LITEMATIC`. Le client garde le fichier en cache sous son `sha256`.
+`size` : `x` largeur, `y` hauteur, `z` longueur. `schematic` : `null` sans construction ; `format` `SCHEM` ou
+`LITEMATIC` ; le client garde le fichier en cache sous son `sha256`.
 
-### `GET /hub/schematic/file`
+### `GET /hubs/{name}/schematic/file`
 
-`200`, `application/octet-stream` : le fichier tel quel (NBT compressé gzip), avec `ETag` = son SHA-256.
+`200`, `application/octet-stream` : le fichier tel quel (NBT compressé gzip), avec `ETag` = son SHA-256. Hub inconnu :
+`404 ERROR_HUB_NOT_FOUND` ; sans construction : `404 ERROR_HUB_SCHEMATIC_NONE`. Nom insensible à la casse.
+
+### `POST /admin/hubs`
+
+```json
+{ "name": "arene", "length": 41, "width": 31, "height": 12 }
+```
+
+`201` + le hub (comme dans `GET /hubs`) ; crée aussi le dossier `hub_schematics/hub_arene/`. Le nom est mis en
+minuscules.
+
+| Statut | `error_code` | Cas |
+|---|---|---|
+| 400 | `ERROR_HUB_INVALID_NAME` | Nom hors format : 2 à 32 minuscules, chiffres ou `_` |
+| 400 | `ERROR_HUB_INVALID_SIZE` | Une dimension absente ou hors de 3 à 64 (`details.min`, `details.max`) |
+| 403 | `ERROR_ADMIN_REQUIRED` | Appelant non admin |
+| 409 | `ERROR_HUB_NAME_TAKEN` | Un hub porte déjà ce nom, casse ignorée |
+
+### `DELETE /admin/hubs/{name}`
+
+`200` + `{ "hub", "anchors_deleted", "archived_as" }` : les Anchors du hub sont supprimés (leurs membres sortent du
+hub, `HubLeft` `ANCHOR_DELETED`), le dossier est renommé `hub_<name>.deleted-<aaaaMMjj-HHmmss>` (`archived_as`,
+`null` s'il n'existait pas). `403 ERROR_ADMIN_REQUIRED`, `404 ERROR_HUB_NOT_FOUND`.
+
+### `POST /admin/hubs/{name}/reload`
+
+`200` + le hub : le dossier est relu avec les contrôles du démarrage (au plus un fichier, lisible, de la taille du
+hub). Refusé : `422 ERROR_HUB_SCHEMATIC_INVALID` (`details.reason`), la construction précédente reste.
+`403 ERROR_ADMIN_REQUIRED`, `404 ERROR_HUB_NOT_FOUND`.
 
 ## Prévu par le CAD, non implémenté
 

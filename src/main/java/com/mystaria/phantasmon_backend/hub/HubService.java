@@ -50,9 +50,22 @@ public class HubService {
 	private static final Set<String> POSES = Set.of("STANDING", "CROUCHING", "SWIMMING", "FALL_FLYING");
 	private static final List<String> NUMBERS = List.of("x", "z", "y_offset", "yaw", "head_yaw", "pitch");
 
-	/** One player in the Hub; {@code state} is null until their first {@code HubMove}. */
-	private record Member(UUID playerUuid, String username, UUID anchorUuid, String serverFingerprint, String dimension,
-			Map<String, Object> state, Instant lastChatAt) {
+	/**
+	 * One player in a hub, entered through {@code anchorUuid}; the hub's size bounds their moves. {@code state} is null
+	 * until their first {@code HubMove}.
+	 */
+	private record Member(UUID playerUuid, String username, UUID anchorUuid, UUID hubUuid, int sizeX, int sizeY, int sizeZ,
+			String serverFingerprint, String dimension, Map<String, Object> state, Instant lastChatAt) {
+
+		Member withState(Map<String, Object> newState) {
+			return new Member(playerUuid, username, anchorUuid, hubUuid, sizeX, sizeY, sizeZ, serverFingerprint, dimension,
+					newState, lastChatAt);
+		}
+
+		Member withChatAt(Instant chatAt) {
+			return new Member(playerUuid, username, anchorUuid, hubUuid, sizeX, sizeY, sizeZ, serverFingerprint, dimension,
+					state, chatAt);
+		}
 
 		Map<String, Object> view() {
 			Map<String, Object> view = new HashMap<>();
@@ -65,27 +78,25 @@ public class HubService {
 
 	private final Map<UUID, Member> members = new ConcurrentHashMap<>();
 	private final HubAnchorRepository anchorRepository;
+	private final HubRepository hubRepository;
 	private final PresenceService presenceService;
 	private final PlayerService playerService;
 	private final PokemonRepository pokemonRepository;
 	private final SessionRegistry sessionRegistry;
 	private final Clock clock;
 	private final int capacity;
-	private final double halfSize;
-	private final int anchorSize;
 
-	public HubService(HubAnchorRepository anchorRepository, PresenceService presenceService, PlayerService playerService,
-			PokemonRepository pokemonRepository, SessionRegistry sessionRegistry, Clock clock, @Value("${phantasmon.hub.capacity:50}") int capacity,
-			@Value("${phantasmon.hub.anchor-size:21}") int anchorSize) {
+	public HubService(HubAnchorRepository anchorRepository, HubRepository hubRepository, PresenceService presenceService,
+			PlayerService playerService, PokemonRepository pokemonRepository, SessionRegistry sessionRegistry, Clock clock,
+			@Value("${phantasmon.hub.capacity:50}") int capacity) {
 		this.anchorRepository = anchorRepository;
+		this.hubRepository = hubRepository;
 		this.presenceService = presenceService;
 		this.playerService = playerService;
 		this.pokemonRepository = pokemonRepository;
 		this.sessionRegistry = sessionRegistry;
 		this.clock = clock;
 		this.capacity = capacity;
-		this.anchorSize = anchorSize;
-		this.halfSize = anchorSize / 2.0;
 	}
 
 	/**
@@ -104,20 +115,26 @@ public class HubService {
 			error(playerUuid, "ERROR_HUB_ANCHOR_WRONG_SERVER", Map.of("anchor_uuid", anchorUuid));
 			return;
 		}
+		Hub hub = hubRepository.findById(anchor.getHubUuid()).orElse(null);
+		if (hub == null) {
+			error(playerUuid, "ERROR_HUB_ANCHOR_NOT_FOUND", Map.of("anchor_uuid", anchorUuid));
+			return;
+		}
 		if (members.containsKey(playerUuid)) {
 			leave(playerUuid, null);
 		}
-		if (members.size() >= capacity) {
-			error(playerUuid, "ERROR_HUB_FULL", Map.of("capacity", capacity));
+		long inHub = members.values().stream().filter(other -> other.hubUuid().equals(hub.getUuid())).count();
+		if (inHub >= capacity) {
+			error(playerUuid, "ERROR_HUB_FULL", Map.of("capacity", capacity, "hub", hub.getName()));
 			return;
 		}
 		String username = playerService.findById(playerUuid).map(Player::getLastUsername).orElse("?");
-		Member member = new Member(playerUuid, username, anchorUuid, anchor.getServerFingerprint(), anchor.getDimension(),
-				null, null);
+		Member member = new Member(playerUuid, username, anchorUuid, hub.getUuid(), hub.getSizeX(), hub.getSizeY(),
+				hub.getSizeZ(), anchor.getServerFingerprint(), anchor.getDimension(), null, null);
 		List<Member> others = visibleTo(member);
 		members.put(playerUuid, member);
-		log.info("Player {} joined the Hub through anchor {} ({} / {} players)", username, anchor.getName(),
-				members.size(), capacity);
+		log.info("Player {} joined hub {} through anchor {} ({} / {} players)", username, hub.getName(), anchor.getName(),
+				inHub + 1, capacity);
 		sessionRegistry.send(playerUuid, WsMessage.of("HubJoined",
 				Map.of("members", others.stream().map(this::viewWithGhost).toList())));
 		WsMessage enter = WsMessage.of("HubPlayerEnter", member.view());
@@ -200,13 +217,13 @@ public class HubService {
 		double x = (double) state.get("x");
 		double z = (double) state.get("z");
 		double yOffset = (double) state.get("y_offset");
-		if (Math.abs(x) > halfSize || Math.abs(z) > halfSize || yOffset < 0 || yOffset > anchorSize) {
-			error(playerUuid, "ERROR_HUB_OUT_OF_BOUNDS", Map.of("half_size", halfSize));
+		// Hub coordinates: x across the anchor (the hub's width), z along its front (its length).
+		if (Math.abs(x) > member.sizeX() / 2.0 || Math.abs(z) > member.sizeZ() / 2.0 || yOffset < 0 || yOffset > member.sizeY()) {
+			error(playerUuid, "ERROR_HUB_OUT_OF_BOUNDS", Map.of("half_size_x", member.sizeX() / 2.0,
+					"half_size_z", member.sizeZ() / 2.0, "height", member.sizeY()));
 			return;
 		}
-		Member moved = members.computeIfPresent(playerUuid, (uuid, current) -> new Member(current.playerUuid(),
-				current.username(), current.anchorUuid(), current.serverFingerprint(), current.dimension(), state,
-				current.lastChatAt()));
+		Member moved = members.computeIfPresent(playerUuid, (uuid, current) -> current.withState(state));
 		if (moved == null) {
 			return;
 		}
@@ -238,12 +255,12 @@ public class HubService {
 			error(playerUuid, "ERROR_HUB_CHAT_RATE_LIMITED", Map.of());
 			return;
 		}
-		members.computeIfPresent(playerUuid, (uuid, current) -> new Member(current.playerUuid(), current.username(),
-				current.anchorUuid(), current.serverFingerprint(), current.dimension(), current.state(), now));
+		members.computeIfPresent(playerUuid, (uuid, current) -> current.withChatAt(now));
 		log.info("Hub chat <{}> {}", member.username(), message);
 		WsMessage chat = WsMessage.of("HubChatMessage", Map.of("player_uuid", playerUuid, "username", member.username(),
 				"message", message, "sent_at", now.toString()));
-		members.keySet().forEach(recipient -> sessionRegistry.send(recipient, chat));
+		sessionRegistry.send(playerUuid, chat);
+		visibleTo(member).forEach(other -> sessionRegistry.send(other.playerUuid(), chat));
 	}
 
 	/** The member just sent a Ghost out: every other member sees it follow their avatar. */
@@ -268,9 +285,16 @@ public class HubService {
 		return members.containsKey(playerUuid);
 	}
 
-	/** Everyone in the Hub right now (one public Hub: they all see each other). */
-	public Set<UUID> memberUuids() {
-		return Set.copyOf(members.keySet());
+	/** Everyone in the same hub as {@code playerUuid} (them included); empty if they are in none. */
+	public Set<UUID> sameHubMembers(UUID playerUuid) {
+		Member member = members.get(playerUuid);
+		if (member == null) {
+			return Set.of();
+		}
+		Set<UUID> same = new java.util.HashSet<>();
+		members.values().stream().filter(other -> other.hubUuid().equals(member.hubUuid()))
+				.forEach(other -> same.add(other.playerUuid()));
+		return same;
 	}
 
 	/** A member as {@code HubJoined} lists them: avatar data, plus their sent-out Ghost or {@code null}. */
@@ -288,11 +312,14 @@ public class HubService {
 				.map(pokemon -> GhostPayloads.withoutPosition(playerUuid, pokemon));
 	}
 
-	/** Every other member: they all get {@code member}'s avatar (a client seeing them for real hides it itself). */
+	/**
+	 * Every other member of the same hub (D-35: hubs are separate spaces): they all get {@code member}'s avatar (a
+	 * client seeing them for real hides it itself).
+	 */
 	private List<Member> visibleTo(Member member) {
 		List<Member> visible = new ArrayList<>();
 		for (Member other : members.values()) {
-			if (!Objects.equals(other.playerUuid(), member.playerUuid())) {
+			if (!Objects.equals(other.playerUuid(), member.playerUuid()) && other.hubUuid().equals(member.hubUuid())) {
 				visible.add(other);
 			}
 		}

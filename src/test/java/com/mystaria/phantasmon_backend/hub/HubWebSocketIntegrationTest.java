@@ -145,10 +145,13 @@ class HubWebSocketIntegrationTest {
 		return client;
 	}
 
+	/** Anchors never overlap (D-35): each one 100 blocks east of the previous. */
+	private static final java.util.concurrent.atomic.AtomicInteger ANCHOR_COUNT = new java.util.concurrent.atomic.AtomicInteger();
+
 	private UUID anchorOf(Client owner, String fingerprint) {
-		return hubAnchorService.create(owner.uuid, new HubAnchorCreateRequest(UUID.randomUUID(),
+		return hubAnchorService.create(owner.uuid, new HubAnchorCreateRequest(UUID.randomUUID(), "global",
 				"Anchor " + owner.uuid.toString().substring(0, 8), fingerprint, OVERWORLD,
-				new HubAnchorCreateRequest.Origin(0.0, 64.0, 0.0), 0.0)).uuid();
+				new HubAnchorCreateRequest.Origin(100.0 * ANCHOR_COUNT.incrementAndGet(), 64.0, 0.0), 0.0)).uuid();
 	}
 
 	private static String server() {
@@ -200,6 +203,64 @@ class HubWebSocketIntegrationTest {
 		assertThat(alice.await("HubPlayerLeave").get("player_uuid").asString()).isEqualTo(bob.uuid.toString());
 	}
 
+	@Autowired
+	private HubCatalogService hubCatalogService;
+
+	@Test
+	void eachHubIsASeparateSpaceWithItsOwnSize() throws Exception {
+		// D-35: two hubs, two spaces — members of one never see those of the other, nor their chat.
+		String arena = "t_" + UUID.randomUUID().toString().substring(0, 8);
+		hubCatalogService.create(null, arena, 9, 5, 4);
+		try {
+			Client alice = inAnchor("Al", server());
+			alice.await("HubJoined");
+			Client bob = connect("Bo");
+			String bobServer = server();
+			UUID arenaAnchor = hubAnchorService.create(bob.uuid, new HubAnchorCreateRequest(UUID.randomUUID(), arena,
+					"Arena " + bob.uuid.toString().substring(0, 8), bobServer, OVERWORLD,
+					new HubAnchorCreateRequest.Origin(100.0 * ANCHOR_COUNT.incrementAndGet(), 64.0, 0.0), 0.0)).uuid();
+			bob.joinServer(bobServer);
+			bob.joinHub(arenaAnchor);
+			assertThat(bob.await("HubJoined").get("members")).isEmpty();
+			alice.expectNo("HubPlayerEnter");
+
+			bob.send("HubChat", "{\"message\":\"hello arena\"}");
+			assertThat(bob.await("HubChatMessage").get("message").asString()).isEqualTo("hello arena");
+			alice.expectNo("HubChatMessage");
+
+			// The arena is 5 wide (x up to 2.5 from the centre) and 9 long (z up to 4.5), 4 high.
+			bob.send("HubMove", """
+					{"x":2,"z":4.4,"y_offset":3.9,"yaw":0,"head_yaw":0,"pitch":0,"pose":"STANDING","on_ground":true}""");
+			bob.expectNo("Error");
+			bob.send("HubMove", """
+					{"x":3,"z":0,"y_offset":0,"yaw":0,"head_yaw":0,"pitch":0,"pose":"STANDING","on_ground":true}""");
+			assertThat(bob.awaitError()).isEqualTo("ERROR_HUB_OUT_OF_BOUNDS");
+			bob.send("HubMove", """
+					{"x":0,"z":0,"y_offset":4.5,"yaw":0,"head_yaw":0,"pitch":0,"pose":"STANDING","on_ground":true}""");
+			assertThat(bob.awaitError()).isEqualTo("ERROR_HUB_OUT_OF_BOUNDS");
+
+			// Deleting the hub takes its members out.
+			hubCatalogService.delete(null, arena);
+			assertThat(bob.await("HubLeft").get("reason").asString()).isEqualTo("ANCHOR_DELETED");
+			bob.await("HubCatalogChanged");
+		} finally {
+			try {
+				hubCatalogService.delete(null, arena);
+			} catch (RuntimeException alreadyDeleted) {
+				// deleted by the test
+			}
+			try (var folders = java.nio.file.Files.list(java.nio.file.Path.of("src/test/resources/hub_schematics"))) {
+				for (java.nio.file.Path folder : folders.filter(path -> path.getFileName().toString().startsWith("hub_t_")).toList()) {
+					try (var files = java.nio.file.Files.walk(folder)) {
+						for (java.nio.file.Path path : files.sorted(java.util.Comparator.reverseOrder()).toList()) {
+							java.nio.file.Files.delete(path);
+						}
+					}
+				}
+			}
+		}
+	}
+
 	@Test
 	void aLateJoinerSeesWhereTheOthersStand() throws Exception {
 		Client alice = inAnchor("Al", server());
@@ -224,7 +285,7 @@ class HubWebSocketIntegrationTest {
 		alice.await("HubJoined");
 		Client carol = connect("Ca");
 		carol.joinServer(server);
-		carol.joinHub(hubAnchorService.findMine(alice.uuid).uuid());
+		carol.joinHub(hubAnchorService.findMine(alice.uuid).get(0).uuid());
 
 		JsonNode members = carol.await("HubJoined").get("members");
 		assertThat(members).hasSize(1);
@@ -334,7 +395,7 @@ class HubWebSocketIntegrationTest {
 		// Coming back later (the Hub holds 2 here), Bob finds Alice's Ghost in HubJoined.
 		bob.send("HubLeave", "{}");
 		bob.await("HubLeft");
-		bob.joinHub(hubAnchorService.findMine(bob.uuid).uuid());
+		bob.joinHub(hubAnchorService.findMine(bob.uuid).get(0).uuid());
 		JsonNode aliceEntry = bob.await("HubJoined").get("members").get(0);
 		assertThat(aliceEntry.get("player_uuid").asString()).isEqualTo(alice.uuid.toString());
 		assertThat(aliceEntry.get("ghost").get("species").asString()).isEqualTo("pikachu");
@@ -411,7 +472,7 @@ class HubWebSocketIntegrationTest {
 		Client dave = inAnchor("Da", server());
 		dave.await("HubJoined");
 		alice.await("HubPlayerEnter");
-		hubAnchorService.delete(alice.uuid, hubAnchorService.findMine(alice.uuid).uuid());
+		hubAnchorService.delete(alice.uuid, hubAnchorService.findMine(alice.uuid).get(0).uuid());
 		assertThat(alice.await("HubLeft").get("reason").asString()).isEqualTo("ANCHOR_DELETED");
 		assertThat(dave.await("HubPlayerLeave").get("player_uuid").asString()).isEqualTo(alice.uuid.toString());
 

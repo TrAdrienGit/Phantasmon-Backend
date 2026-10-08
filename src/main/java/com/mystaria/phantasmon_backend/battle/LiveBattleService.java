@@ -758,8 +758,8 @@ public class LiveBattleService {
 
 	/**
 	 * Like Cobblemon, where everyone around sees the Pokémon of a battle (Adrien 2026-10-07): the players of either
-	 * player's server group ({@code server_fingerprint + dimension}) and, when either player is in the Global Hub,
-	 * every Hub member see the field — the Pokémon, send-outs, recalls, move animations, gimmicks — without the battle
+	 * player's server group ({@code server_fingerprint + dimension}) and, when either player is in a hub, every member
+	 * of that hub see the field — the Pokémon, send-outs, recalls, move animations, gimmicks — without the battle
 	 * screen. Neither player nor a spectator is a viewer. Newcomers are announced to the host
 	 * ({@code BattleFieldViewerJoined}), which sends them the field as it stands ({@code BattleSpectatorPacket} with
 	 * their uuid) then its spectator stream, forwarded as {@code BattleFieldPacket}; those who leave get
@@ -769,9 +769,9 @@ public class LiveBattleService {
 		java.util.Set<UUID> wanted = new LinkedHashSet<>();
 		wanted.addAll(presenceService.groupMembers(battle.hostUuid));
 		wanted.addAll(presenceService.groupMembers(battle.guestUuid));
-		if (hubService.isMember(battle.hostUuid) || hubService.isMember(battle.guestUuid)) {
-			wanted.addAll(hubService.memberUuids());
-		}
+		// The hub each player is in (D-35: a hub's members see each other, not those of another hub).
+		wanted.addAll(hubService.sameHubMembers(battle.hostUuid));
+		wanted.addAll(hubService.sameHubMembers(battle.guestUuid));
 		wanted.remove(battle.hostUuid);
 		wanted.remove(battle.guestUuid);
 		wanted.removeAll(battle.spectators);

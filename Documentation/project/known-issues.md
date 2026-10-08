@@ -32,6 +32,7 @@ Identifiants : `BUG-n` (comportement incorrect), `SEC-n` (sécurité, voir [`sec
 | TODO-30 | basse | Backend | Network : instances multiples du Hub au-delà de 50 joueurs (aujourd'hui : refus `ERROR_HUB_FULL`). |
 | TODO-31 | moyenne | Client + Backend | Network : outils de modération du chat du Hub pour les admins (rendre muet, exclure du Hub) ; jalon 1 = longueur, débit, journalisation seulement. |
 | TODO-32 | basse | Client + Backend | Network : émotes dans le Hub (écartées du jalon 2 par Adrien le 2026-10-07). Pistes : bulles au-dessus de la tête, ou vraies animations du corps (Mixin de rendu ou mod d'animation). |
+| TODO-33 | moyenne | Client | Network, construction du Hub (D-34) : traiter le **sol** du schematic dans un hub — problème d'affichage entre le sol du serveur et celui du hub (signalé par Adrien le 2026-10-08, à préciser : la couche du bas du schematic se pose au niveau des pieds, au-dessus du vrai sol). |
 
 ## 3. Dette technique
 

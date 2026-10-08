@@ -361,6 +361,15 @@ hitbox. Décision [D-34](../architecture/decisions.md#d-34--construction-du-glob
 | H3 | Client | Vérification d'air à la pose ; faux blocs posés, remis après chaque envoi du serveur, retirés avec l'Anchor | La salle s'affiche en jeu |
 | H4 | Client | Incassables, rien à poser dessus, portes / trappes / portillons locaux, blocs à contenu (panneaux…) au mieux | Validation en jeu par Adrien (avec Iris) |
 
+## 7 ter. Plusieurs hubs (2026-10-08, D-35)
+
+Les admins créent des hubs : `/phantasmon admin hub create <nom> <longueur> <largeur> <hauteur>` (base + dossier
+`hub_schematics/hub_<nom>/`), `delete <nom>` (Anchors supprimés, dossier archivé), `reload <nom>` (relit le
+schematic). Les joueurs posent un Anchor par hub : `/phantasmon hub anchor create <hub> [nom]`, noms de hubs suggérés
+d'après le backend (nouveaux hubs visibles sans relancer le jeu) ; `/phantasmon hub list`. Chaque hub est un espace
+séparé (membres, avatars, Ghost, chat, 50 joueurs) ; un hub sans schematic marche sans construction ; deux Anchors ne
+se chevauchent jamais. L'ancien Global Hub est le hub `global`.
+
 ## 8. Jalons suivants (esquisse, non engagés)
 
 | Jalon | Idée | Réutilise |

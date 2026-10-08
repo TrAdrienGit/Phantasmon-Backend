@@ -18,7 +18,7 @@ Lues depuis l'environnement système, ou depuis un fichier `.env` à la racine d
 | `BDD_PASSWORD` | **oui** | — | Mot de passe du rôle |
 | `JWT_SECRET` | **oui** | — | Clé HMAC-SHA256 des JWT. Générer par exemple avec `openssl rand -base64 64`. Sans elle, le démarrage échoue. |
 | `LOGGING_ENABLED` | non | `true` | Un fichier de log par démarrage dans `log/` |
-| `PHANTASMON_HUB_SCHEMATICS_DIR` | non | `hub_schematics` | Dossier des constructions du Global Hub (D-34), relatif au dossier de lancement |
+| `PHANTASMON_HUB_SCHEMATICS_DIR` | non | `hub_schematics` | Dossier des constructions des hubs (D-34, D-35), relatif au dossier de lancement |
 | `BDD_DOCKER_PORT` | non | `5433` | Utilisée **uniquement** par `docker-compose.yml` (port publié sur `127.0.0.1`) |
 
 `JWT_SECRET` et `BDD_PASSWORD` sont des secrets : ne jamais les commiter, les afficher ou les journaliser.
@@ -45,9 +45,8 @@ Lues depuis l'environnement système, ou depuis un fichier `.env` à la racine d
 | `phantasmon.presence.sweep-interval-ms` | `10000` | Période du balayage TTL |
 | `phantasmon.trade.invite-ttl` | `PT60S` | Expiration d'une invitation d'échange |
 | `phantasmon.battle.invite-ttl` | `PT60S` | Expiration d'une invitation de combat |
-| `phantasmon.hub.anchor-size` | `21` | Arête du cube de chaque Hub Anchor, en blocs (Phantasmon Network) |
-| `phantasmon.hub.capacity` | `50` | Joueurs simultanés dans le Global Hub ; au-delà `ERROR_HUB_FULL` |
-| `phantasmon.hub.schematics-dir` | `${PHANTASMON_HUB_SCHEMATICS_DIR:hub_schematics}` | Dossier des constructions du Hub (D-34) ; `hub_global/` doit contenir **un seul** `.schem` / `.litematic` de `anchor-size` blocs de côté, sinon le backend refuse de démarrer |
+| `phantasmon.hub.capacity` | `50` | Joueurs simultanés **par hub** ; au-delà `ERROR_HUB_FULL`. La taille de chaque hub est en base (`hubs`, D-35), plus en propriété |
+| `phantasmon.hub.schematics-dir` | `${PHANTASMON_HUB_SCHEMATICS_DIR:hub_schematics}` | Dossier des constructions des hubs (D-34, D-35) : un sous-dossier `hub_<nom>/` par hub (créé avec le hub), **au plus un** `.schem` / `.litematic` de la taille du hub ; plusieurs fichiers, fichier illisible ou mauvaise taille : le backend refuse de démarrer |
 
 Constantes du code (non configurables) : chrono de combat 90 s (`LiveBattleService.TIMER_SECONDS`), taille
 maximale d'un message WebSocket 1 Mio, 16 boîtes × 30 cases, équipe de 6, rétention des logs vérifiée toutes les

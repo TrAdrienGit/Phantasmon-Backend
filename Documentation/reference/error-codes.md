@@ -109,16 +109,23 @@ Les codes marqués « — » côté client concernent des routes REST que le cli
 
 | Code | Statut | Canal | Signification | Clé de traduction client |
 |---|---|---|---|---|
-| `ERROR_HUB_ANCHOR_QUOTA` | 409 | REST | Le joueur a déjà un Anchor (un par joueur) | `phantasmon.hub.error.anchor_quota` |
+| `ERROR_HUB_ANCHOR_QUOTA` | 409 | REST | Le joueur a déjà un Anchor dans ce hub (un par hub, D-35) | `phantasmon.hub.error.anchor_quota` |
+| `ERROR_HUB_ANCHOR_OVERLAP` | 409 | REST | La zone chevaucherait celle d'un autre Anchor du serveur et de la dimension (D-35) | `phantasmon.hub.error.anchor_overlap` |
 | `ERROR_HUB_ANCHOR_NAME_TAKEN` | 409 | REST | Nom déjà utilisé sur ce serveur (casse ignorée) | `phantasmon.hub.error.anchor_name_taken` |
-| `ERROR_HUB_ANCHOR_NOT_FOUND` | 404 | REST, WS | Anchor inconnu, ou le joueur n'en a pas | `phantasmon.hub.error.anchor_not_found` |
+| `ERROR_HUB_ANCHOR_NOT_FOUND` | 404 | REST, WS | Anchor inconnu | `phantasmon.hub.error.anchor_not_found` |
 | `ERROR_HUB_ANCHOR_FORBIDDEN` | 403 | REST | Suppression par un autre que le créateur ou un admin | `phantasmon.hub.error.anchor_forbidden` |
 | `ERROR_HUB_ANCHOR_WRONG_SERVER` | — | WS | `HubJoin` sans présence, ou par un Anchor d'un autre serveur ou d'une autre dimension (D-30) | `phantasmon.hub.error.anchor_wrong_server` |
-| `ERROR_HUB_FULL` | — | WS | Le Hub compte déjà `details.capacity` joueurs (50) | `phantasmon.hub.error.full` |
+| `ERROR_HUB_FULL` | — | WS | Ce hub compte déjà `details.capacity` joueurs (50 par hub ; `details.hub`) | `phantasmon.hub.error.full` |
 | `ERROR_HUB_NOT_JOINED` | — | WS | `HubMove` / `HubChat` hors du Hub | `phantasmon.hub.error.not_joined` |
-| `ERROR_HUB_OUT_OF_BOUNDS` | — | WS | `HubMove` hors du carré (\|x\|, \|z\| > 10,5) ou `y_offset` hors de 0 à 21 | `phantasmon.hub.error.out_of_bounds` |
+| `ERROR_HUB_OUT_OF_BOUNDS` | — | WS | `HubMove` hors de la zone du hub (\|x\| > largeur / 2, \|z\| > longueur / 2) ou `y_offset` hors de 0 à la hauteur (`details.half_size_x`, `half_size_z`, `height`) | `phantasmon.hub.error.out_of_bounds` |
 | `ERROR_HUB_CHAT_TOO_LONG` | — | WS | Message du chat du Hub de plus de 256 caractères | `phantasmon.hub.error.chat_too_long` |
 | `ERROR_HUB_CHAT_RATE_LIMITED` | — | WS | Plus d'un message du chat du Hub par seconde | `phantasmon.hub.error.chat_rate_limited` |
+| `ERROR_HUB_NOT_FOUND` | 404 | REST | Aucun hub de ce nom (`details.hub`) | `phantasmon.hub.error.not_found` |
+| `ERROR_HUB_NAME_TAKEN` | 409 | REST | Admin : un hub porte déjà ce nom | `phantasmon.hub.error.name_taken` |
+| `ERROR_HUB_INVALID_NAME` | 400 | REST | Admin : nom de hub hors format (2 à 32 minuscules, chiffres, `_`) | `phantasmon.hub.error.invalid_name` |
+| `ERROR_HUB_INVALID_SIZE` | 400 | REST | Admin : dimension absente ou hors de 3 à 64 | `phantasmon.hub.error.invalid_size` |
+| `ERROR_HUB_SCHEMATIC_INVALID` | 422 | REST | Admin, rechargement : dossier refusé (plusieurs fichiers, illisible, mauvaise taille ; `details.reason`), l'ancienne construction reste | `phantasmon.hub.error.schematic_invalid` (le client affiche `details.reason`) |
+| `ERROR_HUB_SCHEMATIC_NONE` | 404 | REST | Fichier demandé pour un hub sans construction | `phantasmon.hub.error.schematic_none` |
 
 ## Protocole WebSocket
 

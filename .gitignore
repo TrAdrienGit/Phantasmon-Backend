@@ -78,3 +78,6 @@ showdown-data/
 
 # Admin file (TODO-25): created on first start, one Minecraft name per line
 admins.txt
+
+# Hubs created by the tests (D-35), removed after each test
+/src/test/resources/hub_schematics/hub_t_*

@@ -62,6 +62,11 @@ public class SessionRegistry {
 		}
 	}
 
+	/** Best-effort push to every connected player. */
+	public void broadcast(WsMessage message) {
+		sessions.keySet().forEach(playerUuid -> send(playerUuid, message));
+	}
+
 	/**
 	 * A raw {@link WebSocketSession} must never be written to by two threads at
 	 * once (Tomcat throws {@code IllegalStateException: TEXT_PARTIAL_WRITING}).

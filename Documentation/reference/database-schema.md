@@ -25,7 +25,9 @@ erDiagram
     PLAYERS ||--o{ BATTLE_SESSIONS : "joue (a / b)"
     PLAYERS |o--o{ BATTLE_SESSIONS : "héberge (V8)"
     POKEMON |o..o{ TRADES : "offert / demandé (historique, sans FK depuis V7)"
-    PLAYERS ||--o| HUB_ANCHORS : "crée (V11, un au plus)"
+    PLAYERS ||--o{ HUB_ANCHORS : "crée (un par hub, V14)"
+    HUBS ||--o{ HUB_ANCHORS : "mène à (V14)"
+    PLAYERS |o--o{ HUBS : "crée (admin, V14)"
 
     PLAYERS {
         uuid uuid PK
@@ -72,9 +74,19 @@ erDiagram
         timestamptz created_at
         timestamptz finished_at
     }
+    HUBS {
+        uuid uuid PK
+        varchar name "unique, casse ignorée"
+        smallint size_x
+        smallint size_y
+        smallint size_z
+        uuid created_by FK "nullable"
+        timestamptz created_at
+    }
     HUB_ANCHORS {
         uuid uuid PK
-        uuid owner_uuid FK "unique"
+        uuid owner_uuid FK
+        uuid hub_uuid FK "unique avec owner_uuid (V14)"
         varchar name
         varchar server_fingerprint
         varchar dimension
@@ -93,7 +105,7 @@ erDiagram
     }
 ```
 
-6 tables : `players`, `pokemon`, `trades`, `battle_sessions`, `idempotency_keys`, `hub_anchors` (plus la table
+7 tables : `players`, `pokemon`, `trades`, `battle_sessions`, `idempotency_keys`, `hubs`, `hub_anchors` (plus la table
 technique `flyway_schema_history`). Pas de table `teams` (l'équipe est `pokemon.team_slot`), pas de table de présence.
 
 ## 3. `players`
@@ -236,17 +248,35 @@ Points d'accès au Global Hub posés par les joueurs, partagés par tous les jou
 | Colonne | Type | Contraintes | Notes |
 |---|---|---|---|
 | `uuid` | UUID | PK | Généré par le backend |
-| `owner_uuid` | UUID | NOT NULL, FK `players` `ON DELETE RESTRICT`, **unique** | Un Anchor par joueur (`uq_hub_anchor_owner`) |
+| `owner_uuid` | UUID | NOT NULL, FK `players` `ON DELETE RESTRICT` | Un Anchor par joueur **et par hub** (`uq_hub_anchor_owner_hub` sur `owner_uuid`, `hub_uuid`, V14 ; un seul en tout avant) |
+| `hub_uuid` | UUID | NOT NULL, FK `hubs` `ON DELETE CASCADE` | Le hub où mène l'Anchor (V14 ; les Anchors existants → hub `global`) ; index `idx_hub_anchor_hub` |
 | `name` | VARCHAR(32) | NOT NULL | Unique par serveur, casse ignorée (`uq_hub_anchor_server_name` sur `server_fingerprint`, `lower(name)`, recréé par V13) |
 | `server_fingerprint` | VARCHAR(128) | NOT NULL | Empreinte du serveur (D-18), jamais l'adresse |
 | `dimension` | VARCHAR(128) | NOT NULL | |
-| `origin_x`, `origin_y`, `origin_z` | DOUBLE PRECISION | NOT NULL | Pieds du créateur ; centre du cube en `x` / `z`, base en `y` |
+| `origin_x`, `origin_y`, `origin_z` | DOUBLE PRECISION | NOT NULL | Pieds du créateur ; centre de la zone en `x` / `z`, base en `y` |
 | `yaw` | SMALLINT | NOT NULL, ∈ {0, 90, 180, 270} | Arrondi au quart de tour |
 | `created_at` | TIMESTAMPTZ | NOT NULL, défaut `now()` | |
 
 Index : `idx_hub_anchor_server_dimension` (`server_fingerprint`, `dimension`) : un Anchor est partagé par les joueurs
-de son serveur (D-30), qui le listent par empreinte et dimension. La taille du cube n'est pas stockée :
-elle est commune à tous les Anchors (`phantasmon.hub.anchor-size`).
+de son serveur (D-30), qui le listent par empreinte et dimension. La taille de la zone n'est pas stockée ici : c'est
+celle de son hub (`hubs.size_*`). Deux Anchors d'un même serveur et d'une même dimension ne se chevauchent jamais
+(contrôle applicatif, `HubBox`, D-35).
+
+## 7 ter. `hubs` (Phantasmon Network, V14)
+
+Les hubs créés par les admins (D-35) : chacun est un espace séparé, avec sa taille et sa construction
+(`hub_schematics/hub_<name>/`, hors base).
+
+| Colonne | Type | Contraintes | Notes |
+|---|---|---|---|
+| `uuid` | UUID | PK | `6c0b5d2e-3b1a-4f0e-9a51-000000000001` pour `global` (créé par V14) |
+| `name` | VARCHAR(32) | NOT NULL, unique casse ignorée (`uq_hub_name` sur `lower(name)`) | Minuscules, chiffres, `_` (contrôle applicatif) : c'est aussi un nom de dossier |
+| `size_x`, `size_y`, `size_z` | SMALLINT | NOT NULL, de 3 à 64 | Largeur (en travers de l'Anchor), hauteur, longueur (vers l'avant de l'Anchor) |
+| `created_by` | UUID | FK `players` `ON DELETE SET NULL` | L'admin créateur ; `NULL` pour `global` |
+| `created_at` | TIMESTAMPTZ | NOT NULL, défaut `now()` | |
+
+Supprimer un hub supprime ses Anchors (`ON DELETE CASCADE`, et le service les retire d'abord pour sortir leurs
+membres du hub).
 
 ## 8. État hors base
 
@@ -276,6 +306,7 @@ Tout est perdu au redémarrage du backend (comportement voulu) et n'est pas part
 | V11 | `V11__init_hub_anchors.sql` | 2026-10-07 | Phantasmon Network (N1) : table `hub_anchors`, un Anchor par joueur, nom unique par serveur |
 | V12 | `V12__hub_anchors_personal.sql` | 2026-10-07 | Contresens sur D-30 (Anchors rendus personnels) : retrait de `uq_hub_anchor_server_name` et de `idx_hub_anchor_server_dimension`. Déjà appliquée sur la base de dev, donc conservée ; annulée par V13 |
 | V13 | `V13__hub_anchors_shared_per_server.sql` | 2026-10-07 | D-30 corrigée (Anchors partagés par serveur) : noms en double numérotés (« Nom 2 »…), puis `uq_hub_anchor_server_name` et `idx_hub_anchor_server_dimension` recréés |
+| V14 | `V14__init_hubs.sql` | 2026-10-08 | Plusieurs hubs (D-35) : table `hubs` (hub `global` 21 × 21 × 21 créé), `hub_anchors.hub_uuid` (Anchors existants → `global`), un Anchor par joueur et par hub (`uq_hub_anchor_owner_hub` remplace `uq_hub_anchor_owner`) |
 
 ## 10. Décisions de schéma
 

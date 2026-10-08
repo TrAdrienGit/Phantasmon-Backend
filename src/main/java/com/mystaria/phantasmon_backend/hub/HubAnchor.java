@@ -14,8 +14,8 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 /**
- * A player's doorway to the Global Hub on their Minecraft server (network-cahier-des-charges.md §5.2): a cube of
- * {@code phantasmon.hub.anchor-size} blocks, centred on {@code origin} horizontally and rising from its feet.
+ * A player's doorway to a hub on their Minecraft server (network-cahier-des-charges.md §5.2, D-35): a box of the hub's
+ * size, centred on {@code origin} horizontally and rising from its feet, turned by {@code yaw}.
  */
 @Entity
 @Table(name = "hub_anchors")
@@ -28,6 +28,10 @@ public class HubAnchor {
 
 	@Column(name = "owner_uuid", nullable = false)
 	private UUID ownerUuid;
+
+	/** The hub this anchor leads to (D-35). */
+	@Column(name = "hub_uuid", nullable = false)
+	private UUID hubUuid;
 
 	@Column(nullable = false, length = 32)
 	private String name;
@@ -54,10 +58,11 @@ public class HubAnchor {
 	@Column(name = "created_at", nullable = false, updatable = false)
 	private Instant createdAt;
 
-	public HubAnchor(UUID uuid, UUID ownerUuid, String name, String serverFingerprint, String dimension,
+	public HubAnchor(UUID uuid, UUID ownerUuid, UUID hubUuid, String name, String serverFingerprint, String dimension,
 			double originX, double originY, double originZ, short yaw) {
 		this.uuid = uuid;
 		this.ownerUuid = ownerUuid;
+		this.hubUuid = hubUuid;
 		this.name = name;
 		this.serverFingerprint = serverFingerprint;
 		this.dimension = dimension;

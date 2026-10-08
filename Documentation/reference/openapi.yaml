@@ -550,16 +550,17 @@ paths:
           $ref: "#/components/responses/Error"
     post:
       tags: [Hub]
-      summary: Crée l'Anchor de l'appelant (un par joueur, idempotent via request_uuid)
+      summary: Crée un Anchor de l'appelant (un par hub, idempotent via request_uuid)
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
-              required: [request_uuid, name, server_fingerprint, dimension, origin, yaw]
+              required: [request_uuid, hub, name, server_fingerprint, dimension, origin, yaw]
               properties:
                 request_uuid: { type: string, format: uuid }
+                hub: { type: string, maxLength: 32, example: global, description: Nom du hub où mène l'Anchor (D-35) }
                 name:
                   type: string
                   minLength: 3
@@ -585,8 +586,10 @@ paths:
                 $ref: "#/components/schemas/HubAnchor"
         "400":
           $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
         "409":
-          description: ERROR_HUB_ANCHOR_QUOTA ou ERROR_HUB_ANCHOR_NAME_TAKEN
+          description: ERROR_HUB_ANCHOR_QUOTA, ERROR_HUB_ANCHOR_NAME_TAKEN ou ERROR_HUB_ANCHOR_OVERLAP
           content:
             application/json:
               schema:
@@ -595,16 +598,16 @@ paths:
   /hub/anchors/mine:
     get:
       tags: [Hub]
-      summary: L'Anchor de l'appelant
+      summary: Les Anchors de l'appelant (un par hub au plus)
       responses:
         "200":
-          description: OK
+          description: OK, liste éventuellement vide
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/HubAnchor"
-        "404":
-          $ref: "#/components/responses/Error"
+                type: array
+                items:
+                  $ref: "#/components/schemas/HubAnchor"
 
   /hub/anchors/{uuid}:
     delete:
@@ -623,40 +626,115 @@ paths:
         "404":
           $ref: "#/components/responses/Error"
 
-  /hub/schematic:
+  /hubs:
     get:
       tags: [Hub]
-      summary: Construction du Global Hub (D-34) — description du schematic
+      summary: Les hubs (D-35), leur taille et leur construction (D-34)
       responses:
         "200":
-          description: OK
+          description: Hubs triés par nom
           content:
             application/json:
               schema:
-                type: object
-                required: [name, format, sha256, size, bytes]
-                properties:
-                  name: { type: string, example: phantasmon_default_hub.schem }
-                  format: { type: string, enum: [SCHEM, LITEMATIC] }
-                  sha256: { type: string, description: SHA-256 du fichier en hexadécimal }
-                  size:
-                    type: object
-                    properties:
-                      x: { type: integer, example: 21 }
-                      y: { type: integer, example: 21 }
-                      z: { type: integer, example: 21 }
-                  bytes: { type: integer, description: Taille du fichier en octets }
+                type: array
+                items:
+                  $ref: "#/components/schemas/Hub"
 
-  /hub/schematic/file:
+  /hubs/{name}/schematic/file:
     get:
       tags: [Hub]
-      summary: Construction du Global Hub (D-34) — le fichier (.schem ou .litematic, NBT gzip)
+      summary: La construction d'un hub (.schem ou .litematic, NBT gzip)
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema: { type: string }
       responses:
         "200":
           description: Le fichier tel quel ; ETag = SHA-256
           content:
             application/octet-stream:
               schema: { type: string, format: binary }
+        "404":
+          $ref: "#/components/responses/Error"
+
+  /admin/hubs:
+    post:
+      tags: [Admin]
+      summary: Crée un hub et son dossier de schematics (admin)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, length, width, height]
+              properties:
+                name: { type: string, pattern: "^[a-z0-9_]{2,32}$", description: Mis en minuscules }
+                length: { type: integer, minimum: 3, maximum: 64, description: Vers l'avant de l'Anchor (z) }
+                width: { type: integer, minimum: 3, maximum: 64, description: En travers (x) }
+                height: { type: integer, minimum: 3, maximum: 64 }
+      responses:
+        "201":
+          description: Hub créé
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Hub"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+
+  /admin/hubs/{name}:
+    delete:
+      tags: [Admin]
+      summary: Supprime un hub et ses Anchors ; archive son dossier (admin)
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Supprimé
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  hub: { type: string }
+                  anchors_deleted: { type: integer }
+                  archived_as: { type: string, nullable: true }
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+
+  /admin/hubs/{name}/reload:
+    post:
+      tags: [Admin]
+      summary: Relit le dossier de schematics d'un hub (admin)
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Hub relu
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Hub"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "422":
+          $ref: "#/components/responses/Error"
 
 components:
   securitySchemes:
@@ -807,10 +885,11 @@ components:
 
     HubAnchor:
       type: object
-      required: [uuid, owner_uuid, name, server_fingerprint, dimension, origin, yaw, size, created_at]
+      required: [uuid, owner_uuid, hub, name, server_fingerprint, dimension, origin, yaw, size, created_at]
       properties:
         uuid: { type: string, format: uuid }
         owner_uuid: { type: string, format: uuid }
+        hub: { type: string, example: global }
         name: { type: string, example: "Place du marché" }
         server_fingerprint: { type: string }
         dimension: { type: string, example: "minecraft:overworld" }
@@ -822,8 +901,31 @@ components:
             y: { type: number }
             z: { type: number }
         yaw: { type: integer, enum: [0, 90, 180, 270] }
-        size: { type: integer, example: 21, description: "Arête du cube en blocs (phantasmon.hub.anchor-size)" }
+        size:
+          $ref: "#/components/schemas/HubSize"
         created_at: { type: string, format: date-time }
+    HubSize:
+      type: object
+      description: Taille du hub en blocs — x largeur, y hauteur, z longueur (vers l'avant de l'Anchor)
+      properties:
+        x: { type: integer, example: 21 }
+        y: { type: integer, example: 21 }
+        z: { type: integer, example: 21 }
+    Hub:
+      type: object
+      required: [name, size]
+      properties:
+        name: { type: string, example: global }
+        size:
+          $ref: "#/components/schemas/HubSize"
+        schematic:
+          type: object
+          nullable: true
+          properties:
+            name: { type: string }
+            format: { type: string, enum: [SCHEM, LITEMATIC] }
+            sha256: { type: string }
+            bytes: { type: integer }
     Trade:
       type: object
       properties:

@@ -45,7 +45,7 @@ public class HubAnchorController {
 	}
 
 	@GetMapping("/hub/anchors/mine")
-	public HubAnchorResponse mine(Authentication authentication) {
+	public List<HubAnchorResponse> mine(Authentication authentication) {
 		return hubAnchorService.findMine(playerUuid(authentication));
 	}
 

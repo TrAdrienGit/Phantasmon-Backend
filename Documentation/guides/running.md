@@ -30,12 +30,16 @@ cp .env.template .env
 Le `.env` est chargé automatiquement **si le backend est lancé depuis la racine du projet**. Il n'est jamais
 commité (`.gitignore`).
 
-**Construction du Global Hub** (D-34) : le dossier `hub_schematics/hub_global/` (relatif au dossier de lancement, ou
-`PHANTASMON_HUB_SCHEMATICS_DIR`) doit contenir **un seul** fichier `.schem` (WorldEdit / Sponge) ou `.litematic`
-(Litematica) de 21 × 21 × 21 blocs. Le dépôt fournit une arène par défaut (`phantasmon_default_hub.schem`, générée
-par `scripts/generate_hub_schematics.py`) : la **remplacer** par la vraie construction, ne pas l'ajouter à côté.
-Le centre de la couche du bas du schematic se place sous les pieds du joueur qui pose l'Anchor ; le +Z du schematic est
-l'avant de l'Anchor. Le changement est pris en compte au redémarrage du backend ; les clients le téléchargent seuls.
+**Constructions des hubs** (D-34, D-35) : `hub_schematics/` (relatif au dossier de lancement, ou
+`PHANTASMON_HUB_SCHEMATICS_DIR`) contient un dossier `hub_<nom>/` par hub, créé avec le hub
+(`/phantasmon admin hub create <nom> <longueur> <largeur> <hauteur>`). Chaque dossier contient **au plus un** fichier
+`.schem` (WorldEdit / Sponge) ou `.litematic` (Litematica) de la taille du hub (largeur × hauteur × longueur) ; vide,
+le hub fonctionne sans construction. Le dépôt fournit une arène pour le hub `global` (`hub_global/
+phantasmon_default_hub.schem`, générée par `scripts/generate_hub_schematics.py`) : la **remplacer**, ne pas l'ajouter
+à côté. Le centre de la couche du bas se place sous les pieds du joueur qui pose l'Anchor ; le +Z du schematic est
+l'avant de l'Anchor. Après avoir déposé ou remplacé un fichier : `/phantasmon admin hub reload <nom>` (sans
+redémarrer) ; les clients le téléchargent seuls. Un hub supprimé laisse son dossier renommé
+`hub_<nom>.deleted-<date>`.
 
 ## 3. Lancer en développement
 
@@ -126,8 +130,8 @@ fichier, pas la console.
 | `/health` répond 503 | Le backend tourne mais ne joint pas PostgreSQL |
 | Modifications non prises en compte en `bootRun` | Lancé sans `--continuous` |
 | Aucune migration appliquée, aucun message Flyway | Dépendance `spring-boot-flyway` retirée de `build.gradle` (module séparé en Spring Boot 4) |
-| `Global Hub schematic folder … must hold exactly one .schem or .litematic file` | `hub_schematics/hub_global/` vide ou avec plusieurs schematics : n'en garder qu'un |
-| `Global Hub schematic … is AxBxC blocks; a Hub anchor is 21x21x21` | Le schematic n'a pas la taille d'un Anchor (`phantasmon.hub.anchor-size`) |
-| `Global Hub schematic folder missing or unreadable` | Backend lancé hors de la racine du projet, ou `PHANTASMON_HUB_SCHEMATICS_DIR` erroné |
+| `Schematic folder … of hub … must hold at most one .schem or .litematic file` | Plusieurs schematics dans `hub_schematics/hub_<nom>/` : n'en garder qu'un |
+| `Schematic … is AxBxC blocks (width x height x length); hub … is …: both must match` | Le schematic n'a pas la taille du hub |
+| `Cannot create the schematic folder of hub …` | Dossier sans droits d'écriture, ou `PHANTASMON_HUB_SCHEMATICS_DIR` erroné |
 | Aucun fichier dans `log/` | `LOGGING_ENABLED=false`, ou dossier sans droits d'écriture |
 | Le client reçoit `ERROR_TRADE_PARTNER_UNAVAILABLE` alors que l'autre joueur est en jeu | L'autre client n'a pas de session WebSocket : non connecté, ou pointe vers un autre backend |

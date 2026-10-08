@@ -629,10 +629,13 @@ class LiveBattleWebSocketIntegrationTest {
 		send(aliceSession, "HubLeave", "{}");
 	}
 
+	/** Anchors never overlap (D-35): each one 100 blocks east of the previous. */
+	private static final java.util.concurrent.atomic.AtomicInteger ANCHOR_COUNT = new java.util.concurrent.atomic.AtomicInteger();
+
 	private UUID anchorOn(UUID owner, String fingerprint) {
-		return hubAnchorService.create(owner, new com.mystaria.phantasmon_backend.hub.HubAnchorCreateRequest(UUID.randomUUID(),
+		return hubAnchorService.create(owner, new com.mystaria.phantasmon_backend.hub.HubAnchorCreateRequest(UUID.randomUUID(), "global",
 				"Anchor " + owner.toString().substring(0, 8), fingerprint, "minecraft:overworld",
-				new com.mystaria.phantasmon_backend.hub.HubAnchorCreateRequest.Origin(0.0, 64.0, 0.0), 0.0)).uuid();
+				new com.mystaria.phantasmon_backend.hub.HubAnchorCreateRequest.Origin(100.0 * ANCHOR_COUNT.incrementAndGet(), 64.0, 0.0), 0.0)).uuid();
 	}
 
 	@Test

@@ -243,21 +243,22 @@ Envoyés par `TradeService` après les appels REST, uniquement aux joueurs conne
 ## 6 bis. Global Hub (Phantasmon Network)
 
 Étape N2 de [`network-cahier-des-charges.md`](../specifications/network-cahier-des-charges.md) (§5.3 à §5.8).
-Implémentation : `hub.HubService` (mémoire, comme la présence). Un seul Hub public, au plus `phantasmon.hub.capacity`
-joueurs (50). On y entre par un Hub Anchor ([`rest-api.md`](rest-api.md#hub-anchors-phantasmon-network)) du serveur
+Implémentation : `hub.HubService` (mémoire, comme la présence). **Plusieurs hubs** créés par les admins (D-35), chacun
+un espace séparé : ses membres, avatars, Ghost et chat ne sont vus que dans ce hub ; au plus `phantasmon.hub.capacity`
+joueurs (50) **par hub**. On y entre par un Hub Anchor ([`rest-api.md`](rest-api.md#hub-anchors-phantasmon-network)) du serveur
 et de la dimension de sa présence. Les positions du Hub sont **relatives à l'Anchor** : jamais de coordonnées réelles
 ni d'adresse de serveur.
 
 **Anchors** (D-30) : on entre par n'importe quel Anchor du serveur et de la dimension où l'on est, jamais par celui
 d'un autre serveur. **Visibilité** : chaque membre reçoit tous les autres, joueurs du même serveur compris (ils
-peuvent être entrés par un autre Anchor) ; le client masque lui-même un avatar qui ferait doublon avec le vrai
-joueur. Le chat va à tous les membres.
+peuvent être entrés par un autre Anchor) **du même hub** ; le client masque lui-même un avatar qui ferait doublon avec
+le vrai joueur. Le chat va à tous les membres du hub.
 
 | C2S | `data` | Effet |
 |---|---|---|
-| `HubJoin` | `{ "anchor_uuid" }` | Entre dans le Hub par cet Anchor, quel que soit son créateur. Refus : `ERROR_WS_MALFORMED_MESSAGE` (UUID absent ou invalide), `ERROR_HUB_ANCHOR_NOT_FOUND`, `ERROR_HUB_ANCHOR_WRONG_SERVER` (pas de `JoinServerGroup`, ou Anchor d'un autre serveur ou d'une autre dimension), `ERROR_HUB_FULL` (`details.capacity`). Déjà membre : sortie puis entrée par le nouvel Anchor. |
+| `HubJoin` | `{ "anchor_uuid" }` | Entre dans le Hub par cet Anchor, quel que soit son créateur. Refus : `ERROR_WS_MALFORMED_MESSAGE` (UUID absent ou invalide), `ERROR_HUB_ANCHOR_NOT_FOUND`, `ERROR_HUB_ANCHOR_WRONG_SERVER` (pas de `JoinServerGroup`, ou Anchor d'un autre serveur ou d'une autre dimension), `ERROR_HUB_FULL` (`details.capacity`, `details.hub` : le hub de cet Anchor est plein). Déjà membre : sortie puis entrée par le nouvel Anchor (éventuellement d'un autre hub). |
 | `HubLeave` | `{}` | Sort du Hub ; répond `HubLeft` `LEFT` |
-| `HubMove` | `{ "x", "z", "y_offset", "yaw", "head_yaw", "pitch", "pose", "on_ground", "skin_parts"? }` | Nouvel état de l'avatar. `x`, `z` : coordonnées Hub (relatives au centre de l'Anchor, après rotation par son `yaw`), \|·\| ≤ 10,5 ; `y_offset` : hauteur au-dessus du sol local, 0 à 21 ; sinon `ERROR_HUB_OUT_OF_BOUNDS` (`details.half_size`). `pose` ∈ `STANDING`, `CROUCHING`, `SWIMMING`, `FALL_FLYING` ; `on_ground` booléen ; `skin_parts` facultatif : masque `PlayerModelPart` de Minecraft (couches extérieures du skin et cape affichées), entier de 0 à 127 ; champ manquant, non fini ou hors limites : `ERROR_WS_MALFORMED_MESSAGE`. Hors du Hub : `ERROR_HUB_NOT_JOINED`. À envoyer jusqu'à 10 fois par seconde, seulement quand l'état change. |
+| `HubMove` | `{ "x", "z", "y_offset", "yaw", "head_yaw", "pitch", "pose", "on_ground", "skin_parts"? }` | Nouvel état de l'avatar. `x`, `z` : coordonnées Hub (relatives au centre de l'Anchor, après rotation par son `yaw`) : \|x\| ≤ largeur du hub / 2, \|z\| ≤ longueur / 2 ; `y_offset` : hauteur au-dessus du sol local, de 0 à la hauteur du hub ; sinon `ERROR_HUB_OUT_OF_BOUNDS` (`details.half_size_x`, `half_size_z`, `height`). `pose` ∈ `STANDING`, `CROUCHING`, `SWIMMING`, `FALL_FLYING` ; `on_ground` booléen ; `skin_parts` facultatif : masque `PlayerModelPart` de Minecraft (couches extérieures du skin et cape affichées), entier de 0 à 127 ; champ manquant, non fini ou hors limites : `ERROR_WS_MALFORMED_MESSAGE`. Hors du Hub : `ERROR_HUB_NOT_JOINED`. À envoyer jusqu'à 10 fois par seconde, seulement quand l'état change. |
 | `HubChat` | `{ "message" }` | Message du chat du Hub : codes `§x` retirés, espaces de bord retirés ; vide → `ERROR_WS_MALFORMED_MESSAGE`, > 256 caractères → `ERROR_HUB_CHAT_TOO_LONG`, moins d'une seconde après le précédent → `ERROR_HUB_CHAT_RATE_LIMITED`, hors du Hub → `ERROR_HUB_NOT_JOINED`. Écrit dans le journal du backend, jamais en base. |
 
 | S2C | `data` | Destinataires |
@@ -269,7 +270,8 @@ joueur. Le chat va à tous les membres.
 | `HubLeft` | `{ "reason": "LEFT" \| "SERVER_CHANGED" \| "ANCHOR_DELETED" }` | Le joueur sorti du Hub (pas d'envoi sur déconnexion ni TTL) |
 | `HubGhostSpawn` | `{ "player_uuid", "pokemon_uuid", "species", "form" \| null, "is_shiny", "level", "gender" \| null, "nickname" \| null }` | Tous les autres membres : un membre sort un Ghost dans le Hub, ou entre dans le Hub avec un Ghost déjà sorti. Mêmes champs que `GhostEntitySpawn`, **sans `position`** : le client le fait suivre l'avatar |
 | `HubGhostDespawn` | `{ "player_uuid", "pokemon_uuid" }` | Tous les autres membres : rappel, Ghost échangé, début d'un combat Ghost (tout ce qui envoie `GhostEntityDespawn` au groupe) ; la sortie du Hub suffit sinon (`HubPlayerLeave`) |
-| `HubChatMessage` | `{ "player_uuid", "username", "message", "sent_at" }` | Tous les membres, expéditeur compris |
+| `HubChatMessage` | `{ "player_uuid", "username", "message", "sent_at" }` | Tous les membres du hub, expéditeur compris |
+| `HubCatalogChanged` | `{}` | **Tous les clients connectés** : un admin a créé, supprimé ou rechargé un hub (D-35) ; le client relit `GET /hubs` (suggestions de commandes, constructions) et les Anchors |
 
 **Sorties automatiques** :
 
