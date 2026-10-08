@@ -623,6 +623,41 @@ paths:
         "404":
           $ref: "#/components/responses/Error"
 
+  /hub/schematic:
+    get:
+      tags: [Hub]
+      summary: Construction du Global Hub (D-34) — description du schematic
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [name, format, sha256, size, bytes]
+                properties:
+                  name: { type: string, example: phantasmon_default_hub.schem }
+                  format: { type: string, enum: [SCHEM, LITEMATIC] }
+                  sha256: { type: string, description: SHA-256 du fichier en hexadécimal }
+                  size:
+                    type: object
+                    properties:
+                      x: { type: integer, example: 21 }
+                      y: { type: integer, example: 21 }
+                      z: { type: integer, example: 21 }
+                  bytes: { type: integer, description: Taille du fichier en octets }
+
+  /hub/schematic/file:
+    get:
+      tags: [Hub]
+      summary: Construction du Global Hub (D-34) — le fichier (.schem ou .litematic, NBT gzip)
+      responses:
+        "200":
+          description: Le fichier tel quel ; ETag = SHA-256
+          content:
+            application/octet-stream:
+              schema: { type: string, format: binary }
+
 components:
   securitySchemes:
     bearerAuth:

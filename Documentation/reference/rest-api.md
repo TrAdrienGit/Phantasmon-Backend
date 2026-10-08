@@ -47,6 +47,8 @@
 | `POST` | [`/hub/anchors`](#post-hubanchors) | Bearer | Créer son Anchor |
 | `GET` | [`/hub/anchors/mine`](#get-hubanchorsmine) | Bearer | Son Anchor |
 | `DELETE` | [`/hub/anchors/{uuid}`](#delete-hubanchorsuuid) | Bearer | Supprimer un Anchor (créateur ou admin) |
+| `GET` | [`/hub/schematic`](#get-hubschematic) | Bearer | Construction du Global Hub : description |
+| `GET` | [`/hub/schematic/file`](#get-hubschematicfile) | Bearer | Construction du Global Hub : le fichier |
 
 ---
 
@@ -461,6 +463,21 @@ que voient les joueurs de ce serveur. Paramètre manquant : `400 ERROR_MALFORMED
 
 `204`. Réservé au créateur ou à un admin (D-26) : sinon `403 ERROR_HUB_ANCHOR_FORBIDDEN` ; inconnu :
 `404 ERROR_HUB_ANCHOR_NOT_FOUND`. Le créateur peut ensuite en poser un autre.
+
+### `GET /hub/schematic`
+
+La construction que chaque client bâtit dans les Anchors du Global Hub ([D-34](../architecture/decisions.md#d-34--construction-du-global-hub-par-un-schematic-en-blocs-client)) :
+le fichier unique de `hub_schematics/hub_global/`, lu et vérifié au démarrage.
+
+```json
+{ "name": "phantasmon_default_hub.schem", "format": "SCHEM", "sha256": "9f2c…", "size": { "x": 21, "y": 21, "z": 21 }, "bytes": 540 }
+```
+
+`format` : `SCHEM` (Sponge v1 à v3) ou `LITEMATIC`. Le client garde le fichier en cache sous son `sha256`.
+
+### `GET /hub/schematic/file`
+
+`200`, `application/octet-stream` : le fichier tel quel (NBT compressé gzip), avec `ETag` = son SHA-256.
 
 ## Prévu par le CAD, non implémenté
 

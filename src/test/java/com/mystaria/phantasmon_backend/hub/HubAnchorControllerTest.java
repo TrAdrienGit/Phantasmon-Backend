@@ -214,4 +214,24 @@ class HubAnchorControllerTest {
 		mockMvc.perform(delete("/hub/anchors/" + moved).header("Authorization", adminToken))
 				.andExpect(status().isNoContent());
 	}
+
+	@Test
+	void theGlobalHubSchematicIsDescribedThenServedWhole() throws Exception {
+		byte[] file = Files.readAllBytes(Path.of("src/test/resources/hub_schematics/hub_global/test_hub.schem"));
+		mockMvc.perform(get("/hub/schematic").header("Authorization", aliceToken))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.name").value("test_hub.schem"))
+				.andExpect(jsonPath("$.format").value("SCHEM"))
+				.andExpect(jsonPath("$.size.x").value(21))
+				.andExpect(jsonPath("$.size.y").value(21))
+				.andExpect(jsonPath("$.size.z").value(21))
+				.andExpect(jsonPath("$.bytes").value(file.length))
+				.andExpect(jsonPath("$.sha256").value(java.util.HexFormat.of().formatHex(
+						java.security.MessageDigest.getInstance("SHA-256").digest(file))));
+		byte[] served = mockMvc.perform(get("/hub/schematic/file").header("Authorization", aliceToken))
+				.andExpect(status().isOk())
+				.andReturn().getResponse().getContentAsByteArray();
+		org.assertj.core.api.Assertions.assertThat(served).isEqualTo(file);
+		mockMvc.perform(get("/hub/schematic")).andExpect(status().isForbidden());
+	}
 }

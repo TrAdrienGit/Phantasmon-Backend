@@ -320,6 +320,47 @@ Adrien : échange et combat avec l'avatar d'un joueur d'un autre serveur ; **pas
 | N7 | Client | Avatar comme adversaire : combat, caméra, lobby, intro | Combat complet contre un joueur d'un autre serveur |
 | N8 | Les deux | Validation en jeu par Adrien : un échange et un combat entre deux serveurs | Jalon 2 terminé |
 
+## 7 bis. Jalon « Hub bâti » — la construction du Global Hub (2026-10-08)
+
+Demande d'Adrien : le Global Hub prend un aspect. Poser un Anchor ne délimite plus seulement une zone : chaque client
+y **construit** une salle, une arène… à partir d'un schematic fourni par le backend. Ce sont de **faux blocs** : le
+serveur Minecraft ne les connaît pas, le client si — même apparence, même éclairage, compatibles shaders, même
+hitbox. Décision [D-34](../architecture/decisions.md#d-34--construction-du-global-hub-par-un-schematic-en-blocs-client).
+
+### 7 bis.1 Règles (réponses d'Adrien du 2026-10-08)
+
+| Sujet | Règle |
+|---|---|
+| Source | Dossier `hub_schematics/hub_global/` du backend : **un seul** fichier `.schem` (Sponge v1 à v3, WorldEdit) ou `.litematic` (Litematica) |
+| Contrôle au démarrage | Exactement un fichier, lisible, de **la taille d'un Anchor** (21 × 21 × 21, `phantasmon.hub.anchor-size`) ; sinon le backend **refuse de démarrer** |
+| Ancrage | Le centre de la couche du bas du schematic se place sur le bloc d'où l'Anchor est posé (colonne centrale, niveau des pieds) ; le schematic tourne avec l'Anchor (quart de tour, son +Z = l'avant de l'Anchor) |
+| Pose d'un Anchor | Le cube 21 × 21 × 21, des pieds vers le haut, doit être **entièrement vide (air)** ; vérifié par le client avant l'appel au backend |
+| Qui voit la construction | Tout joueur Phantasmon du serveur et de la dimension, dès que les chunks de l'Anchor sont chargés chez lui (distance de rendu) ; entrer dans le Hub n'est pas nécessaire |
+| Faux blocs | Incassables ; on ne peut rien poser dessus ; portes, trappes et portillons s'ouvrent côté client seulement ; le reste est inerte |
+| Blocs inconnus d'un client | Remplacés par de l'air (blocs de mods absents chez lui) |
+| Risque serveur | **Accepté pour le moment** : debout sur un faux sol, le joueur flotte pour le serveur ; si `allow-flight=false`, celui-ci peut l'expulser (« Flying is not enabled ») ; un anti-triche peut réagir (LIM-14) |
+
+### 7 bis.2 Conception
+
+- **Backend** : `HubSchematicService` lit le dossier au démarrage (lecteur NBT minimal, sans code Minecraft), vérifie
+  le fichier et sa taille, calcule son SHA-256 ; `GET /hub/schematic` (nom, format, SHA-256, taille) et
+  `GET /hub/schematic/file` (le fichier tel quel). Le backend ne lit jamais les blocs eux-mêmes.
+- **Client** : téléchargement mis en cache par SHA-256 (`config/phantasmon-hub-schematics/`) ; lecture des trois
+  formats (`HubSchematic`) ; noms de blocs → blocs du client, inconnus → air ; disposition (`HubBuildLayout`) ;
+  `HubBuilds` pose les blocs non-air dans le monde local (`setBlock` côté client : rendu, lumière, shaders et
+  collisions par le moteur du jeu) ; ce que le serveur renvoie pour ces positions (mise à jour de bloc, chunk renvoyé)
+  est mis de côté et la construction remise ; l'état réel revient à la suppression de l'Anchor.
+
+### 7 bis.3 Étapes
+
+| Étape | Dépôt | Contenu | Critère de fin |
+|---|---|---|---|
+| H0 | Les deux | Ce chapitre, D-34 | Relu par Adrien |
+| H1 | Backend | Chargement et contrôle du schematic au démarrage ; `GET /hub/schematic`, `GET /hub/schematic/file` | Tests verts |
+| H2 | Client | Cache par SHA-256 ; lecture `.schem` v1-v3 et `.litematic` ; disposition et rotation | Tests unitaires |
+| H3 | Client | Vérification d'air à la pose ; faux blocs posés, remis après chaque envoi du serveur, retirés avec l'Anchor | La salle s'affiche en jeu |
+| H4 | Client | Incassables, rien à poser dessus, portes / trappes / portillons locaux, blocs à contenu (panneaux…) au mieux | Validation en jeu par Adrien (avec Iris) |
+
 ## 8. Jalons suivants (esquisse, non engagés)
 
 | Jalon | Idée | Réutilise |

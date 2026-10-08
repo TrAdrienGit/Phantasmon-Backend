@@ -46,6 +46,7 @@ Pour ajouter une décision : prendre le numéro suivant, dater, et mettre à jou
 | D-31 | Spectateurs d'un combat Ghost | Acceptée | 2026-10-07 |
 | D-32 | Combat solo d'un admin contre un miroir de son équipe | Acceptée | 2026-10-07 |
 | D-33 | Terrain d'un combat Ghost visible par les joueurs alentour | Acceptée | 2026-10-07 |
+| D-34 | Construction du Global Hub par un schematic en blocs client | Acceptée | 2026-10-08 |
 
 ---
 
@@ -407,3 +408,23 @@ Pour ajouter une décision : prendre le numéro suivant, dater, et mettre à jou
   changement de modèle, lueur Téra), entendue depuis le Pokémon.
 - **Conséquences** : l'hôte envoie son flux spectateur dès qu'il y a un spectateur **ou** un témoin ; plusieurs
   combats peuvent être vus en même temps (une scène par combat, `BattleFieldScenes`).
+
+## D-34 — Construction du Global Hub par un schematic en blocs client
+
+- **Contexte** : Adrien (2026-10-08) veut que le Global Hub ait un aspect : poser un Anchor y construit, chez chaque
+  client, une salle ou une arène tirée d'un schematic, en « faux » blocs que le serveur Minecraft ne connaît pas.
+- **Décision (règles d'Adrien)** :
+  - un seul schematic `.schem` ou `.litematic` dans `hub_schematics/hub_global/` du backend, de la taille d'un Anchor
+    (21 × 21 × 21) ; sinon le backend refuse de démarrer ;
+  - ancrage : centre de la couche du bas sur le bloc d'où l'Anchor est posé ; rotation avec l'Anchor ;
+  - poser un Anchor exige un cube entièrement vide (air) ;
+  - construction visible par tout joueur Phantasmon du serveur et de la dimension dont les chunks sont chargés ;
+  - faux blocs incassables ; portes, trappes et portillons ouvrables localement ; le reste inerte ;
+  - risque d'expulsion par le serveur (vol) accepté pour le moment.
+- **Choix de Claude** : seuls les blocs non-air du schematic sont posés (l'air n'efface jamais un vrai bloc, contre
+  lequel le serveur buterait encore) ; un clic droit sur un faux bloc n'est jamais envoyé au serveur (il poserait un
+  vrai bloc dans le vide) ; blocs inconnus → air ; cache client par SHA-256 ; un générateur
+  (`scripts/generate_hub_schematics.py`) fournit une arène par défaut, à remplacer.
+- **Conséquences** : le backend ne démarre pas sans schematic valide ; les blocs ne dépendent que de la liste des
+  Anchors (restent affichés si le backend devient injoignable) ; deux mixins client (`ClientLevelHubBuildMixin`,
+  `MultiPlayerGameModeHubBuildMixin`) ; LIM-14.
