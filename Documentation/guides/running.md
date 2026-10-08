@@ -34,9 +34,10 @@ commité (`.gitignore`).
 `PHANTASMON_HUB_SCHEMATICS_DIR`) contient un dossier `hub_<nom>/` par hub, créé avec le hub
 (`/phantasmon admin hub create <nom> <longueur> <largeur> <hauteur>`). Chaque dossier contient **au plus un** fichier
 `.schem` (WorldEdit / Sponge) ou `.litematic` (Litematica) de la taille du hub (largeur × hauteur × longueur) ; vide,
-le hub fonctionne sans construction. Le dépôt fournit une arène pour le hub `global` (`hub_global/
-phantasmon_default_hub.schem`, générée par `scripts/generate_hub_schematics.py`) : la **remplacer**, ne pas l'ajouter
-à côté. Le centre de la couche du bas se place sous les pieds du joueur qui pose l'Anchor ; le +Z du schematic est
+le hub fonctionne sans construction. Les `.schem` / `.litematic` ne sont **jamais commités** (`.gitignore`, sauf les
+fixtures de `src/test/resources/`) : chaque backend a les siens. Une arène d'exemple pour le hub `global` se génère avec
+`python scripts/generate_hub_schematics.py` (`hub_global/phantasmon_default_hub.schem`) : la **remplacer** par la vraie
+construction, ne pas l'ajouter à côté. Le centre de la couche du bas se place sous les pieds du joueur qui pose l'Anchor ; le +Z du schematic est
 l'avant de l'Anchor. Après avoir déposé ou remplacé un fichier : `/phantasmon admin hub reload <nom>` (sans
 redémarrer) ; les clients le téléchargent seuls. Un hub supprimé laisse son dossier renommé
 `hub_<nom>.deleted-<date>`.
