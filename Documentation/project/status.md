@@ -61,6 +61,7 @@ validés en jeu le 2026-10-07.**
 | Spectateurs | Regarder un combat Ghost en cours, comme dans Cobblemon (D-31), aussi entre serveurs via le Global Hub | Roue Cobblemon (**R**) → « Regarder le combat Ghost » |
 | Construction du Hub | Chaque Anchor bâtit chez les clients du serveur le schematic de son hub en blocs client, incassables (D-34) | Automatique (`hub_schematics/hub_<nom>/`) |
 | Plusieurs hubs | Créés / supprimés / rechargés par les admins, espaces séparés, un Anchor par hub et par joueur, sans chevauchement (D-35) | `/phantasmon admin hub …`, `/phantasmon hub anchor create <hub>`, `/phantasmon hub list` |
+| Vocal du hub | Les membres d'un hub s'entendent en 3D depuis les avatars, avec Simple Voice Chat (facultatif, connecté sur le serveur de chacun) (D-36) | Touches de Simple Voice Chat |
 | Terrain visible alentour | Les joueurs du même serveur et, si un joueur y est, du Global Hub voient les Pokémon d'un combat sans le regarder (D-33) | Automatique |
 | Combat solo (admin) | Combat contre un miroir de son équipe, joué par l'IA de Cobblemon, regardable, non stocké (D-32) | `/phantasmon admin battle solo` |
 | Langues | Français et anglais | Langue du jeu |
@@ -89,7 +90,7 @@ Suivis dans [`known-issues.md`](known-issues.md) (identifiants `BUG-n`, `TODO-n`
 
 | | Backend | Client |
 |---|---|---|
-| Tests automatisés | 218 tests (JUnit 5 + Testcontainers, 2026-10-08) | 70 tests (logique pure, 2026-10-08) |
+| Tests automatisés | 220 tests (JUnit 5 + Testcontainers, 2026-10-09) | 70 tests (logique pure, 2026-10-08) |
 | Migrations Flyway | V1 à V14 | — |
 | Mixins | — | 21 (dont 1 accesseur) |
 | Langues | — | `fr_fr`, `en_us` (~224 clés) |

@@ -77,6 +77,8 @@ public class HubService {
 	}
 
 	private final Map<UUID, Member> members = new ConcurrentHashMap<>();
+	/** Members whose client can talk and listen (Simple Voice Chat present and connected, D-36). */
+	private final Set<UUID> voiceEnabled = ConcurrentHashMap.newKeySet();
 	private final HubAnchorRepository anchorRepository;
 	private final HubRepository hubRepository;
 	private final PresenceService presenceService;
@@ -150,6 +152,7 @@ public class HubService {
 	 * {@code SERVER_CHANGED}, {@code ANCHOR_DELETED}) is sent back as {@code HubLeft}; null for a disconnection.
 	 */
 	public synchronized void leave(UUID playerUuid, String reason) {
+		voiceEnabled.remove(playerUuid);
 		Member member = members.remove(playerUuid);
 		if (member == null) {
 			return;
@@ -283,6 +286,41 @@ public class HubService {
 
 	public boolean isMember(UUID playerUuid) {
 		return members.containsKey(playerUuid);
+	}
+
+	// ---------------------------------------------------------------- voice (D-36)
+
+	/**
+	 * {@code HubVoiceState}: whether this member's client can talk and listen in the hub (Simple Voice Chat installed
+	 * and connected on their own server). Only members with voice receive the voice frames.
+	 */
+	public void setVoice(UUID playerUuid, boolean enabled) {
+		if (!members.containsKey(playerUuid)) {
+			error(playerUuid, "ERROR_HUB_NOT_JOINED", Map.of());
+			return;
+		}
+		if (enabled) {
+			voiceEnabled.add(playerUuid);
+		} else {
+			voiceEnabled.remove(playerUuid);
+		}
+	}
+
+	/**
+	 * A voice frame of {@code playerUuid} (binary message, {@link HubVoice}): relayed to the other members of their hub
+	 * who have voice. Dropped silently when the speaker is not in a hub or has not enabled voice.
+	 */
+	public void relayVoice(UUID playerUuid, HubVoice.Frame frame) {
+		Member member = members.get(playerUuid);
+		if (member == null || !voiceEnabled.contains(playerUuid)) {
+			return;
+		}
+		byte[] out = frame.toListeners(playerUuid);
+		for (Member other : visibleTo(member)) {
+			if (voiceEnabled.contains(other.playerUuid())) {
+				sessionRegistry.sendBinary(other.playerUuid(), out);
+			}
+		}
 	}
 
 	/** Everyone in the same hub as {@code playerUuid} (them included); empty if they are in none. */

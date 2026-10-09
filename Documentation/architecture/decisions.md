@@ -48,6 +48,7 @@ Pour ajouter une décision : prendre le numéro suivant, dater, et mettre à jou
 | D-33 | Terrain d'un combat Ghost visible par les joueurs alentour | Acceptée | 2026-10-07 |
 | D-34 | Construction du Global Hub par un schematic en blocs client | Acceptée | 2026-10-08 |
 | D-35 | Plusieurs hubs créés par les admins, chacun espace séparé | Acceptée | 2026-10-08 |
+| D-36 | Vocal dans les hubs par Simple Voice Chat, dépendance facultative | Acceptée | 2026-10-09 |
 
 ---
 
@@ -453,3 +454,28 @@ Pour ajouter une décision : prendre le numéro suivant, dater, et mettre à jou
 - **Conséquences** : `phantasmon.hub.anchor-size` disparaît ; `GET /hub/schematic` est remplacé par `GET /hubs` et
   `/hubs/{name}/schematic/file` ; `GET /hub/anchors/mine` renvoie une liste ; `HubCoordinates`/`HubBuildLayout`
   acceptent des zones non cubiques.
+
+## D-36 — Vocal dans les hubs par Simple Voice Chat, dépendance facultative
+
+- **Contexte** : Adrien (2026-10-09) veut que les joueurs d'un hub s'entendent comme sur un même serveur avec Simple
+  Voice Chat (présent dans le modpack), en passant par le backend ; la dépendance doit être **facultative et non
+  bloquante** : sans le mod, on entre dans le hub sans vocal.
+- **Constat** (code de Simple Voice Chat 2.5.35 / 2.6) : son client n'enregistre le micro et ne joue les voix que
+  connecté à un serveur vocal Simple Voice Chat — le serveur Minecraft du joueur (ou son monde solo) doit l'avoir.
+- **Décision (choix d'Adrien)** :
+  - limite acceptée : le vocal du hub marche quand Simple Voice Chat est connecté sur le serveur du joueur ; sinon le
+    joueur est dans le hub sans vocal (ni parler ni entendre), avec un message ;
+  - voix en 3D depuis l'avatar de l'orateur, à la distance du serveur vocal, comme la voix de proximité.
+- **Choix de Claude** :
+  - uniquement l'API publique de Simple Voice Chat (`voicechat-api` 2.5.0, compilée, jamais embarquée), chargée par
+    son point d'entrée `voicechat` ; `"suggests"` dans `fabric.mod.json` ; aucune autre classe Phantasmon n'y touche ;
+  - capture : `ClientSoundEvent` (ce que le joueur envoie à son propre serveur, donc ses réglages : appuyer pour
+    parler, activation vocale, muet) encodé en Opus par le codec de Simple Voice Chat ; restitution : canal d'entité
+    sur l'avatar, catégorie de volume « Hub Phantasmon » ; respect du mode sourdine (`isDisabled`) ;
+  - transport en trames WebSocket **binaires** (ni JSON ni base64), relayées aux seuls membres du hub qui ont la voix,
+    budget de 60 trames/s à part ; un joueur dont l'avatar est masqué (vrai joueur présent) n'est pas rejoué, son
+    serveur le porte déjà ;
+  - les envois WebSocket du client sont désormais sérialisés (le client Java refuse un envoi tant que le précédent
+    n'est pas fini — risque latent avec plusieurs threads) ; trames de voix abandonnées au-delà de 10 en attente.
+- **Conséquences** : LIM-15 (dépend du serveur de chacun) ; la voix passe par TCP (WebSocket) : une perte réseau
+  retarde au lieu de couper (TODO-34 : UDP / WebRTC si besoin).

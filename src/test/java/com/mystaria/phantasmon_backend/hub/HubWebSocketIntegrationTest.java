@@ -71,6 +71,8 @@ class HubWebSocketIntegrationTest {
 		final UUID uuid = UUID.randomUUID();
 		final String name;
 		final BlockingQueue<String> received = new LinkedBlockingQueue<>();
+		/** Binary messages (hub voice, D-36). */
+		final BlockingQueue<byte[]> binary = new LinkedBlockingQueue<>();
 		WebSocketSession session;
 
 		Client(String name) {
@@ -80,6 +82,33 @@ class HubWebSocketIntegrationTest {
 		@Override
 		protected void handleTextMessage(WebSocketSession session, TextMessage message) {
 			received.add(message.getPayload());
+		}
+
+		@Override
+		protected void handleBinaryMessage(WebSocketSession session, org.springframework.web.socket.BinaryMessage message) {
+			java.nio.ByteBuffer payload = message.getPayload();
+			byte[] bytes = new byte[payload.remaining()];
+			payload.get(bytes);
+			binary.add(bytes);
+		}
+
+		/** A voice frame as the client sends it: kind, flags, seq, audio. */
+		void speak(int seq, boolean whispering, byte... audio) throws Exception {
+			java.nio.ByteBuffer frame = java.nio.ByteBuffer.allocate(6 + audio.length);
+			frame.put((byte) 1).put((byte) (whispering ? 1 : 0)).putInt(seq).put(audio);
+			session.sendMessage(new org.springframework.web.socket.BinaryMessage(frame.array()));
+		}
+
+		byte[] awaitVoice() throws Exception {
+			byte[] frame = binary.poll(5, TimeUnit.SECONDS);
+			if (frame == null) {
+				throw new AssertionError(name + " never received a voice frame");
+			}
+			return frame;
+		}
+
+		void expectNoVoice() throws Exception {
+			assertThat(binary.poll(500, TimeUnit.MILLISECONDS)).as(name + " got a voice frame").isNull();
 		}
 
 		void send(String type, String data) throws Exception {
@@ -205,6 +234,53 @@ class HubWebSocketIntegrationTest {
 
 	@Autowired
 	private HubCatalogService hubCatalogService;
+
+	@Test
+	void voiceGoesToTheHubMembersWhoHaveVoice() throws Exception {
+		// D-36: frames are relayed as they are, with the speaker's uuid, to the other members who enabled voice.
+		Client alice = inAnchor("Al", server());
+		alice.await("HubJoined");
+		Client bob = inAnchor("Bo", server());
+		bob.await("HubJoined");
+		alice.send("HubVoiceState", "{\"enabled\":true}");
+		bob.send("HubVoiceState", "{\"enabled\":true}");
+		Thread.sleep(200);
+
+		alice.speak(7, true, (byte) 10, (byte) 20, (byte) 30);
+		java.nio.ByteBuffer frame = java.nio.ByteBuffer.wrap(bob.awaitVoice());
+		assertThat(frame.get()).isEqualTo((byte) 1);
+		assertThat(frame.get()).as("whispering").isEqualTo((byte) 1);
+		assertThat(frame.getInt()).isEqualTo(7);
+		assertThat(new UUID(frame.getLong(), frame.getLong())).isEqualTo(alice.uuid);
+		byte[] audio = new byte[frame.remaining()];
+		frame.get(audio);
+		assertThat(audio).containsExactly(10, 20, 30);
+		alice.expectNoVoice();
+
+		// Bob turns voice off (Simple Voice Chat disconnected): he no longer receives, nor may speak.
+		bob.send("HubVoiceState", "{\"enabled\":false}");
+		Thread.sleep(200);
+		alice.speak(8, false, (byte) 1);
+		bob.expectNoVoice();
+		bob.speak(1, false, (byte) 1);
+		alice.expectNoVoice();
+
+		// Malformed or oversized frames are ignored, the connection stays.
+		bob.send("HubVoiceState", "{\"enabled\":true}");
+		Thread.sleep(200);
+		alice.session.sendMessage(new org.springframework.web.socket.BinaryMessage(new byte[] { 9, 9 }));
+		alice.speak(9, false, new byte[2000]);
+		bob.expectNoVoice();
+		assertThat(alice.session.isOpen()).isTrue();
+	}
+
+	@Test
+	void voiceNeedsToBeInAHub() throws Exception {
+		Client alice = connect("Al");
+		alice.joinServer(server());
+		alice.send("HubVoiceState", "{\"enabled\":true}");
+		assertThat(alice.awaitError()).isEqualTo("ERROR_HUB_NOT_JOINED");
+	}
 
 	@Test
 	void eachHubIsASeparateSpaceWithItsOwnSize() throws Exception {

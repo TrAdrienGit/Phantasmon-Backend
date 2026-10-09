@@ -370,6 +370,13 @@ d'après le backend (nouveaux hubs visibles sans relancer le jeu) ; `/phantasmon
 séparé (membres, avatars, Ghost, chat, 50 joueurs) ; un hub sans schematic marche sans construction ; deux Anchors ne
 se chevauchent jamais. L'ancien Global Hub est le hub `global`.
 
+## 7 quater. Vocal dans les hubs (2026-10-09, D-36)
+
+Avec le mod facultatif Simple Voice Chat, les membres d'un hub s'entendent en 3D depuis les avatars, à travers le
+backend (trames binaires Opus). Il faut que Simple Voice Chat soit connecté sur le serveur de chacun (sinon : hub
+sans vocal, message à l'entrée). Sans le mod, rien ne change. Réglages : ceux de Simple Voice Chat (touche, micro,
+sourdine) et une catégorie de volume « Hub Phantasmon ».
+
 ## 8. Jalons suivants (esquisse, non engagés)
 
 | Jalon | Idée | Réutilise |

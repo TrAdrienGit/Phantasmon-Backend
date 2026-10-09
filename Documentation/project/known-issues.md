@@ -33,6 +33,7 @@ Identifiants : `BUG-n` (comportement incorrect), `SEC-n` (sécurité, voir [`sec
 | TODO-31 | moyenne | Client + Backend | Network : outils de modération du chat du Hub pour les admins (rendre muet, exclure du Hub) ; jalon 1 = longueur, débit, journalisation seulement. |
 | TODO-32 | basse | Client + Backend | Network : émotes dans le Hub (écartées du jalon 2 par Adrien le 2026-10-07). Pistes : bulles au-dessus de la tête, ou vraies animations du corps (Mixin de rendu ou mod d'animation). |
 | TODO-33 | moyenne | Client | Network, construction du Hub (D-34) : traiter le **sol** du schematic dans un hub — problème d'affichage entre le sol du serveur et celui du hub (signalé par Adrien le 2026-10-08, à préciser : la couche du bas du schematic se pose au niveau des pieds, au-dessus du vrai sol). |
+| TODO-34 | basse | Client + Backend | Network, vocal du hub (D-36) : la voix passe par le WebSocket (TCP) ; sur un réseau qui perd des paquets elle prend du retard au lieu de sauter. Si besoin : canal UDP / WebRTC dédié. |
 
 ## 3. Dette technique
 
@@ -57,6 +58,7 @@ Identifiants : `BUG-n` (comportement incorrect), `SEC-n` (sécurité, voir [`sec
 | LIM-12 | Network : un joueur qui quitte le Hub (sort du cube de l'Anchor) pendant un échange ou un combat avec un joueur d'un autre serveur n'a plus d'avatar chez l'autre ; la session continue, l'affichage retombe sur « adversaire non chargé » (pas de placement face à lui, caméra sur soi). |
 | LIM-13 | Network : les modèles affichés (Ghost, combat, Méga, formes) viennent des packs de ressources de **chaque** client. Deux joueurs de serveurs différents peuvent avoir des modpacks ou des packs différents : un modèle absent chez l'un s'y affiche avec le modèle de base (cas du 2026-10-07 : pack CCC 2.2 non activé sur l'instance de TheMashen → Méga-Tyranitar et Kyurem au modèle de base chez lui). |
 | LIM-14 | Network, construction du Hub (D-34) : les faux blocs n'existent pas pour le serveur Minecraft. Debout sur le faux sol, le joueur flotte pour lui : avec `allow-flight=false`, le serveur peut l'expulser (« Flying is not enabled ») ; un anti-triche peut réagir. Les mobs et les joueurs sans Phantasmon traversent la salle. Risque accepté par Adrien le 2026-10-08. |
+| LIM-15 | Network, vocal du hub (D-36) : Simple Voice Chat n'enregistre et ne joue la voix que connecté à un serveur vocal ; un joueur dont le serveur (ou le monde) n'a pas Simple Voice Chat est dans le hub sans vocal. Accepté par Adrien le 2026-10-09. |
 | LIM-11 | Dialga s'affiche à l'envers dans le monde (Ghost sorti, combat), chromatique ou non — aussi un vrai Dialga Cobblemon : vient du modpack (modèle du pack CCC et/ou rendu modifié par DeltaClient), pas de Phantasmon. Rien modifié côté mod (Adrien 2026-10-05). |
 
 ## 5. Résolu

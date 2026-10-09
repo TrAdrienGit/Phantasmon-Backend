@@ -5,12 +5,14 @@ import java.util.Map;
 import java.util.UUID;
 
 import org.springframework.stereotype.Component;
+import org.springframework.web.socket.BinaryMessage;
 import org.springframework.web.socket.CloseStatus;
 import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketSession;
 import org.springframework.web.socket.handler.TextWebSocketHandler;
 
 import com.mystaria.phantasmon_backend.hub.HubService;
+import com.mystaria.phantasmon_backend.hub.HubVoice;
 import com.mystaria.phantasmon_backend.pokemon.Pokemon;
 import com.mystaria.phantasmon_backend.pokemon.PokemonRepository;
 import com.mystaria.phantasmon_backend.presence.PlayerPresence;
@@ -45,6 +47,10 @@ public class PhantasmonWebSocketHandler extends TextWebSocketHandler {
 	static final double MESSAGES_PER_SECOND = 40;
 	static final double MESSAGE_BURST = 200;
 	private static final String RATE_LIMITER_ATTRIBUTE = "phantasmonRateLimiter";
+	/** Hub voice (D-36): a speaker sends 50 frames a second; its own budget, apart from the other messages. */
+	static final double VOICE_FRAMES_PER_SECOND = 60;
+	static final double VOICE_BURST = 120;
+	private static final String VOICE_LIMITER_ATTRIBUTE = "phantasmonVoiceLimiter";
 
 	private final PresenceService presenceService;
 	private final SessionRegistry sessionRegistry;
@@ -78,6 +84,8 @@ public class PhantasmonWebSocketHandler extends TextWebSocketHandler {
 		session.setBinaryMessageSizeLimit(MAX_MESSAGE_BYTES);
 		session.getAttributes().put(RATE_LIMITER_ATTRIBUTE,
 				new MessageRateLimiter(MESSAGES_PER_SECOND, MESSAGE_BURST, System::nanoTime));
+		session.getAttributes().put(VOICE_LIMITER_ATTRIBUTE,
+				new MessageRateLimiter(VOICE_FRAMES_PER_SECOND, VOICE_BURST, System::nanoTime));
 		sessionRegistry.register(playerUuid, session);
 	}
 
@@ -120,6 +128,22 @@ public class PhantasmonWebSocketHandler extends TextWebSocketHandler {
 				sessionRegistry.send(playerUuid, despawn);
 			}
 		});
+	}
+
+	/**
+	 * Binary messages carry the hub voice only ({@link HubVoice}, D-36). Over their own budget, frames are dropped
+	 * silently (voice is lossy anyway); anything else binary is ignored.
+	 */
+	@Override
+	protected void handleBinaryMessage(WebSocketSession session, BinaryMessage message) {
+		MessageRateLimiter limiter = (MessageRateLimiter) session.getAttributes().get(VOICE_LIMITER_ATTRIBUTE);
+		if (limiter != null && !limiter.tryAcquire()) {
+			return;
+		}
+		HubVoice.Frame frame = HubVoice.parse(message.getPayload());
+		if (frame != null) {
+			hubService.relayVoice(playerUuid(session), frame);
+		}
 	}
 
 	@Override
@@ -217,6 +241,7 @@ public class PhantasmonWebSocketHandler extends TextWebSocketHandler {
 			case "HubLeave" -> hubService.leave(playerUuid, "LEFT");
 			case "HubMove" -> hubService.move(playerUuid, incoming.data());
 			case "HubChat" -> hubService.chat(playerUuid, incoming.data().get("message"));
+			case "HubVoiceState" -> hubService.setVoice(playerUuid, Boolean.TRUE.equals(incoming.data().get("enabled")));
 			case "Heartbeat" -> {
 				presenceService.heartbeat(playerUuid);
 				send(session, WsMessage.of("HeartbeatAck", Map.of()));

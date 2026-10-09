@@ -273,6 +273,16 @@ le vrai joueur. Le chat va à tous les membres du hub.
 | `HubChatMessage` | `{ "player_uuid", "username", "message", "sent_at" }` | Tous les membres du hub, expéditeur compris |
 | `HubCatalogChanged` | `{}` | **Tous les clients connectés** : un admin a créé, supprimé ou rechargé un hub (D-35) ; le client relit `GET /hubs` (suggestions de commandes, constructions) et les Anchors |
 
+**Vocal du hub** (D-36, avec le mod facultatif Simple Voice Chat) :
+
+| Sens | Message | Effet |
+|---|---|---|
+| C2S | `HubVoiceState` `{ "enabled" }` | Le client peut parler et écouter dans le hub (Simple Voice Chat installé **et** connecté sur son propre serveur). Seuls les membres `enabled` reçoivent et peuvent envoyer de la voix ; remis à faux à la sortie du hub. Hors d'un hub : `ERROR_HUB_NOT_JOINED` |
+| C2S | trame **binaire** `[0x01][flags][seq int32][Opus]` | 20 ms de voix encodée en Opus par Simple Voice Chat ; `flags` bit 0 = chuchotement ; au plus 1 024 octets d'audio. Relayée telle quelle ; ignorée si l'émetteur n'est pas dans un hub avec la voix, si elle est mal formée, ou au-delà de 60 trames/s (rafale 120, budget à part des messages texte) |
+| S2C | trame **binaire** `[0x01][flags][seq int32][uuid de l'orateur, 16 octets][Opus]` | Les autres membres du hub qui ont la voix. Le backend ne décode jamais l'audio |
+
+Entiers et UUID en big-endian. Les trames binaires ne servent qu'à la voix ; tout le reste reste en JSON.
+
 **Sorties automatiques** :
 
 - `JoinServerGroup` vers une autre empreinte ou dimension, `PositionUpdate` avec une autre dimension, ou

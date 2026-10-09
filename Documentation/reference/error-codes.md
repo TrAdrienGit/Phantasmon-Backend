@@ -116,7 +116,7 @@ Les codes marqués « — » côté client concernent des routes REST que le cli
 | `ERROR_HUB_ANCHOR_FORBIDDEN` | 403 | REST | Suppression par un autre que le créateur ou un admin | `phantasmon.hub.error.anchor_forbidden` |
 | `ERROR_HUB_ANCHOR_WRONG_SERVER` | — | WS | `HubJoin` sans présence, ou par un Anchor d'un autre serveur ou d'une autre dimension (D-30) | `phantasmon.hub.error.anchor_wrong_server` |
 | `ERROR_HUB_FULL` | — | WS | Ce hub compte déjà `details.capacity` joueurs (50 par hub ; `details.hub`) | `phantasmon.hub.error.full` |
-| `ERROR_HUB_NOT_JOINED` | — | WS | `HubMove` / `HubChat` hors du Hub | `phantasmon.hub.error.not_joined` |
+| `ERROR_HUB_NOT_JOINED` | — | WS | `HubMove` / `HubChat` / `HubVoiceState` hors du Hub | `phantasmon.hub.error.not_joined` |
 | `ERROR_HUB_OUT_OF_BOUNDS` | — | WS | `HubMove` hors de la zone du hub (\|x\| > largeur / 2, \|z\| > longueur / 2) ou `y_offset` hors de 0 à la hauteur (`details.half_size_x`, `half_size_z`, `height`) | `phantasmon.hub.error.out_of_bounds` |
 | `ERROR_HUB_CHAT_TOO_LONG` | — | WS | Message du chat du Hub de plus de 256 caractères | `phantasmon.hub.error.chat_too_long` |
 | `ERROR_HUB_CHAT_RATE_LIMITED` | — | WS | Plus d'un message du chat du Hub par seconde | `phantasmon.hub.error.chat_rate_limited` |

@@ -62,6 +62,21 @@ public class SessionRegistry {
 		}
 	}
 
+	/** Best-effort binary push (hub voice, D-36); same one-writer-per-session lock as {@link #sendTo}. */
+	public void sendBinary(UUID playerUuid, byte[] payload) {
+		WebSocketSession session = sessions.get(playerUuid);
+		if (session == null || !session.isOpen()) {
+			return;
+		}
+		try {
+			synchronized (session) {
+				session.sendMessage(new org.springframework.web.socket.BinaryMessage(payload));
+			}
+		} catch (IOException | IllegalStateException ex) {
+			log.debug("Failed to send a binary WebSocket message to {}", playerUuid, ex);
+		}
+	}
+
 	/** Best-effort push to every connected player. */
 	public void broadcast(WsMessage message) {
 		sessions.keySet().forEach(playerUuid -> send(playerUuid, message));
