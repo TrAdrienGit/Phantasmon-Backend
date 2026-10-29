@@ -59,11 +59,13 @@ public class PhantasmonWebSocketHandler extends TextWebSocketHandler {
 	private final LiveBattleService liveBattleService;
 	private final GhostRecall ghostRecall;
 	private final HubService hubService;
+	private final com.mystaria.phantasmon_backend.events.MirrorService mirrorService;
 	private final ObjectMapper objectMapper;
 
 	public PhantasmonWebSocketHandler(PresenceService presenceService, SessionRegistry sessionRegistry,
 			PokemonRepository pokemonRepository, LiveTradeService liveTradeService, LiveBattleService liveBattleService,
-			GhostRecall ghostRecall, HubService hubService, ObjectMapper objectMapper) {
+			GhostRecall ghostRecall, HubService hubService, com.mystaria.phantasmon_backend.events.MirrorService mirrorService,
+			ObjectMapper objectMapper) {
 		this.presenceService = presenceService;
 		this.sessionRegistry = sessionRegistry;
 		this.pokemonRepository = pokemonRepository;
@@ -71,6 +73,7 @@ public class PhantasmonWebSocketHandler extends TextWebSocketHandler {
 		this.liveBattleService = liveBattleService;
 		this.ghostRecall = ghostRecall;
 		this.hubService = hubService;
+		this.mirrorService = mirrorService;
 		this.objectMapper = objectMapper;
 	}
 
@@ -101,6 +104,7 @@ public class PhantasmonWebSocketHandler extends TextWebSocketHandler {
 		leaveAndDespawnGhost(playerUuid);
 		liveTradeService.onDisconnect(playerUuid);
 		liveBattleService.onDisconnect(playerUuid);
+		mirrorService.onDisconnect(playerUuid);
 	}
 
 	/**
@@ -242,6 +246,11 @@ public class PhantasmonWebSocketHandler extends TextWebSocketHandler {
 			case "HubMove" -> hubService.move(playerUuid, incoming.data());
 			case "HubChat" -> hubService.chat(playerUuid, incoming.data().get("message"));
 			case "HubVoiceState" -> hubService.setVoice(playerUuid, Boolean.TRUE.equals(incoming.data().get("enabled")));
+			// Phantasmon Events, mirror hubs (D-38).
+			case "EventsMirrorBlocks" -> mirrorService.receiveBlocks(playerUuid, incoming.data());
+			case "EventsMirrorTile" -> mirrorService.receiveTile(playerUuid, incoming.data());
+			case "EventsMirrorSubscribe" -> mirrorService.subscribe(playerUuid, incoming.data().get("hub"), true);
+			case "EventsMirrorUnsubscribe" -> mirrorService.subscribe(playerUuid, incoming.data().get("hub"), false);
 			case "Heartbeat" -> {
 				presenceService.heartbeat(playerUuid);
 				send(session, WsMessage.of("HeartbeatAck", Map.of()));

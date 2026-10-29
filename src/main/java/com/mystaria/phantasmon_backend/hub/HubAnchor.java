@@ -23,6 +23,10 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class HubAnchor {
 
+	public static final String ROLE_NORMAL = "NORMAL";
+	public static final String ROLE_SOURCE = "SOURCE";
+	public static final String ROLE_COPY = "COPY";
+
 	@Id
 	private UUID uuid;
 
@@ -55,6 +59,10 @@ public class HubAnchor {
 	@Column(nullable = false)
 	private short yaw;
 
+	/** {@code NORMAL}; in a mirror hub (D-38), {@code SOURCE} (the server zone copied) or {@code COPY}. */
+	@Column(nullable = false, length = 8)
+	private String role = ROLE_NORMAL;
+
 	@Column(name = "created_at", nullable = false, updatable = false)
 	private Instant createdAt;
 
@@ -70,6 +78,12 @@ public class HubAnchor {
 		this.originY = originY;
 		this.originZ = originZ;
 		this.yaw = yaw;
+	}
+
+	public HubAnchor(UUID uuid, UUID ownerUuid, UUID hubUuid, String name, String serverFingerprint, String dimension,
+			double originX, double originY, double originZ, short yaw, String role) {
+		this(uuid, ownerUuid, hubUuid, name, serverFingerprint, dimension, originX, originY, originZ, yaw);
+		this.role = role;
 	}
 
 	@PrePersist

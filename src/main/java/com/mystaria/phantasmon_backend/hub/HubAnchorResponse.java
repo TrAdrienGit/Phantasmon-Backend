@@ -3,7 +3,10 @@ package com.mystaria.phantasmon_backend.hub;
 import java.time.Instant;
 import java.util.UUID;
 
-/** A Hub Anchor as the API shows it, with its hub's name and size (width x, height y, length z; D-35). */
+/**
+ * A Hub Anchor as the API shows it, with its hub's name and size (width x, height y, length z; D-35), its role and
+ * whether its hub is a mirror (D-38).
+ */
 public record HubAnchorResponse(
 		UUID uuid,
 		UUID ownerUuid,
@@ -14,6 +17,8 @@ public record HubAnchorResponse(
 		Origin origin,
 		int yaw,
 		Size size,
+		String role,
+		boolean mirror,
 		Instant createdAt) {
 
 	public record Origin(double x, double y, double z) {
@@ -26,6 +31,7 @@ public record HubAnchorResponse(
 		return new HubAnchorResponse(anchor.getUuid(), anchor.getOwnerUuid(), hub.getName(), anchor.getName(),
 				anchor.getServerFingerprint(), anchor.getDimension(),
 				new Origin(anchor.getOriginX(), anchor.getOriginY(), anchor.getOriginZ()),
-				anchor.getYaw(), new Size(hub.getSizeX(), hub.getSizeY(), hub.getSizeZ()), anchor.getCreatedAt());
+				anchor.getYaw(), new Size(hub.getSizeX(), hub.getSizeY(), hub.getSizeZ()), anchor.getRole(), hub.isMirror(),
+				anchor.getCreatedAt());
 	}
 }

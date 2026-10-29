@@ -217,6 +217,11 @@ public class HubService {
 			}
 			state.put("skin_parts", parts);
 		}
+		// Optional, mirror hubs only (D-38): the exact height, the same on both sides of the copy.
+		if (data.get("y") instanceof Number y && Double.isFinite(y.doubleValue())
+				&& y.doubleValue() >= Hub.MIRROR_MIN_Y && y.doubleValue() <= Hub.MIRROR_MIN_Y + Hub.MIRROR_HEIGHT) {
+			state.put("y", y.doubleValue());
+		}
 		double x = (double) state.get("x");
 		double z = (double) state.get("z");
 		double yOffset = (double) state.get("y_offset");

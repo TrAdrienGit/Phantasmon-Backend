@@ -50,6 +50,7 @@ Pour ajouter une décision : prendre le numéro suivant, dater, et mettre à jou
 | D-35 | Plusieurs hubs créés par les admins, chacun espace séparé | Acceptée | 2026-10-08 |
 | D-36 | Vocal dans les hubs par Simple Voice Chat, dépendance facultative | Acceptée | 2026-10-09 |
 | D-37 | Mise en scène des combats sortie dans le mod Cobblemon Spectacle | Acceptée | 2026-10-29 |
+| D-38 | Hubs miroirs : terrain d'un serveur copié dans un monde solo (Phantasmon Events) | Acceptée | 2026-10-29 |
 
 ---
 
@@ -514,3 +515,30 @@ Pour ajouter une décision : prendre le numéro suivant, dater, et mettre à jou
   (`assets/cobblemon_spectacle/`), l'ancien `assets/phantasmon/` reste lu.
 - **Conséquences** : Phantasmon passe à 16 mixins (5 dans Spectacle) ; la CI de Phantasmon récupère le dépôt `Cobblemon-Spectacle`
   avant de compiler ; plan complet et phases suivantes dans `Cobblemon-Spectacle/Documentation/plan-decoupage.md`.
+
+## D-38 — Hubs miroirs : terrain d'un serveur copié dans un monde solo (Phantasmon Events)
+
+- **Contexte** : Adrien (2026-10-29) veut animer ses événements depuis un monde solo (tous les droits) sur le terrain
+  réel d'une zone d'un serveur multijoueur, sans mod serveur (D-01) : les blocs vont du serveur vers le monde solo,
+  jamais l'inverse. Add-on séparé `Phantasmon-Events`, qui dépend de Phantasmon et de Cobblemon Spectacle.
+- **Décision (choix d'Adrien)** :
+  - un hub peut être **miroir** (`hubs.mirror`) : créé, redimensionné, supprimé par les admins seulement
+    (`/events hub create <nom> <rayon>`, `resize <hub> <±N>`, `delete <hub>`) ;
+  - taille par **rayon**, sans limite haute (responsabilité des admins) : un carré de côté `2 × rayon + 1` autour du
+    bloc où l'Anchor est posé, **toute la hauteur du monde** (y -64 à 319) ; le redimensionnement garde le centre ;
+  - Anchors des admins seulement, posés par `/events hub anchor <hub>` : sur un serveur multijoueur, **source**
+    (`SOURCE`, une par hub) ; dans un monde solo, **copie** (`COPY`, une par admin) ; jamais tournés, ramenés à
+    y -64 (mêmes hauteurs des deux côtés), sans contrôle de zone vide ni de chevauchement ;
+  - **tout joueur Phantasmon** présent sur la zone source l'alimente : chaque colonne de 16 × 16 blocs est lue à
+    l'arrivée de ses chunks et envoyée si son empreinte diffère de celle du backend (`EventsMirrorTile`), puis seuls
+    les blocs que le serveur change (`EventsMirrorBlocks`) ; le backend n'accepte que les joueurs du serveur et de la
+    dimension de la source ;
+  - le monde solo construit la copie en **vrais blocs** (serveur intégré), colonne par colonne
+    (`GET /events/mirror/{hub}`, `/tile/{tx}/{tz}`), puis suit les changements ; un bloc modifié à la main est écrasé
+    au prochain changement du même bloc sur le serveur ;
+  - la zone source et ses copies forment un même hub (avatars, vocal, combats Ghost) ; les avatars d'un hub miroir
+    sont placés à la hauteur exacte du joueur (`y` dans `HubMove`).
+- **Conséquences** : migrations V15 à V17 (`hubs.mirror`, `hubs.radius`, `hub_anchors.role`) ; terrain gardé par le
+  backend dans `hub_schematics/hub_<nom>/mirror.bin` ; Phantasmon expose aux add-ons `client/api/PhantasmonApi`
+  (hubs, messages `Events*`, `GET` authentifié) ; le contenu des coffres et les entités ne sont pas copiés ; plan dans
+  `Phantasmon-Events/Documentation/plan.md`.

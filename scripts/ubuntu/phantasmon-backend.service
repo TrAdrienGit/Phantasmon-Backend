@@ -17,7 +17,7 @@ Environment=BDD_HOST=localhost
 Environment=BDD_PORT=5432
 Environment=SERVER_ADDRESS=127.0.0.1
 Environment=SERVER_PORT=8080
-ExecStart=/usr/bin/java -Xms256m -Xmx1g -jar /opt/phantasmon/phantasmon-backend.jar
+ExecStart=/usr/bin/java -Xms256m -Xmx2g -jar /opt/phantasmon/phantasmon-backend.jar
 # Spring stops on SIGTERM with exit code 143: a normal stop, not a failure.
 SuccessExitStatus=143
 Restart=on-failure

@@ -13,7 +13,8 @@ import jakarta.validation.constraints.Size;
 /**
  * Matches {@code POST /hub/anchors}. {@code hub}: the name of the hub it leads to (D-35). The name is 3 to 32 letters, digits, spaces, {@code -} or {@code _}, neither
  * starting nor ending with a space; fingerprint and dimension follow the presence rules (SEC-4). Coordinates stay
- * inside Minecraft's world limits; any yaw is accepted and snapped to a quarter turn.
+ * inside Minecraft's world limits; any yaw is accepted and snapped to a quarter turn. {@code role}: null for an
+ * ordinary hub; {@code SOURCE} or {@code COPY} in a mirror hub (D-38).
  */
 public record HubAnchorCreateRequest(
 		@NotNull UUID requestUuid,
@@ -22,7 +23,13 @@ public record HubAnchorCreateRequest(
 		@NotBlank @Size(max = 128) String serverFingerprint,
 		@NotBlank @Size(max = 128) String dimension,
 		@NotNull @Valid Origin origin,
-		@NotNull Double yaw) {
+		@NotNull Double yaw,
+		@Pattern(regexp = "NORMAL|SOURCE|COPY") String role) {
+
+	public HubAnchorCreateRequest(UUID requestUuid, String hub, String name, String serverFingerprint, String dimension,
+			Origin origin, Double yaw) {
+		this(requestUuid, hub, name, serverFingerprint, dimension, origin, yaw, null);
+	}
 
 	public record Origin(
 			@NotNull @DecimalMin("-30000000") @DecimalMax("30000000") Double x,

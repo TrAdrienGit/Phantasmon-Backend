@@ -10,6 +10,10 @@ public interface HubAnchorRepository extends JpaRepository<HubAnchor, UUID> {
 
 	Optional<HubAnchor> findByOwnerUuidAndHubUuid(UUID ownerUuid, UUID hubUuid);
 
+	Optional<HubAnchor> findByOwnerUuidAndHubUuidAndRoleNot(UUID ownerUuid, UUID hubUuid, String role);
+
+	Optional<HubAnchor> findByHubUuidAndRole(UUID hubUuid, String role);
+
 	List<HubAnchor> findByOwnerUuidOrderByNameAsc(UUID ownerUuid);
 
 	List<HubAnchor> findByHubUuid(UUID hubUuid);

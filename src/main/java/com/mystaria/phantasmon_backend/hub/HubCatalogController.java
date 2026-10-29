@@ -31,7 +31,8 @@ public class HubCatalogController {
 	}
 
 	/** {@code length} along the anchor's front (z), {@code width} across it (x), {@code height} (y). */
-	public record HubCreateRequest(String name, Integer length, Integer width, Integer height) {
+	/** {@code mirror}: a mirror hub (D-38), sized by its {@code radius} only. */
+	public record HubCreateRequest(String name, Integer length, Integer width, Integer height, Boolean mirror, Integer radius) {
 	}
 
 	@GetMapping("/hubs")
@@ -54,9 +55,10 @@ public class HubCatalogController {
 			Authentication authentication) {
 		UUID admin = caller(authentication);
 		adminService.requireAdmin(admin);
-		HubCreateRequest body = request == null ? new HubCreateRequest(null, null, null, null) : request;
+		HubCreateRequest body = request == null ? new HubCreateRequest(null, null, null, null, null, null) : request;
 		return ResponseEntity.status(HttpStatus.CREATED)
-				.body(catalog.create(admin, body.name(), body.length(), body.width(), body.height()));
+				.body(Boolean.TRUE.equals(body.mirror()) ? catalog.createMirror(admin, body.name(), body.radius())
+						: catalog.create(admin, body.name(), body.length(), body.width(), body.height()));
 	}
 
 	@DeleteMapping("/admin/hubs/{name}")
@@ -64,6 +66,18 @@ public class HubCatalogController {
 		UUID admin = caller(authentication);
 		adminService.requireAdmin(admin);
 		return catalog.delete(admin, name);
+	}
+
+	public record HubResizeRequest(Integer delta) {
+	}
+
+	/** A mirror hub's radius grows by {@code delta} (negative: shrinks), D-38. */
+	@PostMapping("/admin/hubs/{name}/resize")
+	public HubCatalogService.HubView resize(@PathVariable String name, @RequestBody(required = false) HubResizeRequest request,
+			Authentication authentication) {
+		UUID admin = caller(authentication);
+		adminService.requireAdmin(admin);
+		return catalog.resize(admin, name, request == null ? null : request.delta());
 	}
 
 	@PostMapping("/admin/hubs/{name}/reload")

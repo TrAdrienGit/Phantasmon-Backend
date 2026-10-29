@@ -59,7 +59,7 @@ public class HubCatalogService {
 	}
 
 	/** A hub as the API shows it; {@code schematic} is null for a hub without a build. */
-	public record HubView(String name, Size size, SchematicView schematic) {
+	public record HubView(String name, Size size, SchematicView schematic, boolean mirror, Integer radius) {
 
 		public record Size(int x, int y, int z) {
 		}
@@ -72,16 +72,18 @@ public class HubCatalogService {
 	private final HubAnchorRepository anchorRepository;
 	private final HubService hubService;
 	private final SessionRegistry sessionRegistry;
+	private final com.mystaria.phantasmon_backend.events.MirrorService mirrorService;
 	private final Path root;
 	/** Hub uuid → its build, absent for a hub without one. */
 	private final Map<UUID, Schematic> schematics = new ConcurrentHashMap<>();
 
 	public HubCatalogService(HubRepository hubRepository, HubAnchorRepository anchorRepository, HubService hubService,
-			SessionRegistry sessionRegistry, @Value("${phantasmon.hub.schematics-dir:hub_schematics}") String schematicsDir) {
+			SessionRegistry sessionRegistry, com.mystaria.phantasmon_backend.events.MirrorService mirrorService, @Value("${phantasmon.hub.schematics-dir:hub_schematics}") String schematicsDir) {
 		this.hubRepository = hubRepository;
 		this.anchorRepository = anchorRepository;
 		this.hubService = hubService;
 		this.sessionRegistry = sessionRegistry;
+		this.mirrorService = mirrorService;
 		this.root = Path.of(schematicsDir);
 	}
 
@@ -137,13 +139,13 @@ public class HubCatalogService {
 		Schematic schematic = schematics.get(hub.getUuid());
 		return new HubView(hub.getName(), new HubView.Size(hub.getSizeX(), hub.getSizeY(), hub.getSizeZ()),
 				schematic == null ? null : new HubView.SchematicView(schematic.fileName(), schematic.format(),
-						schematic.sha256(), schematic.bytes().length));
+						schematic.sha256(), schematic.bytes().length), hub.isMirror(),
+				hub.getRadius() == null ? null : hub.getRadius().intValue());
 	}
 
 	// ---------------------------------------------------------------- admin
 
 	/** A new hub, {@code width} (x) × {@code height} (y) × {@code length} (z), and its empty schematic folder. */
-	@Transactional
 	public HubView create(UUID adminUuid, String rawName, Integer length, Integer width, Integer height) {
 		String name = rawName == null ? "" : rawName.strip().toLowerCase(Locale.ROOT);
 		if (!NAME.matcher(name).matches()) {
@@ -168,6 +170,51 @@ public class HubCatalogService {
 				folder.toAbsolutePath());
 		announce();
 		return view(hub);
+	}
+
+	/**
+	 * A new mirror hub (D-38): the whole height of the world, a square of side {@code 2 * radius + 1}; its terrain is
+	 * copied from its source anchor's zone, it never has a build.
+	 */
+	@Transactional
+	public HubView createMirror(UUID adminUuid, String rawName, Integer radius) {
+		String name = rawName == null ? "" : rawName.strip().toLowerCase(Locale.ROOT);
+		if (!NAME.matcher(name).matches()) {
+			throw new ApiException(HttpStatus.BAD_REQUEST, "ERROR_HUB_INVALID_NAME", Map.of("name", name));
+		}
+		requireRadius(radius);
+		if (hubRepository.findByNameIgnoreCase(name).isPresent()) {
+			throw new ApiException(HttpStatus.CONFLICT, "ERROR_HUB_NAME_TAKEN", Map.of("hub", name));
+		}
+		Hub hub = hubRepository.saveAndFlush(Hub.mirror(UUID.randomUUID(), name, radius, adminUuid));
+		log.info("Admin {} created mirror hub {} (radius {})", adminUuid, name, radius);
+		announce();
+		return view(hub);
+	}
+
+	/** A mirror hub grows (or shrinks) by {@code delta} blocks of radius, around the same centre; its terrain follows. */
+	@Transactional
+	public HubView resize(UUID adminUuid, String name, Integer delta) {
+		Hub hub = require(name);
+		if (!hub.isMirror()) {
+			throw new ApiException(HttpStatus.BAD_REQUEST, "ERROR_HUB_NOT_MIRROR", Map.of("hub", hub.getName()));
+		}
+		int oldRadius = hub.getRadius();
+		int newRadius = oldRadius + (delta == null ? 0 : delta);
+		requireRadius(newRadius);
+		hub.resize(newRadius);
+		hubRepository.saveAndFlush(hub);
+		mirrorService.resize(hub, oldRadius);
+		log.info("Admin {} resized mirror hub {}: radius {} -> {}", adminUuid, hub.getName(), oldRadius, newRadius);
+		announce();
+		return view(hub);
+	}
+
+	private static void requireRadius(Integer radius) {
+		// No upper limit (Adrien 2026-10-29): admins only, their responsibility; the radius fits a SMALLINT.
+		if (radius == null || radius < 1 || radius > Short.MAX_VALUE / 2 - 1) {
+			throw new ApiException(HttpStatus.BAD_REQUEST, "ERROR_HUB_INVALID_RADIUS", Map.of("min", 1));
+		}
 	}
 
 	/**
