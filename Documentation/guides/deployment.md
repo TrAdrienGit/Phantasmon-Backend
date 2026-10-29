@@ -8,10 +8,11 @@
 
 | Machine | Adresse Tailscale | Rôle actuel |
 |---|---|---|
-| Machine de développement (Windows) | `100.116.43.32` | Fait tourner **le** backend utilisé par les tests (port 8080, depuis les dépôts sur D:, **disque externe USB** qui s'est déconnecté le 2026-10-04 : voir TODO-17) et PostgreSQL natif (limité à `localhost` depuis le 2026-10-03) ; client Minecraft `MystAria_` |
+| **Serveur Ubuntu `server-linux`** | `100.101.1.79` | **Backend de production depuis le 2026-10-19** : service `phantasmon-backend`, PostgreSQL 18 local, sauvegarde quotidienne, public en HTTPS par Tailscale Funnel (`https://server-linux.tail192969.ts.net`). Voir [`deploying-ubuntu.md`](deploying-ubuntu.md) |
+| Machine de développement (Windows) | `100.116.43.32` | Faisait tourner le backend utilisé par les tests jusqu'au 2026-10-19 (port 8080, depuis les dépôts sur D:, **disque externe USB** qui s'est déconnecté le 2026-10-04 : voir TODO-17) et PostgreSQL natif (limité à `localhost` depuis le 2026-10-03) ; client Minecraft `MystAria_` |
 | « production-server » (ancien portable, Windows 10, i7-10750H, 16 Go) | `100.106.248.73` | Second client de test (`TheMashen`). Possède les dépôts et un backend installé comme service NSSM, **volontairement non utilisé** : les deux clients doivent partager un seul backend. Joignable en SSH par l'alias `production-server` (actuellement injoignable). |
 
-Le client vise `backend_url` de `config/phantasmon.json` (défaut `http://100.116.43.32:8080`). Changer de backend :
+Le client vise `backend_url` de `config/phantasmon.json` (défaut `https://server-linux.tail192969.ts.net`). Changer de backend :
 modifier ce fichier dans chaque instance, puis relancer le jeu ; aucune recompilation.
 
 ## 2. Procédure de déploiement

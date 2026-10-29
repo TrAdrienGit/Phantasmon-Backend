@@ -1,0 +1,32 @@
+[Unit]
+Description=Phantasmon backend (Spring Boot)
+Documentation=https://github.com/your-account/phantasmon-backend
+After=network-online.target postgresql.service
+Wants=network-online.target
+Requires=postgresql.service
+
+[Service]
+Type=simple
+User=phantasmon
+Group=phantasmon
+# The .env, hub_schematics/, log/, admins.txt and showdown-data/ are resolved from here.
+WorkingDirectory=/opt/phantasmon
+# Real environment variables win over the .env (DotenvEnvironmentPostProcessor adds it last): the database is the local
+# PostgreSQL of this server, and the backend only listens locally — Tailscale Funnel publishes it in HTTPS.
+Environment=BDD_HOST=localhost
+Environment=BDD_PORT=5432
+Environment=SERVER_ADDRESS=127.0.0.1
+Environment=SERVER_PORT=8080
+ExecStart=/usr/bin/java -Xms256m -Xmx1g -jar /opt/phantasmon/phantasmon-backend.jar
+# Spring stops on SIGTERM with exit code 143: a normal stop, not a failure.
+SuccessExitStatus=143
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+NoNewPrivileges=true
+ProtectSystem=full
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

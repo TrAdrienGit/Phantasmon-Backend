@@ -1,0 +1,10 @@
+[Unit]
+Description=Phantasmon database backup (pg_dump)
+After=postgresql.service
+Requires=postgresql.service
+
+[Service]
+Type=oneshot
+# postgres owns the database dump rights; the backups folder belongs to it (setup-server.sh).
+User=postgres
+ExecStart=/opt/phantasmon/backup-database.sh

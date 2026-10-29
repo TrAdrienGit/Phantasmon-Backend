@@ -1,4 +1,4 @@
-# Shared helpers for backup-database.ps1 and test-restore.ps1 (dot-sourced, not run on its own).
+﻿# Shared helpers for backup-database.ps1 and test-restore.ps1 (dot-sourced, not run on its own).
 # Windows PowerShell 5.1 compatible.
 
 $ErrorActionPreference = 'Stop'
@@ -33,7 +33,13 @@ function Get-DbSettings {
 
 function Test-ContainerRunning([string]$name) {
 	if (-not (Get-Command docker -ErrorAction SilentlyContinue)) { return $false }
-	$running = & docker ps --filter "name=^/$name$" --format '{{.Names}}' 2>$null
+	# Docker installed but its engine stopped: an error on stderr, which $ErrorActionPreference = 'Stop' would turn
+	# into a failure — it only means "no container running".
+	try {
+		$running = & docker ps --filter "name=^/$name$" --format '{{.Names}}' 2>$null
+	} catch {
+		return $false
+	}
 	return ($LASTEXITCODE -eq 0) -and ($running -eq $name)
 }
 

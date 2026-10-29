@@ -12,6 +12,7 @@ exclusivement par le mod client [Phantasmon-Client](https://github.com/TrAdrienG
 | Apprendre à construire un backend comme celui-ci (parcours pédagogique) | [`apprentissage/`](apprentissage/README.md) |
 | Comprendre le projet en 5 minutes | [`architecture/system-overview.md`](architecture/system-overview.md) |
 | Lancer le backend sur ma machine | [`guides/running.md`](guides/running.md) |
+| Déployer le backend sur le serveur Ubuntu | [`guides/deploying-ubuntu.md`](guides/deploying-ubuntu.md) |
 | Appeler l'API | [`reference/rest-api.md`](reference/rest-api.md), [`reference/websocket-protocol.md`](reference/websocket-protocol.md) |
 | Savoir où en est le projet | [`project/status.md`](project/status.md), [`project/known-issues.md`](project/known-issues.md) |
 | Coder sur ce dépôt (humain ou agent IA) | [`agents/backend-agent-context.md`](agents/backend-agent-context.md) |
@@ -35,6 +36,7 @@ Documentation/
 │   └── openapi.yaml                contrat OpenAPI 3 des routes REST
 ├── guides/
 │   ├── running.md                  lancer en développement, jar, PostgreSQL Docker, dépannage
+│   ├── deploying-ubuntu.md         déploiement sur le serveur Ubuntu (systemd, Tailscale Funnel)
 │   ├── testing.md                  stratégie de test, Testcontainers, CI
 │   └── deployment.md               déploiement, infrastructure actuelle, sauvegardes
 ├── specifications/                 cahier des charges, Parties 1 à 4, annotées (miroir)

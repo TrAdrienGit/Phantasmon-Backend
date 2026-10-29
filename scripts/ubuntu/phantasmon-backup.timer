@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily Phantasmon database backup
+
+[Timer]
+OnCalendar=*-*-* 04:00:00
+# The server was off at 4 am: the backup runs at the next boot.
+Persistent=true
+RandomizedDelaySec=10min
+
+[Install]
+WantedBy=timers.target

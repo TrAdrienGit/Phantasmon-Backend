@@ -1,3 +1,7 @@
 /gradlew text eol=lf
 *.bat text eol=crlf
 *.jar binary
+# Shell scripts and systemd units run on Linux (scripts/deploy-ubuntu.sh)
+*.sh text eol=lf
+*.service text eol=lf
+*.timer text eol=lf

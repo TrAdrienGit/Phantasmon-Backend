@@ -72,7 +72,7 @@ validés en jeu le 2026-10-07.**
 |---|---|---|
 | Fonctions d'administration (`/admin/*`, rôle admin, inspection) | Partie 1 §37-38, Partie 2 §16 | [D-20](../architecture/decisions.md#d-20--fonctions-dadministration-et-limitation-de-débit-reportées) |
 | Limitation de débit par joueur | Partie 2 §13 | WebSocket limité (40 messages/s par connexion, SEC-5) ; rien côté REST (D-20) |
-| Sauvegardes PostgreSQL planifiées | Partie 3 §I, Phase 10 | Scripts de sauvegarde et de test de restauration prêts et testés ; planification à faire (TODO-16) ; pas d'archivage WAL (LIM-8) |
+| Sauvegardes hors serveur | Partie 3 §I, Phase 10 | Backend en production sur Ubuntu (2026-10-19) avec sauvegarde quotidienne locale ; copie hors serveur à faire (TODO-16) ; pas d'archivage WAL (LIM-8) |
 | Publication Modrinth / CurseForge | Partie 3 §J, Phase 10 | Lien de téléchargement factice dans le client (TODO-3) |
 
 ## 4. Bugs connus, TODO et dette technique
@@ -92,5 +92,5 @@ Suivis dans [`known-issues.md`](known-issues.md) (identifiants `BUG-n`, `TODO-n`
 |---|---|---|
 | Tests automatisés | 220 tests (JUnit 5 + Testcontainers, 2026-10-09) | 70 tests (logique pure, 2026-10-08) |
 | Migrations Flyway | V1 à V14 | — |
-| Mixins | — | 21 (dont 1 accesseur) |
+| Mixins | — | 16 (dont 1 accesseur) ; 5 de plus dans Cobblemon Spectacle (D-37) |
 | Langues | — | `fr_fr`, `en_us` (~224 clés) |
