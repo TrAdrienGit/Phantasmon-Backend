@@ -55,7 +55,9 @@ public class AuthController {
 			log.warn("Auth rejected for username={}: server_id is not a challenge issued by this backend", request.username());
 			throw new ApiException(HttpStatus.UNAUTHORIZED, "ERROR_AUTH_INVALID_CHALLENGE", Map.of());
 		}
-		MojangProfile profile = mojangSessionClient.hasJoined(request.username(), request.serverId(), httpRequest.getRemoteAddr())
+		MojangProfile profile = mojangSessionClient.hasJoined(request.username(), request.serverId(),
+				// Behind Tailscale Funnel every request comes from 127.0.0.1: no real IP to have Mojang check.
+				null)
 				.orElseThrow(() -> {
 					log.warn("Mojang verification failed for username={}", request.username());
 					return new ApiException(HttpStatus.UNAUTHORIZED, "ERROR_AUTH_MOJANG_VERIFICATION_FAILED",

@@ -1,5 +1,6 @@
 package com.mystaria.phantasmon_backend.auth;
 
+import org.slf4j.LoggerFactory;
 import java.util.Optional;
 
 import org.springframework.stereotype.Component;
@@ -40,8 +41,14 @@ public class MojangSessionClient {
 					})
 					.retrieve()
 					.body(MojangProfile.class);
+			if (profile == null) {
+				// 204 No Content: Mojang has no join of this player for this serverId.
+				LoggerFactory.getLogger(MojangSessionClient.class).warn("Mojang hasJoined: no session for {} (ip sent: {})",
+						username, clientIp);
+			}
 			return Optional.ofNullable(profile);
 		} catch (RestClientException ex) {
+			LoggerFactory.getLogger(MojangSessionClient.class).warn("Mojang hasJoined failed for {}: {}", username, ex.toString());
 			return Optional.empty();
 		}
 	}
