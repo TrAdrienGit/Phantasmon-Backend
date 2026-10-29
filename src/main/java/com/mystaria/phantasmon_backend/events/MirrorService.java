@@ -62,7 +62,7 @@ public class MirrorService {
 	static final int TILE = 16;
 	static final int SECTIONS = Hub.MIRROR_HEIGHT / 16;
 	static final int TILE_VOLUME = TILE * TILE * Hub.MIRROR_HEIGHT;
-	private static final int MAX_STATE_LENGTH = 512;
+	private static final int MAX_STATE_LENGTH = 32_768; // with block entity data (D-38)
 	private static final int MAX_CHANGES = 8192;
 	private static final short UNKNOWN = -1;
 	private static final int FILE_FORMAT = 2;
