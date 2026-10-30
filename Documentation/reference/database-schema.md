@@ -28,6 +28,10 @@ erDiagram
     PLAYERS ||--o{ HUB_ANCHORS : "crée (un par hub, V14)"
     HUBS ||--o{ HUB_ANCHORS : "mène à (V14)"
     PLAYERS |o--o{ HUBS : "crée (admin, V14)"
+    TOURNAMENTS ||--o{ TOURNAMENT_PLAYERS : "inscrits (V18)"
+    PLAYERS ||--o{ TOURNAMENT_PLAYERS : "s'inscrit (V18)"
+    TOURNAMENTS ||--o{ TOURNAMENT_MATCHES : "matchs (V18)"
+    PLAYERS ||--o| TRAINER_PROFILES : "profil d'animation (V20)"
 
     PLAYERS {
         uuid uuid PK
@@ -278,6 +282,40 @@ Les hubs créés par les admins (D-35) : chacun est un espace séparé, avec sa 
 Supprimer un hub supprime ses Anchors (`ON DELETE CASCADE`, et le service les retire d'abord pour sortir leurs
 membres du hub).
 
+## 7 quater. Hubs miroirs (Phantasmon Events, V15 à V17)
+
+- `hubs.mirror` (BOOLEAN, défaut `false`) : hub miroir (D-38), son terrain est le vrai sol d'une zone d'un serveur
+  multijoueur, copié dans les mondes solo des admins.
+- `hubs.radius` (SMALLINT) : rayon d'un hub miroir, carré de `2 * radius + 1` autour du centre, toute la hauteur
+  (`size_y` = 384). Contrainte `hubs_size_check` : un miroir a un rayon ≥ 1 (sans plafond depuis V17) et des tailles
+  qui en découlent ; un hub ordinaire n'a pas de rayon et garde ses tailles de 3 à 64.
+- `hub_anchors.role` (VARCHAR(8), `NORMAL` | `SOURCE` | `COPY`, défaut `NORMAL`) : la source sur le serveur (une par
+  hub, `uq_hub_anchor_source`), les copies en solo (une par admin) ; `uq_hub_anchor_owner_hub` ne porte plus que sur
+  les Anchors qui ne sont pas des sources.
+- Le terrain lui-même est hors base (`hub_schematics/hub_<nom>/mirror.bin`), les blocs fantômes en mémoire.
+
+## 7 quinquies. Tournois (Phantasmon Events, V18 et V19)
+
+- `tournaments` : `uuid` PK, `name` (unique casse ignorée parmi les tournois ni terminés ni annulés,
+  `uq_tournament_open_name`), `kind` (`SWISS` | `BRACKET`), `best_of` (1, 3 ou 5), `format_id`, `status`
+  (`REGISTRATION`, `CHECK_IN`, `RUNNING`, `FINISHED`, `CANCELLED`), `starts_at`, `registration_opens_at`,
+  `registration_closes_at`, `planned_rounds`, `current_round`, `created_by` (FK `players` `ON DELETE SET NULL`),
+  `created_at`.
+- `tournament_players` : PK (`tournament_uuid`, `player_uuid`), FK `ON DELETE CASCADE` des deux côtés, `username`,
+  `checked_in`, `dropped`, `registered_at`.
+- `tournament_matches` : `uuid` PK, `tournament_uuid` (FK `ON DELETE CASCADE`), `round`, `bracket` (`SWISS`,
+  `WINNERS`, `LOSERS`, `FINAL`, `RESET`), `position`, `player1_uuid`, `player2_uuid` (null : exempt), `wins1`,
+  `wins2`, `winner_uuid`, `status` (`PENDING`, `PLAYING`, `DONE`), `forfeit`, `wave` (V19 : vague où un admin ouvre le match d'un arbre, 0 en ronde
+  suisse). Effacer un tournoi annulé ou terminé efface ses joueurs et ses matchs.
+
+## 7 sexies. `trainer_profiles` (Cobblemon Spectacle E3, V20)
+
+| Colonne | Type | Contraintes | Notes |
+|---|---|---|---|
+| `player_uuid` | UUID | PK, FK `players` `ON DELETE CASCADE` | |
+| `profile` | JSONB | NOT NULL | Moment → animation choisie, par ex. `{"guard": "guard_poised", "send_out": "send_out_spin"}` ; moments `guard`, `send_out`, `recall`, `attack`, `victory`, `defeat`, noms `<moment>_<style>` (contrôle applicatif) |
+| `updated_at` | TIMESTAMPTZ | NOT NULL, défaut `now()` | |
+
 ## 8. État hors base
 
 | Structure | Service | Contenu |
@@ -307,6 +345,12 @@ Tout est perdu au redémarrage du backend (comportement voulu) et n'est pas part
 | V12 | `V12__hub_anchors_personal.sql` | 2026-10-07 | Contresens sur D-30 (Anchors rendus personnels) : retrait de `uq_hub_anchor_server_name` et de `idx_hub_anchor_server_dimension`. Déjà appliquée sur la base de dev, donc conservée ; annulée par V13 |
 | V13 | `V13__hub_anchors_shared_per_server.sql` | 2026-10-07 | D-30 corrigée (Anchors partagés par serveur) : noms en double numérotés (« Nom 2 »…), puis `uq_hub_anchor_server_name` et `idx_hub_anchor_server_dimension` recréés |
 | V14 | `V14__init_hubs.sql` | 2026-10-08 | Plusieurs hubs (D-35) : table `hubs` (hub `global` 21 × 21 × 21 créé), `hub_anchors.hub_uuid` (Anchors existants → `global`), un Anchor par joueur et par hub (`uq_hub_anchor_owner_hub` remplace `uq_hub_anchor_owner`) |
+| V15 | `V15__mirror_hubs.sql` | 2026-10-29 | Hubs miroirs (D-38) : `hubs.mirror`, `hub_anchors.role` (`NORMAL`, `SOURCE`, `COPY`), une source par hub (`uq_hub_anchor_source`), `uq_hub_anchor_owner_hub` limité aux Anchors non sources |
+| V16 | `V16__mirror_hubs_radius.sql` | 2026-10-29 | Hubs miroirs par rayon : `hubs.radius`, toute la hauteur (384), contrainte `hubs_size_check` (rayon 1 à 64) |
+| V17 | `V17__mirror_hubs_no_radius_cap.sql` | 2026-10-29 | Plus de plafond de rayon pour les hubs miroirs (admins seulement) |
+| V18 | `V18__tournaments.sql` | 2026-10-29 | Tournois : tables `tournaments`, `tournament_players`, `tournament_matches` |
+| V19 | `V19__tournament_match_wave.sql` | 2026-10-30 | `tournament_matches.wave` (double élimination) |
+| V20 | `V20__trainer_profiles.sql` | 2026-10-30 | Profils d'animation des dresseurs (Cobblemon Spectacle E3) : table `trainer_profiles` |
 
 ## 10. Décisions de schéma
 

@@ -525,6 +525,23 @@ hub, `HubLeft` `ANCHOR_DELETED`), le dossier est renommé `hub_<name>.deleted-<a
 hub). Refusé : `422 ERROR_HUB_SCHEMATIC_INVALID` (`details.reason`), la construction précédente reste.
 `403 ERROR_ADMIN_REQUIRED`, `404 ERROR_HUB_NOT_FOUND`.
 
+## Profils d'animation des dresseurs (Cobblemon Spectacle E3)
+
+Chaque joueur choisit dans Spectacle une animation par moment du combat ; Phantasmon l'envoie ici et lit celles des
+dresseurs que le client voit (adversaire, combats regardés, avatars de hub). Moments : `guard`, `send_out`,
+`recall`, `attack`, `victory`, `defeat` ; une animation s'appelle `<moment>_<style>` (minuscules, chiffres, `_`, 64
+caractères au plus). Le reste est ignoré sans erreur ; un moment absent = l'animation par défaut.
+
+### `POST /trainer-profile`
+
+Corps : `{ "guard": "guard_poised", "send_out": "send_out_spin", ... }`. Remplace le profil de l'appelant.
+`200` + le profil retenu.
+
+### `GET /trainer-profiles?players=<uuid>,<uuid>`
+
+`200` + `{ "<uuid>": { "guard": "guard_poised", ... }, ... }` : les joueurs sans profil sont absents. 64 joueurs au
+plus : `400 ERROR_TOO_MANY_PLAYERS` (`details.max`).
+
 ## Prévu par le CAD, non implémenté
 
 `GET/PUT /players/{uuid}/team`, `POST /pokemon/import-showdown`, `GET /pokemon/{uuid}/export`, routes `/admin/*`.

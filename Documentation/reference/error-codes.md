@@ -121,6 +121,7 @@ Les codes marqués « — » côté client concernent des routes REST que le cli
 | `ERROR_HUB_CHAT_TOO_LONG` | — | WS | Message du chat du Hub de plus de 256 caractères | `phantasmon.hub.error.chat_too_long` |
 | `ERROR_HUB_CHAT_RATE_LIMITED` | — | WS | Plus d'un message du chat du Hub par seconde | `phantasmon.hub.error.chat_rate_limited` |
 | `ERROR_HUB_NOT_FOUND` | 404 | REST | Aucun hub de ce nom (`details.hub`) | `phantasmon.hub.error.not_found` |
+| `ERROR_TOO_MANY_PLAYERS` | 400 | REST | `GET /trainer-profiles` : plus de 64 joueurs demandés (`details.max`) | — (jamais montré : Phantasmon demande par petits groupes) |
 | `ERROR_HUB_NAME_TAKEN` | 409 | REST | Admin : un hub porte déjà ce nom | `phantasmon.hub.error.name_taken` |
 | `ERROR_HUB_INVALID_NAME` | 400 | REST | Admin : nom de hub hors format (2 à 32 minuscules, chiffres, `_`) | `phantasmon.hub.error.invalid_name` |
 | `ERROR_HUB_INVALID_SIZE` | 400 | REST | Admin : dimension absente ou hors de 3 à 64 | `phantasmon.hub.error.invalid_size` |
