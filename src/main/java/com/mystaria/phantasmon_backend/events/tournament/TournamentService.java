@@ -246,18 +246,19 @@ public class TournamentService {
 	}
 
 	/**
-	 * A cancelled tournament erased with everything tied to it (players, rounds, matches), gone from the list (Adrien
-	 * 2026-10-30). Only a cancelled one: the most recent cancelled tournament of that name.
+	 * A cancelled or finished tournament erased with everything tied to it (players, rounds, matches), gone from the
+	 * list (Adrien 2026-10-30): the most recent such tournament of that name.
 	 */
 	@Transactional
 	public void purge(UUID adminUuid, String name) {
 		String key = name == null ? "" : name.strip();
 		Tournament tournament = tournaments.findAllByOrderByCreatedAtDesc().stream()
-				.filter(t -> t.getName().equalsIgnoreCase(key) && Tournament.CANCELLED.equals(t.getStatus())).findFirst()
-				.orElseThrow(() -> new ApiException(HttpStatus.CONFLICT, "ERROR_TOURNAMENT_NOT_CANCELLED", Map.of("tournament", key)));
+				.filter(t -> t.getName().equalsIgnoreCase(key)
+						&& (Tournament.CANCELLED.equals(t.getStatus()) || Tournament.FINISHED.equals(t.getStatus()))).findFirst()
+				.orElseThrow(() -> new ApiException(HttpStatus.CONFLICT, "ERROR_TOURNAMENT_NOT_OVER", Map.of("tournament", key)));
 		tournaments.delete(tournament); // players and matches go with it (ON DELETE CASCADE)
 		tournaments.flush();
-		log.info("Admin {} erased cancelled tournament {}", adminUuid, tournament.getName());
+		log.info("Admin {} erased tournament {} ({})", adminUuid, tournament.getName(), tournament.getStatus());
 		sessionRegistry.broadcast(WsMessage.of("EventsTournamentChanged", Map.of("tournament", tournament.getName())));
 	}
 
