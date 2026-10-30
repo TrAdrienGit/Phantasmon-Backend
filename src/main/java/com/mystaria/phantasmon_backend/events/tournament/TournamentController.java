@@ -60,8 +60,9 @@ public class TournamentController {
 	}
 
 	@PostMapping("/tournaments/{name}/check-in")
-	public TournamentService.View checkIn(@PathVariable String name, Authentication authentication) {
-		return service.checkIn(caller(authentication), name);
+	public TournamentService.View checkIn(@PathVariable String name,
+			@RequestBody(required = false) java.util.Map<String, Object> party, Authentication authentication) {
+		return service.checkIn(caller(authentication), name, party);
 	}
 
 	@PostMapping("/admin/tournaments")

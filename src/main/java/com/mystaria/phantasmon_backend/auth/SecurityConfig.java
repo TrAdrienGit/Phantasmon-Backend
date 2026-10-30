@@ -35,6 +35,8 @@ public class SecurityConfig {
 				.sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
 				.authorizeHttpRequests(auth -> auth
 						.requestMatchers(HttpMethod.GET, "/health", "/version").permitAll()
+						// Tournaments' public page (read only, no player UUIDs).
+						.requestMatchers(HttpMethod.GET, "/t", "/t/", "/t/*", "/public/tournaments", "/public/tournaments/*").permitAll()
 						.requestMatchers(HttpMethod.POST, "/auth/challenge", "/auth/session", "/auth/refresh").permitAll()
 						.requestMatchers("/ws").permitAll()
 						.anyRequest().authenticated())

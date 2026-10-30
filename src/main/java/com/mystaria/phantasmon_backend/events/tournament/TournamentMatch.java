@@ -43,6 +43,10 @@ public class TournamentMatch {
 	@Column(nullable = false)
 	private short position;
 
+	/** Bracket: the wave in which an admin opens it ({@link DoubleElimination}); Swiss: 0. */
+	@Column(nullable = false)
+	private short wave;
+
 	@Column(name = "player1_uuid")
 	private UUID player1;
 

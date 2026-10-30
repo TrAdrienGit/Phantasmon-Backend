@@ -86,9 +86,6 @@ public class TournamentRunService implements LiveBattleService.TournamentHook {
 		if (!Tournament.REGISTRATION.equals(tournament.getStatus()) && !Tournament.CHECK_IN.equals(tournament.getStatus())) {
 			throw wrongStep(tournament);
 		}
-		if (!Tournament.SWISS.equals(tournament.getKind())) {
-			throw new ApiException(HttpStatus.CONFLICT, "ERROR_TOURNAMENT_BRACKET_NOT_READY", Map.of("tournament", tournament.getName()));
-		}
 		List<TournamentPlayer> entries = players.findByKeyTournamentUuidOrderByRegisteredAtAsc(tournament.getUuid());
 		if (Tournament.CHECK_IN.equals(tournament.getStatus())) {
 			List<TournamentPlayer> absent = entries.stream().filter(p -> !p.isCheckedIn()).toList();
@@ -99,7 +96,12 @@ public class TournamentRunService implements LiveBattleService.TournamentHook {
 			throw new ApiException(HttpStatus.CONFLICT, "ERROR_TOURNAMENT_NOT_ENOUGH_PLAYERS", Map.of("tournament", tournament.getName()));
 		}
 		tournament.setStatus(Tournament.RUNNING);
-		tournament.setPlannedRounds((short) Swiss.plannedRounds(entries.size()));
+		if (Tournament.BRACKET.equals(tournament.getKind())) {
+			buildBracket(tournament, entries.stream().map(TournamentPlayer::playerUuid).toList());
+			tournament.setPlannedRounds((short) DoubleElimination.waves(entries.size()));
+		} else {
+			tournament.setPlannedRounds((short) Swiss.plannedRounds(entries.size()));
+		}
 		log.info("Admin {} started tournament {} with {} players, {} rounds", adminUuid, tournament.getName(), entries.size(),
 				tournament.getPlannedRounds());
 		return tournamentService.changed(tournament);
@@ -109,6 +111,9 @@ public class TournamentRunService implements LiveBattleService.TournamentHook {
 	@Transactional
 	public TournamentService.View nextRound(UUID adminUuid, String name) {
 		Tournament tournament = running(name);
+		if (Tournament.BRACKET.equals(tournament.getKind())) {
+			return nextWave(adminUuid, tournament);
+		}
 		List<TournamentMatch> all = matches.findByTournamentUuidOrderByRoundAscPositionAsc(tournament.getUuid());
 		if (all.stream().anyMatch(m -> !TournamentMatch.DONE.equals(m.getStatus()))) {
 			throw new ApiException(HttpStatus.CONFLICT, "ERROR_TOURNAMENT_ROUND_NOT_OVER", Map.of("tournament", tournament.getName()));
@@ -180,6 +185,10 @@ public class TournamentRunService implements LiveBattleService.TournamentHook {
 		TournamentMatch match = currentMatch(tournament, player);
 		if (match.bye()) {
 			throw new ApiException(HttpStatus.CONFLICT, "ERROR_TOURNAMENT_BYE", Map.of("tournament", tournament.getName()));
+		}
+		if (Tournament.BRACKET.equals(tournament.getKind()) && TournamentMatch.DONE.equals(match.getStatus())) {
+			// Its winner and loser already went on in the bracket.
+			throw new ApiException(HttpStatus.CONFLICT, "ERROR_TOURNAMENT_TOO_LATE", Map.of("tournament", tournament.getName()));
 		}
 		UUID winner = forfeit ? match.opponentOf(player) : player;
 		match.setWinner(winner);
@@ -323,6 +332,11 @@ public class TournamentRunService implements LiveBattleService.TournamentHook {
 
 	/** A match decided: both players told; the round over, everyone in the tournament told. */
 	private void decided(Tournament tournament, TournamentMatch match) {
+		boolean bracket = Tournament.BRACKET.equals(tournament.getKind());
+		if (bracket) {
+			advance(tournament, match);
+			settleWalkovers(tournament);
+		}
 		Map<UUID, String> names = names(tournament);
 		UUID loser = match.opponentOf(match.getWinner());
 		Map<String, Object> result = new HashMap<>();
@@ -331,7 +345,7 @@ public class TournamentRunService implements LiveBattleService.TournamentHook {
 		result.put("score", Math.max(match.getWins1(), match.getWins2()) + "-" + Math.min(match.getWins1(), match.getWins2()));
 		result.put("forfeit", match.isForfeit());
 		List<TournamentMatch> round = matches.findByTournamentUuidOrderByRoundAscPositionAsc(tournament.getUuid()).stream()
-				.filter(m -> m.getRound() == tournament.getCurrentRound()).toList();
+				.filter(m -> bracket ? m.getWave() <= tournament.getCurrentRound() : m.getRound() == tournament.getCurrentRound()).toList();
 		for (TournamentPlayer entry : players.findByKeyTournamentUuidOrderByRegisteredAtAsc(tournament.getUuid())) {
 			if (match.involves(entry.playerUuid())) {
 				Map<String, Object> mine = new HashMap<>(result);
@@ -340,11 +354,128 @@ public class TournamentRunService implements LiveBattleService.TournamentHook {
 			}
 		}
 		if (round.stream().allMatch(m -> TournamentMatch.DONE.equals(m.getStatus()))) {
-			boolean last = tournament.getPlannedRounds() != null && tournament.getCurrentRound() >= tournament.getPlannedRounds();
+			boolean last = bracket ? matches.findByTournamentUuidOrderByRoundAscPositionAsc(tournament.getUuid()).stream()
+					.allMatch(m -> TournamentMatch.DONE.equals(m.getStatus()))
+					: tournament.getPlannedRounds() != null && tournament.getCurrentRound() >= tournament.getPlannedRounds();
 			for (TournamentPlayer entry : players.findByKeyTournamentUuidOrderByRegisteredAtAsc(tournament.getUuid())) {
 				announce(entry.playerUuid(), tournament, "ROUND_DONE", Map.of("round", tournament.getCurrentRound(), "last", last));
 			}
 		}
+	}
+
+	// ---------------------------------------------------------------- bracket (T4)
+
+	/** Every match of the double elimination bracket, round 1 seeded at random; byes settled at once. */
+	private void buildBracket(Tournament tournament, List<UUID> entrants) {
+		List<UUID> seeded = new ArrayList<>(entrants);
+		Collections.shuffle(seeded);
+		Map<Integer, UUID[]> firstRound = DoubleElimination.seed(seeded);
+		List<TournamentMatch> created = new ArrayList<>();
+		for (DoubleElimination.Node node : DoubleElimination.shape(seeded.size())) {
+			TournamentMatch match = new TournamentMatch(UUID.randomUUID(), tournament.getUuid(), node.round(), node.bracket(),
+					node.position(), null, null);
+			match.setWave((short) node.wave());
+			if (DoubleElimination.WINNERS.equals(node.bracket()) && node.round() == 1) {
+				match.setPlayer1(firstRound.get(node.position())[0]);
+				match.setPlayer2(firstRound.get(node.position())[1]);
+			}
+			created.add(match);
+		}
+		matches.saveAllAndFlush(created);
+		settleWalkovers(tournament);
+	}
+
+	/** Matches against nobody (byes, empty slots) decided at once, until none is left. */
+	private void settleWalkovers(Tournament tournament) {
+		boolean again = true;
+		while (again) {
+			again = false;
+			for (TournamentMatch match : matches.findByTournamentUuidOrderByRoundAscPositionAsc(tournament.getUuid())) {
+				if (TournamentMatch.DONE.equals(match.getStatus()) || match.getPlayer1() == null || match.getPlayer2() == null) {
+					continue;
+				}
+				boolean empty1 = DoubleElimination.NOBODY.equals(match.getPlayer1());
+				boolean empty2 = DoubleElimination.NOBODY.equals(match.getPlayer2());
+				if (!empty1 && !empty2) {
+					continue;
+				}
+				match.setWinner(empty1 ? match.getPlayer2() : match.getPlayer1());
+				match.setStatus(TournamentMatch.DONE);
+				matches.saveAndFlush(match);
+				advance(tournament, match);
+				again = true;
+			}
+		}
+	}
+
+	/** The decided match's winner and loser placed in their next matches (the grand final decides the reset). */
+	private void advance(Tournament tournament, TournamentMatch match) {
+		int entrants = players.findByKeyTournamentUuidOrderByRegisteredAtAsc(tournament.getUuid()).size();
+		UUID winner = match.getWinner();
+		UUID loser = winner == null ? null : winner.equals(match.getPlayer1()) ? match.getPlayer2() : match.getPlayer1();
+		if (DoubleElimination.FINAL.equals(match.getBracket())) {
+			// The winners bracket's champion (slot 0) wins: no reset; else both have lost once: the reset final.
+			boolean champion = winner != null && winner.equals(match.getPlayer1());
+			place(tournament, new DoubleElimination.Destination(DoubleElimination.RESET, 1, 0, 0),
+					champion ? DoubleElimination.NOBODY : match.getPlayer1());
+			place(tournament, new DoubleElimination.Destination(DoubleElimination.RESET, 1, 0, 1),
+					champion ? DoubleElimination.NOBODY : match.getPlayer2());
+			return;
+		}
+		if (DoubleElimination.RESET.equals(match.getBracket())) {
+			return;
+		}
+		DoubleElimination.Destination up = DoubleElimination.winnerGoes(entrants, match.getBracket(), match.getRound(), match.getPosition());
+		if (up != null) {
+			place(tournament, up, winner);
+		}
+		DoubleElimination.Destination down = DoubleElimination.loserGoes(entrants, match.getBracket(), match.getRound(), match.getPosition());
+		if (down != null) {
+			place(tournament, down, loser == null ? DoubleElimination.NOBODY : loser);
+		}
+	}
+
+	private void place(Tournament tournament, DoubleElimination.Destination to, UUID player) {
+		matches.findByTournamentUuidOrderByRoundAscPositionAsc(tournament.getUuid()).stream()
+				.filter(m -> m.getBracket().equals(to.bracket()) && m.getRound() == to.round() && m.getPosition() == to.position())
+				.findFirst().ifPresent(m -> {
+					if (to.slot() == 0) {
+						m.setPlayer1(player);
+					} else {
+						m.setPlayer2(player);
+					}
+					matches.saveAndFlush(m);
+				});
+	}
+
+	/** The next wave of the bracket: its matches become playable and their players are told. */
+	private TournamentService.View nextWave(UUID adminUuid, Tournament tournament) {
+		List<TournamentMatch> all = matches.findByTournamentUuidOrderByRoundAscPositionAsc(tournament.getUuid());
+		if (all.stream().anyMatch(m -> m.getWave() <= tournament.getCurrentRound() && !TournamentMatch.DONE.equals(m.getStatus()))) {
+			throw new ApiException(HttpStatus.CONFLICT, "ERROR_TOURNAMENT_ROUND_NOT_OVER", Map.of("tournament", tournament.getName()));
+		}
+		if (all.stream().allMatch(m -> TournamentMatch.DONE.equals(m.getStatus()))) {
+			throw new ApiException(HttpStatus.CONFLICT, "ERROR_TOURNAMENT_ROUNDS_DONE", Map.of("tournament", tournament.getName()));
+		}
+		// Waves with nothing left to play (walkovers only) are skipped.
+		int wave = tournament.getCurrentRound();
+		List<TournamentMatch> opened;
+		do {
+			wave++;
+			int current = wave;
+			opened = all.stream().filter(m -> m.getWave() == current && !TournamentMatch.DONE.equals(m.getStatus())).toList();
+		} while (opened.isEmpty() && wave < DoubleElimination.waves(Math.max(2, players.findByKeyTournamentUuidOrderByRegisteredAtAsc(tournament.getUuid()).size())));
+		tournament.setCurrentRound((short) wave);
+		log.info("Admin {} opened wave {} of bracket {}: {} matches", adminUuid, wave, tournament.getName(), opened.size());
+		Map<UUID, String> names = names(tournament);
+		for (TournamentMatch match : opened) {
+			for (UUID player : new UUID[] { match.getPlayer1(), match.getPlayer2() }) {
+				announce(player, tournament, "ROUND", Map.of("round", wave, "of", tournament.getPlannedRounds(),
+						"opponent", names.getOrDefault(match.opponentOf(player), "?"), "bye", false,
+						"bracket", match.getBracket()));
+			}
+		}
+		return tournamentService.changed(tournament);
 	}
 
 	// ---------------------------------------------------------------- internals
@@ -378,6 +509,11 @@ public class TournamentRunService implements LiveBattleService.TournamentHook {
 	}
 
 	private TournamentMatch currentMatch(Tournament tournament, UUID player) {
+		if (Tournament.BRACKET.equals(tournament.getKind())) {
+			return matches.findOpenFor(player).stream().filter(m -> m.getTournamentUuid().equals(tournament.getUuid())).findFirst()
+					.orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "ERROR_TOURNAMENT_NO_MATCH",
+							Map.of("tournament", tournament.getName())));
+		}
 		return matches.findByTournamentUuidOrderByRoundAscPositionAsc(tournament.getUuid()).stream()
 				.filter(m -> m.getRound() == tournament.getCurrentRound() && m.involves(player)).findFirst()
 				.orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "ERROR_TOURNAMENT_NO_MATCH",

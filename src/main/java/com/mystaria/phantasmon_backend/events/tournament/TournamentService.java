@@ -40,8 +40,8 @@ public class TournamentService {
 	}
 
 	/** A match: its players' names, games won by each, winner (null until decided). */
-	public record MatchView(int round, String bracket, int position, String player1, String player2, int wins1, int wins2,
-			String winner, String status, boolean forfeit) {
+	public record MatchView(int round, String bracket, int position, int wave, String player1, String player2, int wins1,
+			int wins2, String winner, String status, boolean forfeit) {
 	}
 
 	/** A line of the Swiss standings, best first. */
@@ -122,15 +122,25 @@ public class TournamentService {
 
 	@Transactional
 	public View checkIn(UUID playerUuid, String name) {
+		return checkIn(playerUuid, name, null);
+	}
+
+	/**
+	 * Check-in; {@code party}: the player's Cobblemon party as their client sent it (optional). One of the two teams,
+	 * the active Ghost one or the Cobblemon party, must fit the tournament's format (Adrien 2026-10-30).
+	 */
+	@Transactional
+	public View checkIn(UUID playerUuid, String name, Map<String, Object> party) {
 		Tournament tournament = require(name);
 		if (!Tournament.CHECK_IN.equals(tournament.getStatus())) {
 			throw new ApiException(HttpStatus.CONFLICT, "ERROR_TOURNAMENT_NO_CHECK_IN", Map.of("tournament", tournament.getName()));
 		}
 		TournamentPlayer entry = players.findById(new TournamentPlayer.Key(tournament.getUuid(), playerUuid)).orElseThrow(() ->
 				new ApiException(HttpStatus.NOT_FOUND, "ERROR_TOURNAMENT_NOT_REGISTERED", Map.of("tournament", tournament.getName())));
-		// The active Ghost team checked against the tournament's format now, not at the first battle (Adrien 2026-10-30).
+		// The teams checked against the tournament's format now, not at the first battle (Adrien 2026-10-30).
 		List<String> issues = liveBattleService.ghostTeamIssues(playerUuid, tournament.getFormatId());
-		if (!issues.isEmpty()) {
+		List<String> partyIssues = liveBattleService.cobblemonPartyIssues(playerUuid, party, tournament.getFormatId());
+		if (!issues.isEmpty() && (partyIssues == null || !partyIssues.isEmpty())) {
 			throw new ApiException(HttpStatus.CONFLICT, "ERROR_TOURNAMENT_TEAM_INVALID", Map.of("tournament", tournament.getName(),
 					"issues", issues.subList(0, Math.min(5, issues.size()))));
 		}
@@ -307,10 +317,11 @@ public class TournamentService {
 				.map(p -> new PlayerView(p.playerUuid(), p.getUsername(), p.isCheckedIn(), p.isDropped())).toList();
 		Map<UUID, TournamentPlayer> byUuid = new java.util.HashMap<>();
 		registered.forEach(p -> byUuid.put(p.playerUuid(), p));
+		// null: not known yet; "-": nobody (a bye in a bracket).
 		java.util.function.Function<UUID, String> nameOf = uuid -> uuid == null ? null
-				: byUuid.containsKey(uuid) ? byUuid.get(uuid).getUsername() : "?";
+				: DoubleElimination.NOBODY.equals(uuid) ? "-" : byUuid.containsKey(uuid) ? byUuid.get(uuid).getUsername() : "?";
 		List<TournamentMatch> all = matches.findByTournamentUuidOrderByRoundAscPositionAsc(tournament.getUuid());
-		List<MatchView> matchViews = all.stream().map(m -> new MatchView(m.getRound(), m.getBracket(), m.getPosition(),
+		List<MatchView> matchViews = all.stream().map(m -> new MatchView(m.getRound(), m.getBracket(), m.getPosition(), m.getWave(),
 				nameOf.apply(m.getPlayer1()), nameOf.apply(m.getPlayer2()), m.getWins1(), m.getWins2(), nameOf.apply(m.getWinner()),
 				m.getStatus(), m.isForfeit())).toList();
 		List<StandingView> standings = new java.util.ArrayList<>();
@@ -323,11 +334,65 @@ public class TournamentService {
 						byUuid.containsKey(row.player()) && byUuid.get(row.player()).isDropped()));
 			}
 		}
+		if (Tournament.BRACKET.equals(tournament.getKind()) && !all.isEmpty()) {
+			standings = bracketStandings(registered, all, nameOf);
+		}
 		return new View(tournament.getName(), tournament.getKind(), tournament.getBestOf(), tournament.getFormatId(),
 				format == null ? tournament.getFormatId() : format.name(), tournament.getStatus(), tournament.getStartsAt(),
 				tournament.getRegistrationOpensAt(), tournament.getRegistrationClosesAt(), registrationOpen(tournament),
 				tournament.getPlannedRounds() == null ? null : tournament.getPlannedRounds().intValue(),
 				tournament.getCurrentRound(), entries, matchViews, standings);
+	}
+
+	/**
+	 * A bracket's placements: the champion (reset final's winner, else the grand final's), then the players with
+	 * fewer losses, then those who went further. {@code points}: matches won.
+	 */
+	private static List<StandingView> bracketStandings(List<TournamentPlayer> registered, List<TournamentMatch> all,
+			java.util.function.Function<UUID, String> nameOf) {
+		Map<UUID, int[]> stats = new java.util.HashMap<>(); // wins, losses, last wave played
+		registered.forEach(p -> stats.put(p.playerUuid(), new int[3]));
+		UUID champion = null;
+		for (TournamentMatch m : all) {
+			boolean real = m.getPlayer1() != null && m.getPlayer2() != null && !DoubleElimination.NOBODY.equals(m.getPlayer1())
+					&& !DoubleElimination.NOBODY.equals(m.getPlayer2());
+			if (!real || !TournamentMatch.DONE.equals(m.getStatus()) || m.getWinner() == null) {
+				continue;
+			}
+			UUID loser = m.opponentOf(m.getWinner());
+			if (stats.containsKey(m.getWinner())) {
+				stats.get(m.getWinner())[0]++;
+				stats.get(m.getWinner())[2] = Math.max(stats.get(m.getWinner())[2], m.getWave());
+			}
+			if (stats.containsKey(loser)) {
+				stats.get(loser)[1]++;
+				stats.get(loser)[2] = Math.max(stats.get(loser)[2], m.getWave());
+			}
+			if (DoubleElimination.RESET.equals(m.getBracket())
+					|| DoubleElimination.FINAL.equals(m.getBracket()) && m.getWinner().equals(m.getPlayer1())) {
+				champion = m.getWinner();
+			}
+		}
+		UUID first = champion;
+		List<UUID> order = new java.util.ArrayList<>(stats.keySet());
+		java.util.Comparator<UUID> ranking = java.util.Comparator.<UUID, Boolean>comparing(u -> !u.equals(first))
+				.thenComparingInt(u -> stats.get(u)[1]).thenComparing(u -> -stats.get(u)[2]);
+		order.sort(ranking);
+		Map<UUID, TournamentPlayer> byUuid = new java.util.HashMap<>();
+		registered.forEach(p -> byUuid.put(p.playerUuid(), p));
+		List<StandingView> rows = new java.util.ArrayList<>();
+		int rank = 0;
+		UUID previous = null;
+		for (int i = 0; i < order.size(); i++) {
+			UUID u = order.get(i);
+			if (previous == null || ranking.compare(previous, u) != 0) {
+				rank = i + 1;
+			}
+			previous = u;
+			int[] st = stats.get(u);
+			rows.add(new StandingView(rank, nameOf.apply(u), st[0], st[0], st[1], 0, 0, byUuid.get(u).isDropped()));
+		}
+		return rows;
 	}
 
 	/** The decided matches, as the Swiss logic reads them. */

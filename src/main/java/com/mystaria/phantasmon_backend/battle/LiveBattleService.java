@@ -222,6 +222,32 @@ public class LiveBattleService {
 		return null;
 	}
 
+	/**
+	 * The problems of a Cobblemon party sent by the player ({@code team: COBBLEMON}, {@code party}, as with an
+	 * invitation) in that format; empty: allowed. Null if no party was sent.
+	 */
+	public synchronized List<String> cobblemonPartyIssues(UUID playerUuid, Map<String, Object> message, String formatId) {
+		if (message == null || !"COBBLEMON".equals(message.get("team"))) {
+			return null;
+		}
+		BattleTeam team;
+		try {
+			team = partyParser.parse(playerUuid, message);
+		} catch (CobblemonPartyParser.InvalidPartyException ex) {
+			return List.of("INVALID_PARTY");
+		}
+		List<PokemonResponse> party = team.party();
+		List<TeamValidator.Member> members = party.stream().map(LiveBattleService::member).toList();
+		List<String> problems = new ArrayList<>();
+		List<List<TeamValidator.Issue>> issues = showdown.validator().validate(showdown.formats().get(formatId), members);
+		for (int i = 0; i < issues.size(); i++) {
+			for (TeamValidator.Issue issue : issues.get(i)) {
+				problems.add(party.get(i).species() + ": " + issue.code() + (issue.subject() == null ? "" : " " + issue.subject()));
+			}
+		}
+		return problems;
+	}
+
 	/** The problems of a player's active Ghost team in that format (empty: allowed), e.g. for a tournament check-in. */
 	public synchronized List<String> ghostTeamIssues(UUID playerUuid, String formatId) {
 		List<PokemonResponse> team = resolve(playerUuid, BattleTeam.GHOST);
