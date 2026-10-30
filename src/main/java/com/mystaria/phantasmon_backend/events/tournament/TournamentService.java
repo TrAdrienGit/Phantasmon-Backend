@@ -1,0 +1,275 @@
+package com.mystaria.phantasmon_backend.events.tournament;
+
+import java.time.Instant;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.UUID;
+import java.util.regex.Pattern;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.http.HttpStatus;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import com.mystaria.phantasmon_backend.battle.format.BattleFormats;
+import com.mystaria.phantasmon_backend.battle.format.ShowdownDataSource;
+import com.mystaria.phantasmon_backend.common.ApiException;
+import com.mystaria.phantasmon_backend.player.Player;
+import com.mystaria.phantasmon_backend.player.PlayerRepository;
+import com.mystaria.phantasmon_backend.websocket.SessionRegistry;
+import com.mystaria.phantasmon_backend.websocket.WsMessage;
+
+/**
+ * Tournaments before they start (plan-tournois.md, phase T1): created by an admin, players register in the
+ * registration window (admins any time), check in once an admin opens the check-in. Every change is pushed to every
+ * connected client ({@code EventsTournamentChanged}), which reads the tournament again.
+ */
+@Service
+public class TournamentService {
+
+	private static final Logger log = LoggerFactory.getLogger(TournamentService.class);
+	static final Pattern NAME = Pattern.compile("[a-z0-9_]{2,32}");
+
+	/** A tournament as the API shows it. */
+	public record View(String name, String kind, int bestOf, String formatId, String formatName, String status,
+			Instant startsAt, Instant registrationOpensAt, Instant registrationClosesAt, boolean registrationOpen,
+			Integer plannedRounds, int currentRound, List<PlayerView> players) {
+	}
+
+	public record PlayerView(UUID uuid, String username, boolean checkedIn, boolean dropped) {
+	}
+
+	/** {@code POST /admin/tournaments}; dates optional (ISO-8601). */
+	public record CreateRequest(String name, String kind, Integer bestOf, String formatId, Instant startsAt,
+			Instant registrationOpensAt, Instant registrationClosesAt) {
+	}
+
+	/** {@code POST /admin/tournaments/{name}/schedule}: the dates to change (absent: unchanged). */
+	public record ScheduleRequest(Instant startsAt, Instant registrationOpensAt, Instant registrationClosesAt) {
+	}
+
+	private final TournamentRepository tournaments;
+	private final TournamentPlayerRepository players;
+	private final PlayerRepository playerRepository;
+	private final ShowdownDataSource showdown;
+	private final SessionRegistry sessionRegistry;
+
+	public TournamentService(TournamentRepository tournaments, TournamentPlayerRepository players,
+			PlayerRepository playerRepository, ShowdownDataSource showdown, SessionRegistry sessionRegistry) {
+		this.tournaments = tournaments;
+		this.players = players;
+		this.playerRepository = playerRepository;
+		this.showdown = showdown;
+		this.sessionRegistry = sessionRegistry;
+	}
+
+	// ---------------------------------------------------------------- reading
+
+	/** The tournaments not over yet, then the last 10 over. */
+	@Transactional(readOnly = true)
+	public List<View> list() {
+		List<Tournament> all = tournaments.findAllByOrderByCreatedAtDesc();
+		List<Tournament> shown = new java.util.ArrayList<>(all.stream().filter(t -> !t.over()).toList());
+		all.stream().filter(Tournament::over).limit(10).forEach(shown::add);
+		return shown.stream().map(this::view).toList();
+	}
+
+	@Transactional(readOnly = true)
+	public View get(String name) {
+		return view(require(name));
+	}
+
+	// ---------------------------------------------------------------- players
+
+	@Transactional
+	public View register(UUID playerUuid, String name) {
+		Tournament tournament = require(name);
+		if (!registrationOpen(tournament)) {
+			throw new ApiException(HttpStatus.CONFLICT, "ERROR_TOURNAMENT_REGISTRATION_CLOSED", Map.of("tournament", tournament.getName()));
+		}
+		return add(tournament, player(playerUuid), null);
+	}
+
+	@Transactional
+	public View unregister(UUID playerUuid, String name) {
+		Tournament tournament = require(name);
+		if (Tournament.RUNNING.equals(tournament.getStatus()) || tournament.over()) {
+			throw new ApiException(HttpStatus.CONFLICT, "ERROR_TOURNAMENT_STARTED", Map.of("tournament", tournament.getName()));
+		}
+		TournamentPlayer entry = players.findById(new TournamentPlayer.Key(tournament.getUuid(), playerUuid)).orElseThrow(() ->
+				new ApiException(HttpStatus.NOT_FOUND, "ERROR_TOURNAMENT_NOT_REGISTERED", Map.of("tournament", tournament.getName())));
+		players.delete(entry);
+		return changed(tournament);
+	}
+
+	@Transactional
+	public View checkIn(UUID playerUuid, String name) {
+		Tournament tournament = require(name);
+		if (!Tournament.CHECK_IN.equals(tournament.getStatus())) {
+			throw new ApiException(HttpStatus.CONFLICT, "ERROR_TOURNAMENT_NO_CHECK_IN", Map.of("tournament", tournament.getName()));
+		}
+		TournamentPlayer entry = players.findById(new TournamentPlayer.Key(tournament.getUuid(), playerUuid)).orElseThrow(() ->
+				new ApiException(HttpStatus.NOT_FOUND, "ERROR_TOURNAMENT_NOT_REGISTERED", Map.of("tournament", tournament.getName())));
+		entry.setCheckedIn(true);
+		return changed(tournament);
+	}
+
+	// ---------------------------------------------------------------- admin
+
+	@Transactional
+	public View create(UUID adminUuid, CreateRequest request) {
+		String name = request.name() == null ? "" : request.name().strip().toLowerCase(Locale.ROOT);
+		if (!NAME.matcher(name).matches()) {
+			throw new ApiException(HttpStatus.BAD_REQUEST, "ERROR_TOURNAMENT_INVALID_NAME", Map.of("name", name));
+		}
+		String kind = request.kind() == null ? "" : request.kind().strip().toUpperCase(Locale.ROOT);
+		if (!Tournament.SWISS.equals(kind) && !Tournament.BRACKET.equals(kind)) {
+			throw new ApiException(HttpStatus.BAD_REQUEST, "ERROR_TOURNAMENT_INVALID_KIND", Map.of("kind", kind));
+		}
+		int bestOf = request.bestOf() == null ? 1 : request.bestOf();
+		if (bestOf != 1 && bestOf != 3 && bestOf != 5) {
+			throw new ApiException(HttpStatus.BAD_REQUEST, "ERROR_TOURNAMENT_INVALID_BEST_OF", Map.of("best_of", bestOf));
+		}
+		String format = request.formatId() == null ? "" : request.formatId().strip().toLowerCase(Locale.ROOT);
+		if (BattleFormats.FREE.equals(format) || !BattleFormats.OFFERED.contains(format)) {
+			throw new ApiException(HttpStatus.BAD_REQUEST, "ERROR_TOURNAMENT_INVALID_FORMAT", Map.of("format", format));
+		}
+		if (tournaments.findOpenByName(name).isPresent()) {
+			throw new ApiException(HttpStatus.CONFLICT, "ERROR_TOURNAMENT_NAME_TAKEN", Map.of("tournament", name));
+		}
+		Tournament tournament = new Tournament(UUID.randomUUID(), name, kind, bestOf, format, adminUuid);
+		tournament.setStartsAt(request.startsAt());
+		tournament.setRegistrationOpensAt(request.registrationOpensAt());
+		tournament.setRegistrationClosesAt(request.registrationClosesAt());
+		tournaments.saveAndFlush(tournament);
+		log.info("Admin {} created tournament {} ({}, best of {}, {})", adminUuid, name, kind, bestOf, format);
+		return changed(tournament);
+	}
+
+	@Transactional
+	public View schedule(String name, ScheduleRequest request) {
+		Tournament tournament = requireNotOver(name);
+		if (request.startsAt() != null) {
+			tournament.setStartsAt(request.startsAt());
+		}
+		if (request.registrationOpensAt() != null) {
+			tournament.setRegistrationOpensAt(request.registrationOpensAt());
+		}
+		if (request.registrationClosesAt() != null) {
+			tournament.setRegistrationClosesAt(request.registrationClosesAt());
+		}
+		return changed(tournament);
+	}
+
+	/** An admin registers a player by name (one who has used Phantasmon), whatever the window. */
+	@Transactional
+	public View adminAdd(UUID adminUuid, String name, String username) {
+		Tournament tournament = requireNotOver(name);
+		Player player = playerRepository.findFirstByLastUsernameIgnoreCaseOrderByLastSeenAtDesc(username == null ? "" : username.strip())
+				.orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "ERROR_PLAYER_NOT_FOUND", Map.of("username", String.valueOf(username))));
+		log.info("Admin {} registered {} in tournament {}", adminUuid, player.getLastUsername(), tournament.getName());
+		return add(tournament, player, adminUuid);
+	}
+
+	/**
+	 * An admin removes a player: before the start, the registration goes; once running, the player is dropped (no
+	 * longer paired, the matches played still count).
+	 */
+	@Transactional
+	public View adminRemove(UUID adminUuid, String name, String username) {
+		Tournament tournament = requireNotOver(name);
+		TournamentPlayer entry = players.findByKeyTournamentUuidOrderByRegisteredAtAsc(tournament.getUuid()).stream()
+				.filter(p -> p.getUsername().equalsIgnoreCase(username == null ? "" : username.strip())).findFirst()
+				.orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "ERROR_TOURNAMENT_NOT_REGISTERED",
+						Map.of("tournament", tournament.getName(), "username", String.valueOf(username))));
+		if (Tournament.RUNNING.equals(tournament.getStatus())) {
+			entry.setDropped(true);
+		} else {
+			players.delete(entry);
+		}
+		log.info("Admin {} removed {} from tournament {}", adminUuid, entry.getUsername(), tournament.getName());
+		return changed(tournament);
+	}
+
+	/** Registration → check-in: the registered players confirm they are there. */
+	@Transactional
+	public View openCheckIn(String name) {
+		Tournament tournament = requireNotOver(name);
+		if (!Tournament.REGISTRATION.equals(tournament.getStatus())) {
+			throw new ApiException(HttpStatus.CONFLICT, "ERROR_TOURNAMENT_WRONG_STEP", Map.of("tournament", tournament.getName(),
+					"status", tournament.getStatus()));
+		}
+		tournament.setStatus(Tournament.CHECK_IN);
+		return changed(tournament);
+	}
+
+	@Transactional
+	public View cancel(UUID adminUuid, String name) {
+		Tournament tournament = requireNotOver(name);
+		tournament.setStatus(Tournament.CANCELLED);
+		log.info("Admin {} cancelled tournament {}", adminUuid, tournament.getName());
+		return changed(tournament);
+	}
+
+	// ---------------------------------------------------------------- internals
+
+	private View add(Tournament tournament, Player player, UUID adminUuid) {
+		TournamentPlayer.Key key = new TournamentPlayer.Key(tournament.getUuid(), player.getUuid());
+		if (players.existsById(key)) {
+			throw new ApiException(HttpStatus.CONFLICT, "ERROR_TOURNAMENT_ALREADY_REGISTERED", Map.of("tournament", tournament.getName()));
+		}
+		TournamentPlayer entry = new TournamentPlayer(tournament.getUuid(), player.getUuid(), player.getLastUsername());
+		// Registered during the check-in (late, or by an admin): there, so checked in.
+		entry.setCheckedIn(Tournament.CHECK_IN.equals(tournament.getStatus()) || adminUuid != null && !Tournament.REGISTRATION.equals(tournament.getStatus()));
+		players.save(entry);
+		return changed(tournament);
+	}
+
+	boolean registrationOpen(Tournament tournament) {
+		if (!Tournament.REGISTRATION.equals(tournament.getStatus()) && !Tournament.CHECK_IN.equals(tournament.getStatus())) {
+			return false;
+		}
+		Instant now = Instant.now();
+		return (tournament.getRegistrationOpensAt() == null || !now.isBefore(tournament.getRegistrationOpensAt()))
+				&& (tournament.getRegistrationClosesAt() == null || now.isBefore(tournament.getRegistrationClosesAt()));
+	}
+
+	private Player player(UUID playerUuid) {
+		return playerRepository.findById(playerUuid).orElseThrow(() ->
+				new ApiException(HttpStatus.NOT_FOUND, "ERROR_PLAYER_NOT_FOUND", Map.of("player_uuid", playerUuid)));
+	}
+
+	Tournament require(String name) {
+		String key = name == null ? "" : name.strip();
+		return tournaments.findOpenByName(key).or(() -> tournaments.findAllByOrderByCreatedAtDesc().stream()
+				.filter(t -> t.getName().equalsIgnoreCase(key)).findFirst())
+				.orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "ERROR_TOURNAMENT_NOT_FOUND", Map.of("tournament", key)));
+	}
+
+	Tournament requireNotOver(String name) {
+		Tournament tournament = require(name);
+		if (tournament.over()) {
+			throw new ApiException(HttpStatus.CONFLICT, "ERROR_TOURNAMENT_OVER", Map.of("tournament", tournament.getName()));
+		}
+		return tournament;
+	}
+
+	View changed(Tournament tournament) {
+		tournaments.saveAndFlush(tournament);
+		sessionRegistry.broadcast(WsMessage.of("EventsTournamentChanged", Map.of("tournament", tournament.getName())));
+		return view(tournament);
+	}
+
+	View view(Tournament tournament) {
+		BattleFormats.Format format = showdown.formats().get(tournament.getFormatId());
+		List<PlayerView> entries = players.findByKeyTournamentUuidOrderByRegisteredAtAsc(tournament.getUuid()).stream()
+				.map(p -> new PlayerView(p.playerUuid(), p.getUsername(), p.isCheckedIn(), p.isDropped())).toList();
+		return new View(tournament.getName(), tournament.getKind(), tournament.getBestOf(), tournament.getFormatId(),
+				format == null ? tournament.getFormatId() : format.name(), tournament.getStatus(), tournament.getStartsAt(),
+				tournament.getRegistrationOpensAt(), tournament.getRegistrationClosesAt(), registrationOpen(tournament),
+				tournament.getPlannedRounds() == null ? null : tournament.getPlannedRounds().intValue(),
+				tournament.getCurrentRound(), entries);
+	}
+}
