@@ -542,3 +542,22 @@ Pour ajouter une décision : prendre le numéro suivant, dater, et mettre à jou
   backend dans `hub_schematics/hub_<nom>/mirror.bin` ; Phantasmon expose aux add-ons `client/api/PhantasmonApi`
   (hubs, messages `Events*`, `GET` authentifié) ; le contenu des coffres et les entités ne sont pas copiés ; plan dans
   `Phantasmon-Events/Documentation/plan.md`.
+
+## D-39 — Le moins de commandes possible, toutes sous `/phantasmon`
+
+- **Date** : 2026-10-30 (Adrien).
+- **Contexte** : le modpack a déjà beaucoup de touches ; Phantasmon passe par la roue d'interaction de Cobblemon, le
+  PC et des menus. Il restait des commandes décommissionnées (`/phantasmon pokemon *`, échange asynchrone, invitation
+  au Hub), des commandes qui ne servaient qu'aux boutons du chat, et des commandes d'Events sous `/events`.
+- **Décision** :
+  - les boutons du chat lancent une **action** (`ChatActions`, `phantasmon-action:<nom>`), plus une commande :
+    rien à taper, rien dans la complétion ;
+  - joueurs : `/phantasmon login`, `/phantasmon hub list | anchor create/info/delete | leave | chat`, `/hc` ;
+    admins : `/phantasmon admin ...` ;
+  - Phantasmon Events sous `/phantasmon event` : `tournament` ouvre le menu des tournois (tout s'y fait, joueurs et
+    admins), `hub ...` pour les hubs miroirs (admins) ;
+  - supprimés : `/phantasmon pokemon *` (tout se fait dans le PC), `trade *`, `battle *`, `hub join | decline |
+    always | autojoin` (on entre dans un Hub sans invitation), `/phantasmon tournament *`, `/events *`.
+- **Conséquences** : `PokemonCommandHandler` devient `PcOpener` ; `TradeCommandHandler`, `TradeClient` et leurs DTO
+  sont retirés ; la portée de visée des avatars du Hub passe de 10 à 20 blocs (la roue des vrais joueurs suit
+  Cobblemon, 64 blocs).
