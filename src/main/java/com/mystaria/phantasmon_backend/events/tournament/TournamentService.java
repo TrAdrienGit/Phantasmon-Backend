@@ -35,7 +35,18 @@ public class TournamentService {
 	/** A tournament as the API shows it. */
 	public record View(String name, String kind, int bestOf, String formatId, String formatName, String status,
 			Instant startsAt, Instant registrationOpensAt, Instant registrationClosesAt, boolean registrationOpen,
-			Integer plannedRounds, int currentRound, List<PlayerView> players) {
+			Integer plannedRounds, int currentRound, List<PlayerView> players, List<MatchView> matches,
+			List<StandingView> standings) {
+	}
+
+	/** A match: its players' names, games won by each, winner (null until decided). */
+	public record MatchView(int round, String bracket, int position, String player1, String player2, int wins1, int wins2,
+			String winner, String status, boolean forfeit) {
+	}
+
+	/** A line of the Swiss standings, best first. */
+	public record StandingView(int rank, String username, int points, int wins, int losses, int buchholz,
+			double opponentsWinRate, boolean dropped) {
 	}
 
 	public record PlayerView(UUID uuid, String username, boolean checkedIn, boolean dropped) {
@@ -55,11 +66,16 @@ public class TournamentService {
 	private final PlayerRepository playerRepository;
 	private final ShowdownDataSource showdown;
 	private final SessionRegistry sessionRegistry;
+	private final TournamentMatchRepository matches;
+	private final com.mystaria.phantasmon_backend.battle.LiveBattleService liveBattleService;
 
 	public TournamentService(TournamentRepository tournaments, TournamentPlayerRepository players,
-			PlayerRepository playerRepository, ShowdownDataSource showdown, SessionRegistry sessionRegistry) {
+			PlayerRepository playerRepository, ShowdownDataSource showdown, SessionRegistry sessionRegistry,
+			TournamentMatchRepository matches, com.mystaria.phantasmon_backend.battle.LiveBattleService liveBattleService) {
+		this.liveBattleService = liveBattleService;
 		this.tournaments = tournaments;
 		this.players = players;
+		this.matches = matches;
 		this.playerRepository = playerRepository;
 		this.showdown = showdown;
 		this.sessionRegistry = sessionRegistry;
@@ -112,6 +128,12 @@ public class TournamentService {
 		}
 		TournamentPlayer entry = players.findById(new TournamentPlayer.Key(tournament.getUuid(), playerUuid)).orElseThrow(() ->
 				new ApiException(HttpStatus.NOT_FOUND, "ERROR_TOURNAMENT_NOT_REGISTERED", Map.of("tournament", tournament.getName())));
+		// The active Ghost team checked against the tournament's format now, not at the first battle (Adrien 2026-10-30).
+		List<String> issues = liveBattleService.ghostTeamIssues(playerUuid, tournament.getFormatId());
+		if (!issues.isEmpty()) {
+			throw new ApiException(HttpStatus.CONFLICT, "ERROR_TOURNAMENT_TEAM_INVALID", Map.of("tournament", tournament.getName(),
+					"issues", issues.subList(0, Math.min(5, issues.size()))));
+		}
 		entry.setCheckedIn(true);
 		return changed(tournament);
 	}
@@ -213,6 +235,22 @@ public class TournamentService {
 		return changed(tournament);
 	}
 
+	/**
+	 * A cancelled tournament erased with everything tied to it (players, rounds, matches), gone from the list (Adrien
+	 * 2026-10-30). Only a cancelled one: the most recent cancelled tournament of that name.
+	 */
+	@Transactional
+	public void purge(UUID adminUuid, String name) {
+		String key = name == null ? "" : name.strip();
+		Tournament tournament = tournaments.findAllByOrderByCreatedAtDesc().stream()
+				.filter(t -> t.getName().equalsIgnoreCase(key) && Tournament.CANCELLED.equals(t.getStatus())).findFirst()
+				.orElseThrow(() -> new ApiException(HttpStatus.CONFLICT, "ERROR_TOURNAMENT_NOT_CANCELLED", Map.of("tournament", key)));
+		tournaments.delete(tournament); // players and matches go with it (ON DELETE CASCADE)
+		tournaments.flush();
+		log.info("Admin {} erased cancelled tournament {}", adminUuid, tournament.getName());
+		sessionRegistry.broadcast(WsMessage.of("EventsTournamentChanged", Map.of("tournament", tournament.getName())));
+	}
+
 	// ---------------------------------------------------------------- internals
 
 	private View add(Tournament tournament, Player player, UUID adminUuid) {
@@ -264,12 +302,37 @@ public class TournamentService {
 
 	View view(Tournament tournament) {
 		BattleFormats.Format format = showdown.formats().get(tournament.getFormatId());
-		List<PlayerView> entries = players.findByKeyTournamentUuidOrderByRegisteredAtAsc(tournament.getUuid()).stream()
+		List<TournamentPlayer> registered = players.findByKeyTournamentUuidOrderByRegisteredAtAsc(tournament.getUuid());
+		List<PlayerView> entries = registered.stream()
 				.map(p -> new PlayerView(p.playerUuid(), p.getUsername(), p.isCheckedIn(), p.isDropped())).toList();
+		Map<UUID, TournamentPlayer> byUuid = new java.util.HashMap<>();
+		registered.forEach(p -> byUuid.put(p.playerUuid(), p));
+		java.util.function.Function<UUID, String> nameOf = uuid -> uuid == null ? null
+				: byUuid.containsKey(uuid) ? byUuid.get(uuid).getUsername() : "?";
+		List<TournamentMatch> all = matches.findByTournamentUuidOrderByRoundAscPositionAsc(tournament.getUuid());
+		List<MatchView> matchViews = all.stream().map(m -> new MatchView(m.getRound(), m.getBracket(), m.getPosition(),
+				nameOf.apply(m.getPlayer1()), nameOf.apply(m.getPlayer2()), m.getWins1(), m.getWins2(), nameOf.apply(m.getWinner()),
+				m.getStatus(), m.isForfeit())).toList();
+		List<StandingView> standings = new java.util.ArrayList<>();
+		if (Tournament.SWISS.equals(tournament.getKind()) && !all.isEmpty()) {
+			List<Swiss.Row> rows = Swiss.standings(registered.stream().map(TournamentPlayer::playerUuid).toList(), results(all));
+			for (int i = 0; i < rows.size(); i++) {
+				Swiss.Row row = rows.get(i);
+				standings.add(new StandingView(i + 1, nameOf.apply(row.player()), row.points(), row.wins(), row.losses(),
+						row.buchholz(), Math.round(row.opponentsWinRate() * 1000) / 1000.0,
+						byUuid.containsKey(row.player()) && byUuid.get(row.player()).isDropped()));
+			}
+		}
 		return new View(tournament.getName(), tournament.getKind(), tournament.getBestOf(), tournament.getFormatId(),
 				format == null ? tournament.getFormatId() : format.name(), tournament.getStatus(), tournament.getStartsAt(),
 				tournament.getRegistrationOpensAt(), tournament.getRegistrationClosesAt(), registrationOpen(tournament),
 				tournament.getPlannedRounds() == null ? null : tournament.getPlannedRounds().intValue(),
-				tournament.getCurrentRound(), entries);
+				tournament.getCurrentRound(), entries, matchViews, standings);
+	}
+
+	/** The decided matches, as the Swiss logic reads them. */
+	static List<Swiss.Result> results(List<TournamentMatch> all) {
+		return all.stream().filter(m -> TournamentMatch.DONE.equals(m.getStatus()) && m.getWinner() != null)
+				.map(m -> new Swiss.Result(m.getPlayer1(), m.getPlayer2(), m.getWinner())).toList();
 	}
 }

@@ -20,11 +20,20 @@ import com.mystaria.phantasmon_backend.admin.AdminService;
 public class TournamentController {
 
 	private final TournamentService service;
+	private final TournamentRunService run;
 	private final AdminService adminService;
 
-	public TournamentController(TournamentService service, AdminService adminService) {
+	public TournamentController(TournamentService service, TournamentRunService run, AdminService adminService) {
 		this.service = service;
+		this.run = run;
 		this.adminService = adminService;
+	}
+
+	/** {@code POST /admin/tournaments/{name}/result}: {@code username} wins their match, or loses it by forfeit. */
+	public record ResultRequest(String username, Boolean forfeit) {
+	}
+
+	public record RoundsRequest(Integer delta) {
 	}
 
 	public record PlayerRequest(String username) {
@@ -89,6 +98,44 @@ public class TournamentController {
 	@PostMapping("/admin/tournaments/{name}/cancel")
 	public TournamentService.View cancel(@PathVariable String name, Authentication authentication) {
 		return service.cancel(admin(authentication), name);
+	}
+
+	@PostMapping("/admin/tournaments/{name}/start")
+	public TournamentService.View start(@PathVariable String name, Authentication authentication) {
+		return run.start(admin(authentication), name);
+	}
+
+	@PostMapping("/admin/tournaments/{name}/next-round")
+	public TournamentService.View nextRound(@PathVariable String name, Authentication authentication) {
+		return run.nextRound(admin(authentication), name);
+	}
+
+	@PostMapping("/admin/tournaments/{name}/rounds")
+	public TournamentService.View rounds(@PathVariable String name, @RequestBody RoundsRequest request, Authentication authentication) {
+		admin(authentication);
+		return run.changeRounds(name, request.delta() == null ? 0 : request.delta());
+	}
+
+	@PostMapping("/admin/tournaments/{name}/result")
+	public TournamentService.View result(@PathVariable String name, @RequestBody ResultRequest request, Authentication authentication) {
+		return run.setResult(admin(authentication), name, request.username(), Boolean.TRUE.equals(request.forfeit()));
+	}
+
+	@PostMapping("/admin/tournaments/{name}/reinvite")
+	public TournamentService.View reinvite(@PathVariable String name, @RequestBody PlayerRequest request, Authentication authentication) {
+		admin(authentication);
+		return run.reinvite(name, request.username());
+	}
+
+	@PostMapping("/admin/tournaments/{name}/finish")
+	public TournamentService.View finish(@PathVariable String name, Authentication authentication) {
+		return run.finish(admin(authentication), name);
+	}
+
+	@DeleteMapping("/admin/tournaments/{name}")
+	public ResponseEntity<Void> purge(@PathVariable String name, Authentication authentication) {
+		service.purge(admin(authentication), name);
+		return ResponseEntity.noContent().build();
 	}
 
 	private UUID admin(Authentication authentication) {

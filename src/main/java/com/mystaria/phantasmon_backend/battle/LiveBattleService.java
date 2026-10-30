@@ -117,6 +117,8 @@ public class LiveBattleService {
 		/** Admin solo battle: host and guest are the same player, the other side is a mirror played by the host's AI. */
 		final boolean solo;
 		boolean timerEnabled;
+		/** A tournament match's game: the tournament is told how it ended. */
+		UUID tournamentMatch;
 		/** Watching players, in arrival order. */
 		final java.util.Set<UUID> spectators = new java.util.LinkedHashSet<>();
 		/** Players who see the field without watching (same server group or Global Hub as a player), see {@link #refreshViewers}. */
@@ -157,6 +159,8 @@ public class LiveBattleService {
 		UUID timerBy;
 		/** Battle format, picked by either player (TODO-24); "free" = no rule. */
 		String formatId = BattleFormats.FREE;
+		/** A tournament match's game (Phantasmon Events): its format is the tournament's, not changeable. */
+		UUID tournamentMatch;
 
 		Lobby(UUID uuid, UUID inviterUuid, UUID inviteeUuid) {
 			this.uuid = uuid;
@@ -177,6 +181,97 @@ public class LiveBattleService {
 	private boolean isBusy(UUID playerUuid) {
 		return battlesByPlayer.containsKey(playerUuid) || lobbiesByPlayer.containsKey(playerUuid)
 				|| battlesBySpectator.containsKey(playerUuid);
+	}
+
+	// ---- Tournaments (Phantasmon Events) ----
+
+	/** What a tournament learns of its matches' games. Called under this service's lock. */
+	public interface TournamentHook {
+		/** A game ended; {@code winnerUuid} null for a draw (disconnection, backend stopping, admin stop). */
+		void onGameEnded(UUID matchUuid, UUID winnerUuid, String reason);
+
+		/** The match's lobby closed before its battle started (a player left, the timer ran out...). */
+		void onLobbyCancelled(UUID matchUuid, String reason);
+
+		/** The opponent a player is paired with in a running tournament's round, not played yet; null if none. */
+		UUID pairedOpponent(UUID playerUuid);
+
+		/** A lobby of two paired players opened: their match (now being played) and its format; null if not paired. */
+		Binding bindLobby(UUID playerA, UUID playerB);
+	}
+
+	public record Binding(UUID matchUuid, String formatId) {
+	}
+
+	/**
+	 * Paired players (Adrien 2026-10-30): one paired in a tournament round battles only their opponent until their
+	 * match is decided. Null if the battle between them is allowed, else the error code.
+	 */
+	private String tournamentRefusal(UUID inviterUuid, UUID targetUuid) {
+		if (tournamentHook == null) {
+			return null;
+		}
+		UUID mine = tournamentHook.pairedOpponent(inviterUuid);
+		if (mine != null && !mine.equals(targetUuid)) {
+			return "ERROR_BATTLE_TOURNAMENT_PAIRED";
+		}
+		UUID theirs = tournamentHook.pairedOpponent(targetUuid);
+		if (theirs != null && !theirs.equals(inviterUuid)) {
+			return "ERROR_BATTLE_PARTNER_IN_TOURNAMENT";
+		}
+		return null;
+	}
+
+	/** The problems of a player's active Ghost team in that format (empty: allowed), e.g. for a tournament check-in. */
+	public synchronized List<String> ghostTeamIssues(UUID playerUuid, String formatId) {
+		List<PokemonResponse> team = resolve(playerUuid, BattleTeam.GHOST);
+		if (team.isEmpty()) {
+			return List.of("EMPTY_TEAM");
+		}
+		BattleFormats.Format format = showdown.formats().get(formatId);
+		List<TeamValidator.Member> members = team.stream().map(LiveBattleService::member).toList();
+		List<String> problems = new ArrayList<>();
+		List<List<TeamValidator.Issue>> issues = showdown.validator().validate(format, members);
+		for (int i = 0; i < issues.size(); i++) {
+			for (TeamValidator.Issue issue : issues.get(i)) {
+				problems.add(team.get(i).species() + ": " + issue.code() + (issue.subject() == null ? "" : " " + issue.subject()));
+			}
+		}
+		return problems;
+	}
+
+	private TournamentHook tournamentHook;
+
+	public void setTournamentHook(TournamentHook hook) {
+		this.tournamentHook = hook;
+	}
+
+	/**
+	 * A tournament match's game: the lobby of the two players opens at once, without an invitation, with the
+	 * tournament's format (not changeable) and their Ghost teams. False if one of them is offline or busy.
+	 */
+	public synchronized boolean openTournamentLobby(UUID matchUuid, UUID playerA, UUID playerB, String formatId) {
+		if (!sessionRegistry.isConnected(playerA) || !sessionRegistry.isConnected(playerB) || isBusy(playerA) || isBusy(playerB)) {
+			return false;
+		}
+		Lobby lobby = new Lobby(UUID.randomUUID(), playerA, playerB);
+		lobby.formatId = formatId;
+		lobby.tournamentMatch = matchUuid;
+		choose(lobby.inviterSide, playerA, BattleTeam.GHOST);
+		choose(lobby.inviteeSide, playerB, BattleTeam.GHOST);
+		lobbiesByPlayer.put(playerA, lobby);
+		lobbiesByPlayer.put(playerB, lobby);
+		log.info("Tournament lobby {} opened for match {}: {} vs {} ({})", lobby.uuid, matchUuid, playerA, playerB, formatId);
+		sendLobby(lobby, playerA);
+		sendLobby(lobby, playerB);
+		ghostRecall.recall(playerA, "tournament lobby");
+		ghostRecall.recall(playerB, "tournament lobby");
+		return true;
+	}
+
+	/** Whether the player is in a battle or a lobby right now. */
+	public synchronized boolean inBattleOrLobby(UUID playerUuid) {
+		return battlesByPlayer.containsKey(playerUuid) || lobbiesByPlayer.containsKey(playerUuid);
 	}
 
 	// ---- Invitation ----
@@ -201,6 +296,8 @@ public class LiveBattleService {
 			sendError(inviterUuid, "ERROR_BATTLE_PARTNER_UNAVAILABLE");
 		} else if (isBusy(targetUuid)) {
 			sendError(inviterUuid, "ERROR_BATTLE_PARTNER_BUSY");
+		} else if (tournamentRefusal(inviterUuid, targetUuid) != null) {
+			sendError(inviterUuid, tournamentRefusal(inviterUuid, targetUuid));
 		} else {
 			invites.values().removeIf(existing -> existing.inviterUuid().equals(inviterUuid) && existing.inviteeUuid().equals(targetUuid));
 			Invite invite = new Invite(UUID.randomUUID(), inviterUuid, targetUuid, clock.instant(), inviterTeam);
@@ -256,7 +353,18 @@ public class LiveBattleService {
 			sendError(inviteeUuid, "ERROR_BATTLE_INVALID_PARTY");
 			return;
 		}
+		String refusal = tournamentRefusal(inviterUuid, inviteeUuid);
+		if (refusal != null) {
+			sendError(inviteeUuid, refusal);
+			return;
+		}
 		Lobby lobby = new Lobby(UUID.randomUUID(), inviterUuid, inviteeUuid);
+		Binding binding = tournamentHook == null ? null : tournamentHook.bindLobby(inviterUuid, inviteeUuid);
+		if (binding != null) {
+			// Their tournament match: its format, not changeable.
+			lobby.tournamentMatch = binding.matchUuid();
+			lobby.formatId = binding.formatId();
+		}
 		choose(lobby.inviterSide, inviterUuid, invite.inviterTeam());
 		choose(lobby.inviteeSide, inviteeUuid, inviteeChoice);
 		lobbiesByPlayer.put(inviterUuid, lobby);
@@ -320,6 +428,10 @@ public class LiveBattleService {
 		}
 		if (showdown.formats().get(formatId) == null) {
 			sendError(playerUuid, "ERROR_BATTLE_UNKNOWN_FORMAT");
+			return;
+		}
+		if (lobby.tournamentMatch != null) {
+			sendError(playerUuid, "ERROR_BATTLE_FORMAT_LOCKED");
 			return;
 		}
 		if (formatId.equals(lobby.formatId)) {
@@ -456,6 +568,9 @@ public class LiveBattleService {
 		data.put("by_name", byUuid == null ? null : nameOf(byUuid));
 		sessionRegistry.send(lobby.inviterUuid, WsMessage.of("BattleLobbyCancelled", data));
 		sessionRegistry.send(lobby.inviteeUuid, WsMessage.of("BattleLobbyCancelled", data));
+		if (lobby.tournamentMatch != null && tournamentHook != null) {
+			tournamentHook.onLobbyCancelled(lobby.tournamentMatch, reason);
+		}
 	}
 
 	/**
@@ -566,6 +681,7 @@ public class LiveBattleService {
 				hostTeam.stream().map(PokemonResponse::uuid).toList(), guestTeam.stream().map(PokemonResponse::uuid).toList());
 		battleRepository.save(session);
 		LiveBattle battle = new LiveBattle(session.getUuid(), hostUuid, guestUuid);
+		battle.tournamentMatch = lobby.tournamentMatch;
 		battlesByPlayer.put(hostUuid, battle);
 		battlesByPlayer.put(guestUuid, battle);
 		log.info("Live battle {} started from lobby {}: host {} vs guest {}", battle.uuid, lobby.uuid, hostUuid, guestUuid);
@@ -988,6 +1104,9 @@ public class LiveBattleService {
 		WsMessage fieldEnded = WsMessage.of("BattleFieldEnded", Map.of("battle_uuid", battle.uuid, "reason", reason));
 		battle.viewers.forEach(viewer -> sessionRegistry.send(viewer, fieldEnded));
 		battle.viewers.clear();
+		if (battle.tournamentMatch != null && tournamentHook != null) {
+			tournamentHook.onGameEnded(battle.tournamentMatch, winnerUuid, reason);
+		}
 	}
 
 	private LiveBattle battleOf(UUID playerUuid, UUID battleUuid) {
