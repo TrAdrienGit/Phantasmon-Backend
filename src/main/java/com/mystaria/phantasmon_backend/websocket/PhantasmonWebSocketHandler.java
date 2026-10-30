@@ -251,6 +251,9 @@ public class PhantasmonWebSocketHandler extends TextWebSocketHandler {
 			case "EventsMirrorTile" -> mirrorService.receiveTile(playerUuid, incoming.data());
 			case "EventsMirrorSubscribe" -> mirrorService.subscribe(playerUuid, incoming.data().get("hub"), true);
 			case "EventsMirrorUnsubscribe" -> mirrorService.subscribe(playerUuid, incoming.data().get("hub"), false);
+			case "EventsMirrorGhosts" -> mirrorService.receiveGhosts(playerUuid, incoming.data());
+			case "EventsMirrorWatch" -> mirrorService.watch(playerUuid, incoming.data().get("hub"), true);
+			case "EventsMirrorUnwatch" -> mirrorService.watch(playerUuid, incoming.data().get("hub"), false);
 			case "Heartbeat" -> {
 				presenceService.heartbeat(playerUuid);
 				send(session, WsMessage.of("HeartbeatAck", Map.of()));

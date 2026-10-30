@@ -54,6 +54,12 @@ import com.mystaria.phantasmon_backend.websocket.WsMessage;
  * <li>both carry the hub's {@code radius}: a message for another radius (the hub was just resized) is ignored.</li>
  * </ul>
  * Saved in the hub's folder ({@code mirror.bin}) every 10 s when changed.
+ *
+ * <p><b>Ghost blocks</b> (Adrien 2026-10-30): an admin building a copy may place blocks in it; they are sent here
+ * ({@code EventsMirrorGhosts}, {@code ""} removes one) and shown, client-only, to the players in the source zone
+ * (watchers, {@code EventsMirrorWatch}) and in the other copies. The Minecraft server never knows them, so they are
+ * kept in memory only and meant to be cleared ({@link #clearGhosts}); a real block changed where a ghost stands
+ * removes the ghost; a resize removes them all.
  */
 @Service
 public class MirrorService {
@@ -66,6 +72,7 @@ public class MirrorService {
 	private static final int MAX_CHANGES = 8192;
 	private static final short UNKNOWN = -1;
 	private static final int FILE_FORMAT = 2;
+	private static final int MAX_GHOSTS = 200_000;
 
 	/** {@code GET /events/mirror/{hub}}: the hub's known tiles and their hashes ({@code [tx, tz, hash]}). */
 	public record Info(String hub, int radius, int side, long version, List<long[]> tiles) {
@@ -201,6 +208,10 @@ public class MirrorService {
 	private final Map<UUID, Terrain> terrains = new ConcurrentHashMap<>();
 	/** Hub → the admins building its copy right now. */
 	private final Map<UUID, Set<UUID>> subscribers = new ConcurrentHashMap<>();
+	/** Hub → the players in its source zone, shown its ghost blocks. */
+	private final Map<UUID, Set<UUID>> watchers = new ConcurrentHashMap<>();
+	/** Hub → its ghost blocks, {@link #ghostKey} → state. Memory only. */
+	private final Map<UUID, Map<Long, String>> ghosts = new ConcurrentHashMap<>();
 
 	public MirrorService(HubRepository hubRepository, HubAnchorRepository anchorRepository, PresenceService presenceService,
 			AdminService adminService, SessionRegistry sessionRegistry,
@@ -357,6 +368,106 @@ public class MirrorService {
 			terrain.dirty = true;
 		}
 		publish(hub, WsMessage.of("EventsMirrorBlocks", Map.of("hub", hub.getName(), "version", version, "changes", applied)));
+		// The real block changed where a ghost stood: the ghost goes, both sides agree again.
+		Map<Long, String> hubGhosts = ghosts.get(hub.getUuid());
+		if (hubGhosts != null && !hubGhosts.isEmpty()) {
+			List<List<Object>> removed = new ArrayList<>();
+			for (List<Object> change : applied) {
+				int x = (Integer) change.get(0);
+				int y = (Integer) change.get(1);
+				int z = (Integer) change.get(2);
+				if (hubGhosts.remove(ghostKey(x, y, z)) != null) {
+					removed.add(List.of(x, y, z, ""));
+				}
+			}
+			publishGhosts(hub, removed);
+		}
+	}
+
+	// ---------------------------------------------------------------- ghost blocks
+
+	/** {@code x} and {@code z} below 2^27, {@code y} below 512. */
+	private static long ghostKey(int x, int y, int z) {
+		return ((long) x << 36) | ((long) z << 9) | y;
+	}
+
+	private static List<Object> ghostChange(long key, String state) {
+		return List.of((int) (key >>> 36), (int) (key & 511), (int) ((key >>> 9) & ((1 << 27) - 1)), state);
+	}
+
+	public List<List<Object>> ghosts(String hubName) {
+		Hub hub = mirrorHub(hubName);
+		List<List<Object>> list = new ArrayList<>();
+		ghosts.getOrDefault(hub.getUuid(), Map.of()).forEach((key, state) -> list.add(ghostChange(key, state)));
+		return list;
+	}
+
+	/**
+	 * {@code EventsMirrorGhosts}: {@code hub, changes} ({@code [x, y, z, state]}, zone-relative, {@code ""} removes), from
+	 * an admin who has a copy of that hub.
+	 */
+	public void receiveGhosts(UUID playerUuid, Map<String, Object> data) {
+		Hub hub = hubRepository.findByNameIgnoreCase(String.valueOf(data.get("hub"))).filter(Hub::isMirror).orElse(null);
+		if (hub == null || !(data.get("changes") instanceof List<?> changes) || changes.size() > MAX_CHANGES
+				|| !adminService.isAdmin(playerUuid)
+				|| anchorRepository.findByOwnerUuidAndHubUuid(playerUuid, hub.getUuid())
+						.filter(anchor -> HubAnchor.ROLE_COPY.equals(anchor.getRole())).isEmpty()) {
+			return;
+		}
+		Terrain terrain = terrain(hub);
+		Map<Long, String> hubGhosts = ghosts.computeIfAbsent(hub.getUuid(), uuid -> new ConcurrentHashMap<>());
+		List<List<Object>> applied = new ArrayList<>();
+		for (Object raw : changes) {
+			if (!(raw instanceof List<?> change) || change.size() != 4 || !(change.get(0) instanceof Number x)
+					|| !(change.get(1) instanceof Number y) || !(change.get(2) instanceof Number z)
+					|| !(change.get(3) instanceof String state) || state.length() > MAX_STATE_LENGTH
+					|| !terrain.inside(x.intValue(), y.intValue(), z.intValue())) {
+				continue;
+			}
+			long key = ghostKey(x.intValue(), y.intValue(), z.intValue());
+			boolean changed = state.isEmpty() ? hubGhosts.remove(key) != null
+					: (hubGhosts.containsKey(key) || hubGhosts.size() < MAX_GHOSTS) && !state.equals(hubGhosts.put(key, state));
+			if (changed) {
+				applied.add(List.of(x.intValue(), y.intValue(), z.intValue(), state));
+			}
+		}
+		publishGhosts(hub, applied);
+	}
+
+	/** Removes all the hub's ghost blocks; how many there were. */
+	public int clearGhosts(String hubName) {
+		Hub hub = mirrorHub(hubName);
+		Map<Long, String> hubGhosts = ghosts.remove(hub.getUuid());
+		if (hubGhosts == null) {
+			return 0;
+		}
+		List<List<Object>> removed = new ArrayList<>();
+		hubGhosts.keySet().forEach(key -> removed.add(ghostChange(key, "")));
+		publishGhosts(hub, removed);
+		return removed.size();
+	}
+
+	/** {@code EventsMirrorGhosts} to the copies and the watchers, in batches. */
+	private void publishGhosts(Hub hub, List<List<Object>> changes) {
+		for (int from = 0; from < changes.size(); from += MAX_CHANGES) {
+			WsMessage message = WsMessage.of("EventsMirrorGhosts", Map.of("hub", hub.getName(),
+					"changes", changes.subList(from, Math.min(changes.size(), from + MAX_CHANGES))));
+			publish(hub, message);
+			watchers.getOrDefault(hub.getUuid(), Set.of()).forEach(watcher -> sessionRegistry.send(watcher, message));
+		}
+	}
+
+	/** {@code EventsMirrorWatch} / {@code EventsMirrorUnwatch} {@code {hub}}: a player in the source zone. */
+	public void watch(UUID playerUuid, Object hubName, boolean watch) {
+		Hub hub = hubRepository.findByNameIgnoreCase(String.valueOf(hubName)).filter(Hub::isMirror).orElse(null);
+		if (hub == null) {
+			return;
+		}
+		if (watch) {
+			watchers.computeIfAbsent(hub.getUuid(), uuid -> ConcurrentHashMap.newKeySet()).add(playerUuid);
+		} else {
+			watchers.getOrDefault(hub.getUuid(), Set.of()).remove(playerUuid);
+		}
 	}
 
 	/** The hub of a feeding message, if the sender is on its source zone's server and dimension and the radius matches. */
@@ -393,6 +504,7 @@ public class MirrorService {
 
 	public void onDisconnect(UUID playerUuid) {
 		subscribers.values().forEach(set -> set.remove(playerUuid));
+		watchers.values().forEach(set -> set.remove(playerUuid));
 	}
 
 	/**
@@ -400,6 +512,13 @@ public class MirrorService {
 	 * outside are dropped; the copies start again ({@code EventsMirrorReset}).
 	 */
 	public void resize(Hub hub, int oldRadius) {
+		// Ghost blocks are zone-relative under the old corner: removed (watchers given the real blocks back first).
+		Map<Long, String> hubGhosts = ghosts.remove(hub.getUuid());
+		if (hubGhosts != null) {
+			List<List<Object>> removed = new ArrayList<>();
+			hubGhosts.keySet().forEach(key -> removed.add(ghostChange(key, "")));
+			publishGhosts(hub, removed);
+		}
 		Terrain old = terrain(hub, oldRadius);
 		Terrain resized = new Terrain(2 * hub.getRadius() + 1);
 		int shift = hub.getRadius() - oldRadius;
