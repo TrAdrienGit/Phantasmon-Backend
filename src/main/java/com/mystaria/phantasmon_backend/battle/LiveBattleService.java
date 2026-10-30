@@ -161,6 +161,11 @@ public class LiveBattleService {
 		String formatId = BattleFormats.FREE;
 		/** A tournament match's game (Phantasmon Events): its format is the tournament's, not changeable. */
 		UUID tournamentMatch;
+		/**
+		 * The battle ambiance both players see (Cobblemon Spectacle phase A3), picked by either: an ambiance id
+		 * ({@code namespace:name}), or "" for each player's own choice.
+		 */
+		String ambiance = "";
 
 		Lobby(UUID uuid, UUID inviterUuid, UUID inviteeUuid) {
 			this.uuid = uuid;
@@ -471,6 +476,27 @@ public class LiveBattleService {
 		sendLobby(lobby, lobby.other(playerUuid));
 	}
 
+	private static final java.util.regex.Pattern AMBIANCE_ID = java.util.regex.Pattern.compile("[a-z0-9_.-]{1,64}:[a-z0-9_./-]{1,64}");
+
+	/** Battle ambiance (Spectacle A3): either player picks it, for both; "" = each player's own. Nobody is unreadied. */
+	public synchronized void setLobbyAmbiance(UUID playerUuid, UUID lobbyUuid, String ambiance) {
+		Lobby lobby = lobbyOf(playerUuid, lobbyUuid);
+		if (lobby == null) {
+			return;
+		}
+		String id = ambiance == null ? "" : ambiance;
+		if (!id.isEmpty() && !AMBIANCE_ID.matcher(id).matches()) {
+			return;
+		}
+		if (id.equals(lobby.ambiance)) {
+			return;
+		}
+		lobby.ambiance = id;
+		log.info("Live battle lobby {}: ambiance {} picked by {}", lobby.uuid, id.isEmpty() ? "(each their own)" : id, playerUuid);
+		sendLobby(lobby, playerUuid);
+		sendLobby(lobby, lobby.other(playerUuid));
+	}
+
 	private BattleFormats.Format format(Lobby lobby) {
 		BattleFormats.Format format = showdown.formats().get(lobby.formatId);
 		return format != null ? format : showdown.formats().get(BattleFormats.FREE);
@@ -625,6 +651,7 @@ public class LiveBattleService {
 		// Format (TODO-24): the offered list, the picked one, what breaks it — in detail for one's own team, only a
 		// red circle for the opponent's (its items and moves stay hidden).
 		data.put("format_id", lobby.formatId);
+		data.put("ambiance", lobby.ambiance);
 		data.put("formats", showdown.formats().offered().stream()
 				.map(format -> Map.of("id", format.id(), "name", format.name())).toList());
 		data.put("own_team_issues", issues(lobby, own.team).stream()
@@ -720,12 +747,13 @@ public class LiveBattleService {
 				"own_team", hostTeam, "opponent_team", guestTeam,
 				"own_team_source", hostSource, "opponent_team_source", guestSource, "format", formatData));
 		hostView.put("intro", intro);
+		hostView.put("ambiance", lobby.ambiance);
 		sessionRegistry.send(hostUuid, WsMessage.of("BattleSessionStarted", hostView));
 		sessionRegistry.send(guestUuid, WsMessage.of("BattleSessionStarted", Map.of(
 				"battle_uuid", battle.uuid, "role", "GUEST",
 				"opponent_uuid", hostUuid, "opponent_name", nameOf(hostUuid),
 				"own_team", guestTeam, "own_team_source", guestSource, "opponent_team_source", hostSource,
-				"format", formatData, "intro", intro)));
+				"format", formatData, "intro", intro, "ambiance", lobby.ambiance)));
 		ghostRecall.recall(hostUuid, "battle started");
 		ghostRecall.recall(guestUuid, "battle started");
 		if (lobby.timerBy != null) {
