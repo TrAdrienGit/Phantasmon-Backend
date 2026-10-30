@@ -103,4 +103,4 @@ About 125 tests, written test-first. Integration tests boot the real application
 
 ## License
 
-GNU General Public License v3.0 — see [`LICENSE`](./LICENSE).
+Apache License 2.0 — see [`LICENSE`](./LICENSE). Free to use, modify and redistribute; forks and redistributions must keep [`NOTICE`](./NOTICE) and credit the original author.
