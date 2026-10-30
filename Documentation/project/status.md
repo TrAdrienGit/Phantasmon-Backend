@@ -29,12 +29,12 @@ production (phase 10), qu'Adrien ne monte pas pour l'instant (il reste sur sa ma
 
 **2026-10-07 — Core déclaré terminé par Adrien.** Seul du polish (UI, VFX, SFX, animations) continue sur `dev`.
 Le projet passe à **Phantasmon Network** (couche inter-serveurs), développé directement sur `dev`
-
-**2026-10-30 — Une seule branche.** Depuis le découpage en mods (Spectacle, Events, Trahison), chaque dépôt vit sur `main` uniquement ; `dev` a été fusionnée puis supprimée.
 ([D-27](../architecture/decisions.md#d-27--phantasmon-network-développé-sur-dev)) selon
 [`specifications/network-cahier-des-charges.md`](../specifications/network-cahier-des-charges.md).
 **Jalon 1 (« Hub social minimal ») et jalon 2 (« Interactions » : échange et combat entre serveurs) terminés et
 validés en jeu le 2026-10-07.**
+
+**2026-10-30 — Une seule branche.** Depuis le découpage en mods (Spectacle, Events, Trahison), chaque dépôt vit sur `main` uniquement ; `dev` a été fusionnée puis supprimée.
 
 | Étape Network | Périmètre | Statut |
 |---|---|---|
