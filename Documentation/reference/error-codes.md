@@ -120,6 +120,14 @@ Les codes marqués « — » côté client concernent des routes REST que le cli
 | `ERROR_HUB_OUT_OF_BOUNDS` | — | WS | `HubMove` hors de la zone du hub (\|x\| > largeur / 2, \|z\| > longueur / 2) ou `y_offset` hors de 0 à la hauteur (`details.half_size_x`, `half_size_z`, `height`) | `phantasmon.hub.error.out_of_bounds` |
 | `ERROR_HUB_CHAT_TOO_LONG` | — | WS | Message du chat du Hub de plus de 256 caractères | `phantasmon.hub.error.chat_too_long` |
 | `ERROR_HUB_CHAT_RATE_LIMITED` | — | WS | Plus d'un message du chat du Hub par seconde | `phantasmon.hub.error.chat_rate_limited` |
+| `ERROR_HUB_CHAT_MUTED` | — | WS | Joueur rendu muet par un admin dans le chat des hubs (`details.until`) | `phantasmon.hub.error.chat_muted` |
+| `ERROR_HUB_CHAT_LOCKED` | — | WS | Chat des hubs verrouillé par un admin (seuls les admins écrivent) | `phantasmon.hub.error.chat_locked` |
+| `ERROR_NPC_NOT_FOUND` | 404 | REST, WS | Dresseur PNJ inconnu, ou son événement est fermé (joueur) | `phantasmon.battle.error.npc_not_found` |
+| `ERROR_NPC_EMPTY_TEAM` | — | WS | `BattleNpcStart` : ce PNJ n'a pas encore d'équipe | `phantasmon.battle.error.npc_empty_team` |
+| `ERROR_NPC_NAME`, `ERROR_NPC_SKIN`, `ERROR_NPC_AI` | 400 | REST | Nom (32 au plus), skin (pseudo Minecraft) ou IA invalides | `phantasmon_events.error.*` (Events) |
+| `ERROR_EVENT_NAME` | 400 | REST | Nom d'événement invalide (minuscules, chiffres, `_`) | `phantasmon_events.error.error_event_name` |
+| `ERROR_EVENT_NOT_FOUND` | 404 | REST | Événement inconnu | `phantasmon_events.error.error_event_not_found` |
+| `ERROR_HUB_MUTE_DURATION` | 400 | REST | `POST /admin/hub/mute` : durée hors de 1 minute à 365 jours (`details.max_minutes`) | `phantasmon.admin.hub.bad_duration` |
 | `ERROR_HUB_NOT_FOUND` | 404 | REST | Aucun hub de ce nom (`details.hub`) | `phantasmon.hub.error.not_found` |
 | `ERROR_TOO_MANY_PLAYERS` | 400 | REST | `GET /trainer-profiles` : plus de 64 joueurs demandés (`details.max`) | — (jamais montré : Phantasmon demande par petits groupes) |
 | `ERROR_HUB_NAME_TAKEN` | 409 | REST | Admin : un hub porte déjà ce nom | `phantasmon.hub.error.name_taken` |

@@ -43,6 +43,16 @@
 | `GET` | [`/admin/players/{name}`](#administration) | Admin | Joueur par pseudo |
 | `POST` | [`/admin/battles/stop`](#administration) | Admin | Arrêter le combat / le lobby d'un joueur |
 | `POST` | [`/admin/reboot`](#administration) | Admin | Redémarrer le backend |
+| `POST` | [`/admin/hub/mute`](#administration) | Admin | Rendre un joueur muet dans le chat des hubs, pour un temps |
+| `POST` | [`/admin/hub/unmute`](#administration) | Admin | Lever ce silence |
+| `POST` | [`/admin/hub/lock`](#administration) | Admin | Verrouiller / déverrouiller le chat des hubs |
+| `GET` | [`/events/npcs`](#dresseurs-pnj-des-événements) | Joueur | Dresseurs PNJ visibles ici |
+| `GET` | [`/admin/events`](#dresseurs-pnj-des-événements) | Admin | Événements, ouverts ou non |
+| `POST` | [`/admin/events/npcs`](#dresseurs-pnj-des-événements) | Admin | Poser un dresseur PNJ |
+| `POST` | [`/admin/events/npcs/{uuid}`](#dresseurs-pnj-des-événements) | Admin | Le modifier (nom, skin, événement, IA, format, place) |
+| `POST` | [`/admin/events/npcs/{uuid}/team`](#dresseurs-pnj-des-événements) | Admin | Son équipe : copie de celle de l'admin |
+| `DELETE` | [`/admin/events/npcs/{uuid}`](#dresseurs-pnj-des-événements) | Admin | Le supprimer |
+| `POST` | [`/admin/events/{name}/open`](#dresseurs-pnj-des-événements) | Admin | Ouvrir ou fermer un événement |
 | `GET` | [`/hub/anchors`](#get-hubanchors) | Bearer | Anchors d'un serveur et d'une dimension |
 | `POST` | [`/hub/anchors`](#post-hubanchors) | Bearer | Créer son Anchor |
 | `GET` | [`/hub/anchors/mine`](#get-hubanchorsmine) | Bearer | Ses Anchors (un par hub au plus) |
@@ -401,6 +411,13 @@ change ; créé vide au premier démarrage). Sinon `403 ERROR_ADMIN_REQUIRED`.
   terminé en match nul (`reason` `ADMIN_STOPPED`) ou lobby annulé ; `404 ERROR_ADMIN_NOTHING_TO_STOP`.
 - `POST /admin/reboot` → `202 { "rebooting": true }` : le contexte Spring est fermé puis relancé dans le même
   processus une demi-seconde plus tard.
+- Modération du chat des hubs (TODO-31) :
+  - `POST /admin/hub/mute` `{ "player": "<pseudo>", "minutes": n }` → `{ "player", "until" }` : muet jusqu'à
+    `until` (remplace un silence en cours ; table `hub_chat_mutes`, gardé au redémarrage) ; `400 ERROR_HUB_MUTE_DURATION`
+    hors de 1 minute à 365 jours ; le joueur reçoit `HubChatMuted` ;
+  - `POST /admin/hub/unmute` `{ "player": "<pseudo>" }` → `{ "player", "was_muted" }` ;
+  - `POST /admin/hub/lock` → `{ "locked" }` : bascule le verrou global (seuls les admins écrivent ; en mémoire, levé
+    au redémarrage) ; tous les membres des hubs reçoivent `HubChatLock`.
 - PC d'un autre joueur : les routes Pokémon habituelles acceptent un admin — `GET /players/{uuid}/pokemon` et
   `.../pc` pour n'importe quel joueur ; `PATCH` / `DELETE` / `clone` agissent au nom du propriétaire du Pokémon ;
   `POST /pokemon?owner={uuid}` crée dans le PC de ce joueur (`403 ERROR_ADMIN_REQUIRED` pour un non-admin).
@@ -546,3 +563,26 @@ plus : `400 ERROR_TOO_MANY_PLAYERS` (`details.max`).
 
 `GET/PUT /players/{uuid}/team`, `POST /pokemon/import-showdown`, `GET /pokemon/{uuid}/export`, routes `/admin/*`.
 Raisons : décisions D-09 et D-20 ([`architecture/decisions.md`](../architecture/decisions.md)).
+
+## Dresseurs PNJ des événements
+
+Phantasmon Events (Adrien 2026-11-02). Un dresseur PNJ appartient à un événement ; les joueurs ne le voient et ne le
+défient que si l'événement est ouvert, les admins toujours (pour le régler). Chaque changement envoie
+`EventsNpcsChanged` à tous les clients connectés, qui relisent la liste.
+
+- `GET /events/npcs?server=<empreinte>&dimension=<id>` → `[{ "uuid", "event", "open", "name", "skin", "x", "y", "z",
+  "yaw", "ai", "format_id", "team_size", "team_species" }]` (`team_species` : admins seulement).
+- `GET /admin/events` → `[{ "name", "open", "npcs" }]`.
+- `POST /admin/events/npcs` `{ "event", "name", "server_fingerprint", "dimension", "x", "y", "z", "yaw" }` → le PNJ ;
+  l'événement est créé (fermé) s'il n'existe pas. `400 ERROR_EVENT_NAME` (minuscules, chiffres, `_`, 32 au plus),
+  `ERROR_NPC_NAME`.
+- `POST /admin/events/npcs/{uuid}` : chaque champ facultatif — `name`, `skin` (pseudo Minecraft, vide : aucun,
+  `ERROR_NPC_SKIN`), `event`, `ai` (`random`, `easy`, `normal`, `hard`, `veryhard`, `ERROR_NPC_AI`), `format_id`, et
+  la place (`server_fingerprint`, `dimension`, `x`, `y`, `z`, `yaw` ensemble). `404 ERROR_NPC_NOT_FOUND`.
+- `POST /admin/events/npcs/{uuid}/team` `{ "team": "GHOST" }` ou `{ "team": "COBBLEMON", "party": [...] }` (comme une
+  invitation) : l'équipe du PNJ devient une copie de celle de l'admin (6 au plus). `400 ERROR_BATTLE_EMPTY_TEAM`,
+  `ERROR_BATTLE_INVALID_PARTY`.
+- `DELETE /admin/events/npcs/{uuid}` → `{ "deleted": true }`.
+- `POST /admin/events/{name}/open` `{ "open": bool }` → `{ "name", "open" }` ; `404 ERROR_EVENT_NOT_FOUND`.
+
+Le combat contre un PNJ passe par le WebSocket (`BattleNpcStart`).

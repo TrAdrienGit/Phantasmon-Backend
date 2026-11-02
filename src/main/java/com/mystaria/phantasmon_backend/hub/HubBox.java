@@ -10,7 +10,8 @@ record HubBox(int minX, int minY, int minZ, int maxX, int maxY, int maxZ) {
 
 	static HubBox of(double originX, double originY, double originZ, int yaw, int sizeX, int sizeY, int sizeZ) {
 		int centerX = (int) Math.floor(originX);
-		int baseY = (int) Math.ceil(originY - 1.0E-4);
+		// One block down: the floor layer replaces the ground under the anchor (TODO-33), as in the client's HubBuildLayout.
+		int baseY = (int) Math.ceil(originY - 1.0E-4) - 1;
 		int centerZ = (int) Math.floor(originZ);
 		int turns = Math.floorMod(yaw, 360) / 90 % 4;
 		int[] a = toWorld(centerX, baseY, centerZ, turns, sizeX, sizeZ, 0, 0, 0);

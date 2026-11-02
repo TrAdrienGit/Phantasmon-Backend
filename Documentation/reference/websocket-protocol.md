@@ -200,7 +200,7 @@ de l'invité (`BattlePacket`) n'est jamais recopié : il porte l'équipe et les 
 
 | S2C | `data` | Destinataires |
 |---|---|---|
-| `BattleSpectateStarted` | `{ "battle_uuid", "host_uuid", "host_name", "guest_uuid", "guest_name" }` | Le spectateur |
+| `BattleSpectateStarted` | `{ "battle_uuid", "host_uuid", "host_name", "guest_uuid", "guest_name", "ambiance" }` (`ambiance` : celle du lobby, "" = chacun la sienne) | Le spectateur |
 | `BattleSpectatorJoined` | `{ "battle_uuid", "spectator_uuid", "spectator_name" }` | Les deux joueurs ; l'hôte envoie alors au spectateur le rattrapage (`BattleInitializePacket` sans camp + historique du chat), puis le flux |
 | `BattleSpectatorLeft` | `{ "battle_uuid", "spectator_uuid" }` | Les deux joueurs (départ ou déconnexion du spectateur) |
 | `BattleSpectatorPacket` | `{ "battle_uuid", "id", "payload" }` | Le ou les spectateurs |
@@ -230,6 +230,7 @@ liste est réévaluée chaque seconde et avant chaque paquet du flux. Aucun mess
 | C2S | `data` | Effet |
 |---|---|---|
 | `BattleSoloStart` | `{}` | **Admin** ([D-32](../architecture/decisions.md#d-32--combat-solo-dun-admin-contre-un-miroir-de-son-équipe)) : combat contre un miroir de son équipe Ghost. Refus : `ERROR_ADMIN_REQUIRED`, `ERROR_BATTLE_ALREADY_IN_BATTLE`, `ERROR_BATTLE_EMPTY_TEAM`. Réponse : `BattleSessionStarted` avec `role` `HOST`, `"solo": true`, `opponent_uuid` = uuid du miroir (stable, propre à cet admin), `opponent_name` = « pseudo (miroir) », `opponent_team` = `own_team`, format Libre. Le reste comme un combat normal (spectateurs compris) ; `BattleResult` accepte le miroir comme vainqueur ; un seul `BattleEnded` ; **rien n'est stocké** dans `battle_sessions` |
+| `BattleNpcStart` | `{ "npc_uuid", "team": "GHOST" \| "COBBLEMON", "party"? }` | Phantasmon Events : défier un dresseur PNJ (événement ouvert, ou admin) avec son équipe Ghost ou sa party Cobblemon. Comme le combat solo : `BattleSessionStarted` au seul joueur (`role` `HOST`, `solo` `true`, `opponent_uuid` = le PNJ, `ai` = son niveau d'IA, `npc_uuid`, `npc_skin`), le client du joueur fait tourner le moteur et l'IA joue le PNJ ; jamais enregistré, regardable. `ERROR_NPC_NOT_FOUND`, `ERROR_NPC_EMPTY_TEAM`, `ERROR_BATTLE_EMPTY_TEAM`, `ERROR_BATTLE_INVALID_PARTY`, `ERROR_BATTLE_ALREADY_IN_BATTLE`. Abandonner donne la victoire au PNJ |
 
 ## 6. Échanges asynchrones (notifications)
 
@@ -260,7 +261,7 @@ le vrai joueur. Le chat va à tous les membres du hub.
 | `HubJoin` | `{ "anchor_uuid" }` | Entre dans le Hub par cet Anchor, quel que soit son créateur. Refus : `ERROR_WS_MALFORMED_MESSAGE` (UUID absent ou invalide), `ERROR_HUB_ANCHOR_NOT_FOUND`, `ERROR_HUB_ANCHOR_WRONG_SERVER` (pas de `JoinServerGroup`, ou Anchor d'un autre serveur ou d'une autre dimension), `ERROR_HUB_FULL` (`details.capacity`, `details.hub` : le hub de cet Anchor est plein). Déjà membre : sortie puis entrée par le nouvel Anchor (éventuellement d'un autre hub). |
 | `HubLeave` | `{}` | Sort du Hub ; répond `HubLeft` `LEFT` |
 | `HubMove` | `{ "x", "z", "y_offset", "yaw", "head_yaw", "pitch", "pose", "on_ground", "skin_parts"? }` | Nouvel état de l'avatar. `x`, `z` : coordonnées Hub (relatives au centre de l'Anchor, après rotation par son `yaw`) : \|x\| ≤ largeur du hub / 2, \|z\| ≤ longueur / 2 ; `y_offset` : hauteur au-dessus du sol local, de 0 à la hauteur du hub ; sinon `ERROR_HUB_OUT_OF_BOUNDS` (`details.half_size_x`, `half_size_z`, `height`). `pose` ∈ `STANDING`, `CROUCHING`, `SWIMMING`, `FALL_FLYING` ; `on_ground` booléen ; `skin_parts` facultatif : masque `PlayerModelPart` de Minecraft (couches extérieures du skin et cape affichées), entier de 0 à 127 ; champ manquant, non fini ou hors limites : `ERROR_WS_MALFORMED_MESSAGE`. Hors du Hub : `ERROR_HUB_NOT_JOINED`. À envoyer jusqu'à 10 fois par seconde, seulement quand l'état change. |
-| `HubChat` | `{ "message" }` | Message du chat du Hub : codes `§x` retirés, espaces de bord retirés ; vide → `ERROR_WS_MALFORMED_MESSAGE`, > 256 caractères → `ERROR_HUB_CHAT_TOO_LONG`, moins d'une seconde après le précédent → `ERROR_HUB_CHAT_RATE_LIMITED`, hors du Hub → `ERROR_HUB_NOT_JOINED`. Écrit dans le journal du backend, jamais en base. |
+| `HubChat` | `{ "message" }` | Message du chat du Hub : codes `§x` retirés, espaces de bord retirés ; vide → `ERROR_WS_MALFORMED_MESSAGE`, > 256 caractères → `ERROR_HUB_CHAT_TOO_LONG`, moins d'une seconde après le précédent → `ERROR_HUB_CHAT_RATE_LIMITED`, hors du Hub → `ERROR_HUB_NOT_JOINED`. Modération (TODO-31) : joueur rendu muet → `ERROR_HUB_CHAT_MUTED` (`details.until`), chat verrouillé → `ERROR_HUB_CHAT_LOCKED` (les admins passent outre les deux) ; message d'un admin commençant par `!!` → annonce (`!!` retiré). Écrit dans le journal du backend, jamais en base. |
 
 | S2C | `data` | Destinataires |
 |---|---|---|
@@ -271,7 +272,11 @@ le vrai joueur. Le chat va à tous les membres du hub.
 | `HubLeft` | `{ "reason": "LEFT" \| "SERVER_CHANGED" \| "ANCHOR_DELETED" }` | Le joueur sorti du Hub (pas d'envoi sur déconnexion ni TTL) |
 | `HubGhostSpawn` | `{ "player_uuid", "pokemon_uuid", "species", "form" \| null, "is_shiny", "level", "gender" \| null, "nickname" \| null }` | Tous les autres membres : un membre sort un Ghost dans le Hub, ou entre dans le Hub avec un Ghost déjà sorti. Mêmes champs que `GhostEntitySpawn`, **sans `position`** : le client le fait suivre l'avatar |
 | `HubGhostDespawn` | `{ "player_uuid", "pokemon_uuid" }` | Tous les autres membres : rappel, Ghost échangé, début d'un combat Ghost (tout ce qui envoie `GhostEntityDespawn` au groupe) ; la sortie du Hub suffit sinon (`HubPlayerLeave`) |
-| `HubChatMessage` | `{ "player_uuid", "username", "message", "sent_at" }` | Tous les membres du hub, expéditeur compris |
+| `HubChatMessage` | `{ "player_uuid", "username", "message", "sent_at", "announcement" }` | Tous les membres du hub, expéditeur compris ; `announcement` : annonce d'un admin (en surbrillance, en grand à l'écran) |
+| `HubChatMuted` | `{ "until" }` | Le joueur qu'un admin vient de rendre muet dans le chat des hubs (TODO-31) |
+| `HubChatUnmuted` | `{}` | Le joueur dont un admin vient de lever le silence |
+| `HubChatLock` | `{ "locked" }` | Tous les membres des hubs : un admin a verrouillé ou déverrouillé le chat |
+| `EventsNpcsChanged` | `{}` | **Tous les clients connectés** : un dresseur PNJ ou un événement a changé ; le client relit `GET /events/npcs` |
 | `HubCatalogChanged` | `{}` | **Tous les clients connectés** : un admin a créé, supprimé ou rechargé un hub (D-35) ; le client relit `GET /hubs` (suggestions de commandes, constructions) et les Anchors |
 
 **Vocal du hub** (D-36, avec le mod facultatif Simple Voice Chat) :

@@ -16,6 +16,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+import com.mystaria.phantasmon_backend.admin.AdminService;
 import com.mystaria.phantasmon_backend.player.Player;
 import com.mystaria.phantasmon_backend.player.PlayerService;
 import com.mystaria.phantasmon_backend.pokemon.Pokemon;
@@ -45,6 +46,10 @@ public class HubService {
 
 	static final int CHAT_MAX_LENGTH = 256;
 	static final Duration CHAT_INTERVAL = Duration.ofSeconds(1);
+	/** Longest hub chat mute an admin can give (TODO-31). */
+	public static final Duration MUTE_MAX = Duration.ofDays(365);
+	/** An admin's message starting with this is an announcement: highlighted, bigger, on every member's screen. */
+	static final String ANNOUNCEMENT_TAG = "!!";
 	/** Cape, jacket, both sleeves, both pant legs, hat: Minecraft's {@code PlayerModelPart} masks. */
 	static final int MAX_SKIN_PARTS = 0x7F;
 	private static final Set<String> POSES = Set.of("STANDING", "CROUCHING", "SWIMMING", "FALL_FLYING");
@@ -77,6 +82,10 @@ public class HubService {
 	}
 
 	private final Map<UUID, Member> members = new ConcurrentHashMap<>();
+	private final AdminService adminService;
+	private final HubChatMuteRepository muteRepository;
+	/** Global chat lock (TODO-31): while on, only admins write in the hubs' chat. In memory: a restart lifts it. */
+	private volatile boolean chatLocked;
 	/** Members whose client can talk and listen (Simple Voice Chat present and connected, D-36). */
 	private final Set<UUID> voiceEnabled = ConcurrentHashMap.newKeySet();
 	private final HubAnchorRepository anchorRepository;
@@ -90,7 +99,10 @@ public class HubService {
 
 	public HubService(HubAnchorRepository anchorRepository, HubRepository hubRepository, PresenceService presenceService,
 			PlayerService playerService, PokemonRepository pokemonRepository, SessionRegistry sessionRegistry, Clock clock,
+			AdminService adminService, HubChatMuteRepository muteRepository,
 			@Value("${phantasmon.hub.capacity:50}") int capacity) {
+		this.adminService = adminService;
+		this.muteRepository = muteRepository;
 		this.anchorRepository = anchorRepository;
 		this.hubRepository = hubRepository;
 		this.presenceService = presenceService;
@@ -242,6 +254,8 @@ public class HubService {
 	/**
 	 * {@code HubChat}: formatting codes ({@code §x}) removed, trimmed, at most {@value #CHAT_MAX_LENGTH} characters and
 	 * one message per second. Logged, never stored; sent to every member, the sender and same-server members included.
+	 * Moderation (TODO-31): a muted player, or anyone but an admin while the chat is locked, is refused; an admin's
+	 * message starting with {@value #ANNOUNCEMENT_TAG} goes out as an announcement ({@code announcement: true}).
 	 */
 	public void chat(UUID playerUuid, Object rawMessage) {
 		Member member = members.get(playerUuid);
@@ -259,16 +273,81 @@ public class HubService {
 			return;
 		}
 		Instant now = clock.instant();
+		boolean admin = adminService.isAdmin(playerUuid);
+		if (!admin) {
+			Instant mutedUntil = mutedUntil(playerUuid, now);
+			if (mutedUntil != null) {
+				error(playerUuid, "ERROR_HUB_CHAT_MUTED", Map.of("until", mutedUntil.toString()));
+				return;
+			}
+			if (chatLocked) {
+				error(playerUuid, "ERROR_HUB_CHAT_LOCKED", Map.of());
+				return;
+			}
+		}
+		boolean announcement = admin && message.startsWith(ANNOUNCEMENT_TAG);
+		if (announcement) {
+			message = message.substring(ANNOUNCEMENT_TAG.length()).strip();
+			if (message.isEmpty()) {
+				error(playerUuid, "ERROR_WS_MALFORMED_MESSAGE", Map.of());
+				return;
+			}
+		}
 		if (member.lastChatAt() != null && member.lastChatAt().plus(CHAT_INTERVAL).isAfter(now)) {
 			error(playerUuid, "ERROR_HUB_CHAT_RATE_LIMITED", Map.of());
 			return;
 		}
 		members.computeIfPresent(playerUuid, (uuid, current) -> current.withChatAt(now));
-		log.info("Hub chat <{}> {}", member.username(), message);
+		log.info("Hub chat <{}>{} {}", member.username(), announcement ? " (announcement)" : "", message);
 		WsMessage chat = WsMessage.of("HubChatMessage", Map.of("player_uuid", playerUuid, "username", member.username(),
-				"message", message, "sent_at", now.toString()));
+				"message", message, "sent_at", now.toString(), "announcement", announcement));
 		sessionRegistry.send(playerUuid, chat);
 		visibleTo(member).forEach(other -> sessionRegistry.send(other.playerUuid(), chat));
+	}
+
+	// ---- Chat moderation (TODO-31) ----
+
+	/** When the player's hub chat mute ends, or null if they aren't muted (an expired mute is forgotten). */
+	private Instant mutedUntil(UUID playerUuid, Instant now) {
+		HubChatMute mute = muteRepository.findById(playerUuid).orElse(null);
+		if (mute == null) {
+			return null;
+		}
+		if (!mute.getMutedUntil().isAfter(now)) {
+			muteRepository.delete(mute);
+			return null;
+		}
+		return mute.getMutedUntil();
+	}
+
+	/** Admin: mutes {@code playerUuid} in the hubs' chat for {@code duration} (replacing any mute); returns its end. */
+	public Instant mute(UUID adminUuid, UUID playerUuid, Duration duration) {
+		Instant now = clock.instant();
+		Instant until = now.plus(duration);
+		muteRepository.save(new HubChatMute(playerUuid, until, adminUuid, now));
+		log.info("Hub chat: admin {} muted {} until {}", adminUuid, playerUuid, until);
+		sessionRegistry.send(playerUuid, WsMessage.of("HubChatMuted", Map.of("until", until.toString())));
+		return until;
+	}
+
+	/** Admin: lifts the player's mute; false if they weren't muted. */
+	public boolean unmute(UUID adminUuid, UUID playerUuid) {
+		boolean muted = mutedUntil(playerUuid, clock.instant()) != null;
+		if (muted) {
+			muteRepository.deleteById(playerUuid);
+			log.info("Hub chat: admin {} unmuted {}", adminUuid, playerUuid);
+			sessionRegistry.send(playerUuid, WsMessage.of("HubChatUnmuted", Map.of()));
+		}
+		return muted;
+	}
+
+	/** Admin: turns the global chat lock on or off; every hub member is told. */
+	public boolean toggleChatLock(UUID adminUuid) {
+		chatLocked = !chatLocked;
+		log.info("Hub chat: admin {} {} the chat", adminUuid, chatLocked ? "locked" : "unlocked");
+		WsMessage lock = WsMessage.of("HubChatLock", Map.of("locked", chatLocked));
+		members.keySet().forEach(uuid -> sessionRegistry.send(uuid, lock));
+		return chatLocked;
 	}
 
 	/** The member just sent a Ghost out: every other member sees it follow their avatar. */

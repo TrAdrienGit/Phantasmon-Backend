@@ -74,12 +74,12 @@ class HubCatalogSchematicTest {
 
 	@Test
 	void anAnchorsBoxIsCentredOnItsBlockAndTurnsWithIt() {
-		// Same expectations as the client's HubBuildLayout: 21 wide around x = 100, from the feet up.
-		assertThat(HubBox.of(100.7, 64.0, -20.2, 0, 21, 21, 21)).isEqualTo(new HubBox(90, 64, -31, 110, 84, -11));
+		// Same expectations as the client's HubBuildLayout: 21 wide around x = 100, from one block under the feet up (the floor layer replaces the ground).
+		assertThat(HubBox.of(100.7, 64.0, -20.2, 0, 21, 21, 21)).isEqualTo(new HubBox(90, 63, -31, 110, 83, -11));
 		// 3 wide, 15 long: facing south it runs along z, facing west along x.
-		assertThat(HubBox.of(0.5, 64.0, 0.5, 0, 3, 3, 15)).isEqualTo(new HubBox(-1, 64, -7, 1, 66, 7));
-		assertThat(HubBox.of(0.5, 64.0, 0.5, 90, 3, 3, 15)).isEqualTo(new HubBox(-7, 64, -1, 7, 66, 1));
-		assertThat(HubBox.of(0.5, 64.5, 0.5, 0, 3, 3, 3).minY()).isEqualTo(65);
+		assertThat(HubBox.of(0.5, 64.0, 0.5, 0, 3, 3, 15)).isEqualTo(new HubBox(-1, 63, -7, 1, 65, 7));
+		assertThat(HubBox.of(0.5, 64.0, 0.5, 90, 3, 3, 15)).isEqualTo(new HubBox(-7, 63, -1, 7, 65, 1));
+		assertThat(HubBox.of(0.5, 64.5, 0.5, 0, 3, 3, 3).minY()).isEqualTo(64);
 		assertThat(HubBox.of(0, 64, 0, 0, 3, 3, 3).intersects(HubBox.of(2, 66, 0, 0, 3, 3, 3))).isTrue();
 		assertThat(HubBox.of(0, 64, 0, 0, 3, 3, 3).intersects(HubBox.of(3, 64, 0, 0, 3, 3, 3))).isFalse();
 		assertThat(HubBox.of(0, 64, 0, 0, 3, 3, 3).intersects(HubBox.of(0, 67, 0, 0, 3, 3, 3))).isFalse();

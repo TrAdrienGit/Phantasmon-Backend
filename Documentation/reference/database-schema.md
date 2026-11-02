@@ -32,6 +32,8 @@ erDiagram
     PLAYERS ||--o{ TOURNAMENT_PLAYERS : "s'inscrit (V18)"
     TOURNAMENTS ||--o{ TOURNAMENT_MATCHES : "matchs (V18)"
     PLAYERS ||--o| TRAINER_PROFILES : "profil d'animation (V20)"
+    PLAYERS ||--o| HUB_CHAT_MUTES : "muet dans le chat des hubs (V21)"
+    EVENT_GROUPS ||--o{ EVENT_NPCS : "dresseurs PNJ (V22)"
 
     PLAYERS {
         uuid uuid PK
@@ -316,6 +318,41 @@ membres du hub).
 | `profile` | JSONB | NOT NULL | Moment → animation choisie, par ex. `{"guard": "guard_poised", "send_out": "send_out_spin"}` ; moments `guard`, `send_out`, `recall`, `attack`, `victory`, `defeat`, noms `<moment>_<style>` (contrôle applicatif) |
 | `updated_at` | TIMESTAMPTZ | NOT NULL, défaut `now()` | |
 
+## 7 septies. `hub_chat_mutes` (modération du chat des hubs, TODO-31, V21)
+
+| Colonne | Type | Contraintes | Notes |
+|---|---|---|---|
+| `player_uuid` | UUID | PK, FK `players` `ON DELETE CASCADE` | Le joueur rendu muet |
+| `muted_until` | TIMESTAMPTZ | NOT NULL | Fin du silence ; une ligne échue est effacée au message suivant du joueur |
+| `muted_by` | UUID | NOT NULL | L'admin (pas de FK) |
+| `muted_at` | TIMESTAMPTZ | NOT NULL, défaut `now()` | |
+
+## 7 octies. `event_groups` et `event_npcs` (Phantasmon Events, dresseurs PNJ, V22)
+
+`event_groups` : un événement qu'un admin ouvre et ferme.
+
+| Colonne | Type | Contraintes | Notes |
+|---|---|---|---|
+| `name` | VARCHAR(32) | PK | Minuscules, chiffres, `_` |
+| `open` | BOOLEAN | NOT NULL, défaut `false` | Ses PNJ ne sont vus et défiés par les joueurs que s'il est ouvert (les admins les voient toujours) |
+| `created_at` | TIMESTAMPTZ | NOT NULL, défaut `now()` | |
+
+`event_npcs` : un dresseur PNJ d'un événement.
+
+| Colonne | Type | Contraintes | Notes |
+|---|---|---|---|
+| `uuid` | UUID | PK | Aussi l'UUID de son entité côté client (intro, caméra) |
+| `event_name` | VARCHAR(32) | NOT NULL, FK `event_groups` `ON DELETE CASCADE` | |
+| `name` | VARCHAR(32) | NOT NULL | |
+| `skin` | VARCHAR(16) | | Pseudo Minecraft dont il porte le skin ; null : son nom |
+| `server_fingerprint`, `dimension` | VARCHAR(128) | NOT NULL | Où il se tient (index `event_npcs_place`) |
+| `x`, `y`, `z`, `yaw` | DOUBLE, REAL | NOT NULL | |
+| `team` | JSONB | NOT NULL, défaut `[]` | Copie de Pokémon (même forme que les équipes d'un combat), 6 au plus |
+| `ai` | VARCHAR(16) | NOT NULL, défaut `normal` | `random`, `easy`, `normal`, `hard`, `veryhard` (contrôle applicatif) |
+| `format_id` | VARCHAR(64) | NOT NULL, défaut `free` | Format de combat (inconnu : Libre) |
+| `created_by` | UUID | NOT NULL | L'admin (pas de FK) |
+| `updated_at` | TIMESTAMPTZ | NOT NULL | |
+
 ## 8. État hors base
 
 | Structure | Service | Contenu |
@@ -351,6 +388,8 @@ Tout est perdu au redémarrage du backend (comportement voulu) et n'est pas part
 | V18 | `V18__tournaments.sql` | 2026-10-29 | Tournois : tables `tournaments`, `tournament_players`, `tournament_matches` |
 | V19 | `V19__tournament_match_wave.sql` | 2026-10-30 | `tournament_matches.wave` (double élimination) |
 | V20 | `V20__trainer_profiles.sql` | 2026-10-30 | Profils d'animation des dresseurs (Cobblemon Spectacle E3) : table `trainer_profiles` |
+| V21 | `V21__hub_chat_mutes.sql` | 2026-11-01 | Modération du chat des hubs (TODO-31) : table `hub_chat_mutes` |
+| V22 | `V22__event_npcs.sql` | 2026-11-02 | Phantasmon Events : tables `event_groups` et `event_npcs` (dresseurs PNJ) |
 
 ## 10. Décisions de schéma
 

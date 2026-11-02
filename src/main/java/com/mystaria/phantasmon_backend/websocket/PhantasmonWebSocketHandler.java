@@ -231,6 +231,7 @@ public class PhantasmonWebSocketHandler extends TextWebSocketHandler {
 			case "BattleResult" -> liveBattleService.reportResult(playerUuid, uuidField(incoming, "battle_uuid"),
 					uuidField(incoming, "winner_uuid"));
 			case "BattleSoloStart" -> liveBattleService.startSolo(playerUuid);
+			case "BattleNpcStart" -> liveBattleService.startNpc(playerUuid, uuidField(incoming, "npc_uuid"), incoming.data());
 			case "BattleSpectate" -> liveBattleService.spectate(playerUuid, uuidField(incoming, "target_uuid"));
 			case "BattleSpectatorPacket" -> liveBattleService.relaySpectatorPacket(playerUuid, uuidField(incoming, "battle_uuid"),
 					incoming.data());

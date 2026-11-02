@@ -1,5 +1,7 @@
 package com.mystaria.phantasmon_backend.admin;
 
+import java.time.Duration;
+import java.time.Instant;
 import java.util.Map;
 import java.util.UUID;
 
@@ -14,6 +16,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.mystaria.phantasmon_backend.battle.LiveBattleService;
 import com.mystaria.phantasmon_backend.common.ApiException;
+import com.mystaria.phantasmon_backend.hub.HubService;
 import com.mystaria.phantasmon_backend.player.Player;
 import com.mystaria.phantasmon_backend.player.PlayerService;
 
@@ -32,9 +35,11 @@ public class AdminController {
 	private final PlayerService playerService;
 	private final LiveBattleService liveBattleService;
 	private final BackendRestarter restarter;
+	private final HubService hubService;
 
 	public AdminController(AdminService adminService, PlayerService playerService, LiveBattleService liveBattleService,
-			BackendRestarter restarter) {
+			BackendRestarter restarter, HubService hubService) {
+		this.hubService = hubService;
 		this.adminService = adminService;
 		this.playerService = playerService;
 		this.liveBattleService = liveBattleService;
@@ -42,6 +47,9 @@ public class AdminController {
 	}
 
 	public record StopBattleRequest(String player) {
+	}
+
+	public record HubMuteRequest(String player, Long minutes) {
 	}
 
 	/** Whether the caller is an admin — the client shows its admin commands accordingly. */
@@ -79,6 +87,37 @@ public class AdminController {
 		log.warn("Backend reboot requested by admin {}", admin);
 		restarter.restartSoon();
 		return ResponseEntity.accepted().body(Map.of("rebooting", true));
+	}
+
+	/** Hub chat moderation (TODO-31): mutes {@code player} in the hubs' chat for {@code minutes}. */
+	@PostMapping("/admin/hub/mute")
+	public Map<String, Object> hubMute(@RequestBody HubMuteRequest request, Authentication authentication) {
+		UUID admin = caller(authentication);
+		adminService.requireAdmin(admin);
+		Player player = byName(request == null ? null : request.player());
+		long minutes = request.minutes() == null ? 0 : request.minutes();
+		if (minutes < 1 || minutes > HubService.MUTE_MAX.toMinutes()) {
+			throw new ApiException(HttpStatus.BAD_REQUEST, "ERROR_HUB_MUTE_DURATION", Map.of("max_minutes", HubService.MUTE_MAX.toMinutes()));
+		}
+		Instant until = hubService.mute(admin, player.getUuid(), Duration.ofMinutes(minutes));
+		return Map.of("player", player.getLastUsername(), "until", until.toString());
+	}
+
+	/** Lifts {@code player}'s hub chat mute. */
+	@PostMapping("/admin/hub/unmute")
+	public Map<String, Object> hubUnmute(@RequestBody StopBattleRequest request, Authentication authentication) {
+		UUID admin = caller(authentication);
+		adminService.requireAdmin(admin);
+		Player player = byName(request == null ? null : request.player());
+		return Map.of("player", player.getLastUsername(), "was_muted", hubService.unmute(admin, player.getUuid()));
+	}
+
+	/** Global hub chat lock, toggled: while on, only admins write in the hubs' chat. */
+	@PostMapping("/admin/hub/lock")
+	public Map<String, Object> hubLock(Authentication authentication) {
+		UUID admin = caller(authentication);
+		adminService.requireAdmin(admin);
+		return Map.of("locked", hubService.toggleChatLock(admin));
 	}
 
 	private Player byName(String name) {

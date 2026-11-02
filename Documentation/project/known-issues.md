@@ -24,7 +24,6 @@ Identifiants : `BUG-n` (comportement incorrect), `SEC-n` (sécurité, voir [`sec
 |---|---|---|---|
 | TODO-2 | haute | Client | Retirer `/phantasmon admin debug fingerprint` quand un vrai serveur dédié remplacera les tests « Ouvrir au LAN » (décision D-18). |
 | TODO-3 | haute | Client | Remplacer les métadonnées factices : `homepage` / `sources` de `fabric.mod.json` (`github.com/your-account/…`), lien de mise à jour `https://modrinth.com/mod/phantasmon` (`AuthService`). |
-| TODO-7 | moyenne | Machine serveur | Rétablir l'accès SSH (`production-server`) : les déploiements du client retombent sur l'instance locale « Cobblemon 2 ». |
 | TODO-16 | moyenne | Serveur Ubuntu | **Sauvegarde quotidienne en place depuis le 2026-10-19** (timer `phantasmon-backup`, 14 jours + hebdomadaires 92 jours, `guides/deploying-ubuntu.md`). Reste : copier les dumps hors du serveur (autre machine ou cloud), une panne de disque les emporterait avec la base. |
 | TODO-21 | basse | Client | Effets sonores : premiers sons faits (PC, boutons de confirmation, journal §4.87) embarqués dans le mod (`assets/phantasmon/sounds/sfx/`) ; d'autres à venir selon Adrien. |
 | TODO-27 | basse | Client + Backend | Combats scénarisés : combats uniques préparés par l'admin (maître du jeu) — musique, intro, effets pendant le match choisis à l'avance. |
@@ -110,3 +109,4 @@ Identifiants : `BUG-n` (comportement incorrect), `SEC-n` (sécurité, voir [`sec
 | TODO-28 | 2026-10-06 | Cristaux Z : aucun objet dans le modpack ; tenus « virtuellement » par les Ghost (`GhostZCrystals`, fournisseur d'objet de Cobblemon), choisissables dans l'éditeur, reconnus à l'import, effet de puissance Z en combat. |
 | TODO-25 | 2026-10-06 | Rôle administrateur (D-26) : `admins.txt`, commandes `/phantasmon admin` (PC d'un joueur, arrêt de combat, redémarrage du backend, ping, débogage). |
 | TODO-26 | 2026-10-06 | 5 intros de combat (X/Y, Épée/Bouclier, Diamant/Perle, Émeraude, Noir/Blanc), tirée au sort par le backend, la même pour les deux joueurs ; aperçu `/phantasmon admin debug intro`. |
+| TODO-7 | 2026-11-01 | Sans objet : la machine « production-server » (`100.106.248.73`) n'est plus utilisée ; les deux instances de test (MystAria_, TheMashen) sont sur la machine de développement et le script de déploiement les sert toutes deux en local. Le backend se déploie en SSH sur le serveur Ubuntu (`root@100.101.1.79`, `scripts/deploy-ubuntu.sh`), accès vérifié le 2026-11-01. |
