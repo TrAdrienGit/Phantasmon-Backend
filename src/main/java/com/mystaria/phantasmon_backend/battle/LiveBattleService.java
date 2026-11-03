@@ -173,6 +173,11 @@ public class LiveBattleService {
 		 * ({@code namespace:name}), or "" for each player's own choice.
 		 */
 		String ambiance = "";
+		/**
+		 * An event NPC's lobby (Adrien 2026-11-03): the NPC is the invitee side — always ready, its team and format
+		 * fixed by the admin; only the player sees the lobby.
+		 */
+		com.mystaria.phantasmon_backend.events.npc.EventNpc npc;
 
 		Lobby(UUID uuid, UUID inviterUuid, UUID inviteeUuid) {
 			this.uuid = uuid;
@@ -450,7 +455,9 @@ public class LiveBattleService {
 			return;
 		}
 		choose(side, playerUuid, choice);
-		lobby.side(lobby.other(playerUuid)).ready = false;
+		if (lobby.npc == null) {
+			lobby.side(lobby.other(playerUuid)).ready = false;
+		}
 		sendLobby(lobby, playerUuid);
 		sendLobby(lobby, lobby.other(playerUuid));
 	}
@@ -468,7 +475,7 @@ public class LiveBattleService {
 			sendError(playerUuid, "ERROR_BATTLE_UNKNOWN_FORMAT");
 			return;
 		}
-		if (lobby.tournamentMatch != null) {
+		if (lobby.tournamentMatch != null || lobby.npc != null) {
 			sendError(playerUuid, "ERROR_BATTLE_FORMAT_LOCKED");
 			return;
 		}
@@ -637,13 +644,20 @@ public class LiveBattleService {
 	 * (species, form, shininess, gender — what the model shows) and whether they are ready; never their lead.
 	 */
 	private void sendLobby(Lobby lobby, UUID viewerUuid) {
+		if (lobby.npc != null && viewerUuid.equals(lobby.inviteeUuid)) {
+			return; // the NPC side: nobody to tell
+		}
 		UUID opponentUuid = lobby.other(viewerUuid);
 		LobbySide own = lobby.side(viewerUuid);
 		LobbySide opponent = lobby.side(opponentUuid);
 		Map<String, Object> data = new HashMap<>();
 		data.put("lobby_uuid", lobby.uuid);
 		data.put("opponent_uuid", opponentUuid);
-		data.put("opponent_name", nameOf(opponentUuid));
+		data.put("opponent_name", lobby.npc != null ? lobby.npc.getName() : nameOf(opponentUuid));
+		if (lobby.npc != null) {
+			data.put("npc", true);
+			data.put("npc_ai", lobby.npc.getAi());
+		}
 		data.put("own_team_source", own.choice.source().name());
 		data.put("own_team", own.team);
 		data.put("own_lead", own.lead);
@@ -706,6 +720,10 @@ public class LiveBattleService {
 	// ---- Battle start ----
 
 	private void startBattle(Lobby lobby) {
+		if (lobby.npc != null) {
+			startNpcBattle(lobby);
+			return;
+		}
 		UUID inviterUuid = lobby.inviterUuid;
 		UUID inviteeUuid = lobby.inviteeUuid;
 		List<PokemonResponse> inviterTeam = battleTeam(inviterUuid, lobby.inviterSide);
@@ -813,9 +831,9 @@ public class LiveBattleService {
 
 	/**
 	 * {@code BattleNpcStart} (Phantasmon Events, Adrien 2026-11-02): a player challenges an event's trainer NPC with
-	 * their Ghost team or Cobblemon party ({@code team}, {@code party}, as for an invitation). Like the admin solo
-	 * battle: the player's client hosts the engine and its AI plays the NPC's team ({@code ai} in the session), no
-	 * lobby, never stored, spectatable. The NPC's format applies (the "Libre" one if unknown).
+	 * their Ghost team or Cobblemon party ({@code team}, {@code party}, as for an invitation). A lobby opens (Adrien
+	 * 2026-11-03), as against a player: the NPC's team shown, the player picks team, lead, ambiance, music, timer; the
+	 * NPC is ready from the start, its format fixed. One lobby or battle at a time per NPC.
 	 */
 	public synchronized void startNpc(UUID playerUuid, UUID npcUuid, Map<String, Object> message) {
 		if (isBusy(playerUuid)) {
@@ -831,9 +849,15 @@ public class LiveBattleService {
 			sendError(playerUuid, "ERROR_NPC_EMPTY_TEAM");
 			return;
 		}
-		// One battle at a time (Adrien 2026-11-03): the NPC is already battling someone.
+		// One at a time (Adrien 2026-11-03): the NPC is already battling someone, or in someone's lobby.
 		for (LiveBattle other : battlesByPlayer.values()) {
 			if (npc.getUuid().equals(other.aiOpponent)) {
+				sendError(playerUuid, "ERROR_NPC_BUSY");
+				return;
+			}
+		}
+		for (Lobby other : lobbiesByPlayer.values()) {
+			if (other.npc != null && other.npc.getUuid().equals(npc.getUuid())) {
 				sendError(playerUuid, "ERROR_NPC_BUSY");
 				return;
 			}
@@ -845,33 +869,64 @@ public class LiveBattleService {
 			sendError(playerUuid, "ERROR_BATTLE_INVALID_PARTY");
 			return;
 		}
-		List<PokemonResponse> team = resolve(playerUuid, choice);
+		Lobby lobby = new Lobby(UUID.randomUUID(), playerUuid, npc.getUuid());
+		lobby.npc = npc;
+		lobby.formatId = showdown.formats().get(npc.getFormatId()) != null ? npc.getFormatId() : BattleFormats.FREE;
+		choose(lobby.inviterSide, playerUuid, choice);
+		lobby.inviteeSide.choice = BattleTeam.GHOST;
+		lobby.inviteeSide.team = new ArrayList<>(npc.getTeam());
+		lobby.inviteeSide.lead = 0;
+		lobby.inviteeSide.ready = true;
+		lobbiesByPlayer.put(playerUuid, lobby);
+		log.info("Event NPC lobby {} opened: {} against NPC {} '{}' (AI {})", lobby.uuid, playerUuid, npc.getUuid(), npc.getName(), npc.getAi());
+		sendLobby(lobby, playerUuid);
+		if (choice.isGhost()) {
+			ghostRecall.recall(playerUuid, "battle lobby");
+		}
+	}
+
+	/**
+	 * The player of an NPC's lobby is ready: the battle starts, like the admin solo battle — the player's client hosts
+	 * the engine and the NPC's AI plays its team ({@code ai}; the expert one picks its own lead against the player's
+	 * team, the others lead with the first), never stored, spectatable, with the lobby's ambiance and timer.
+	 */
+	private void startNpcBattle(Lobby lobby) {
+		UUID playerUuid = lobby.inviterUuid;
+		com.mystaria.phantasmon_backend.events.npc.EventNpc npc = lobby.npc;
+		List<PokemonResponse> team = battleTeam(playerUuid, lobby.inviterSide);
+		lobbiesByPlayer.remove(playerUuid);
 		if (team.isEmpty()) {
-			sendError(playerUuid, "ERROR_BATTLE_EMPTY_TEAM");
+			cancelLobby(lobby, "EMPTY_TEAM", null);
 			return;
+		}
+		BattleFormats.Format format = format(lobby);
+		List<PokemonResponse> npcTeam = npc.getTeam();
+		if (format.pickedTeamSize() > 0) {
+			team = team.subList(0, Math.min(format.pickedTeamSize(), team.size()));
 		}
 		LiveBattle battle = new LiveBattle(UUID.randomUUID(), playerUuid, playerUuid, true);
 		battle.aiOpponent = npc.getUuid();
+		battle.ambiance = lobby.ambiance;
 		battlesByPlayer.put(playerUuid, battle);
 		log.info("Event NPC battle {}: {} against NPC {} '{}' (AI {})", battle.uuid, playerUuid, npc.getUuid(), npc.getName(), npc.getAi());
-		BattleFormats.Format format = showdown.formats().get(npc.getFormatId());
-		format = format != null ? format : showdown.formats().get(BattleFormats.FREE);
 		Map<String, Object> view = new HashMap<>(Map.of(
 				"battle_uuid", battle.uuid, "role", "HOST", "solo", true,
 				"opponent_uuid", npc.getUuid(), "opponent_name", npc.getName(),
-				"own_team", team, "opponent_team", npc.getTeam(),
-				"own_team_source", choice.source().name(), "opponent_team_source", BattleTeam.GHOST.source().name(),
+				"own_team", team, "opponent_team", npcTeam,
+				"own_team_source", lobby.inviterSide.choice.source().name(), "opponent_team_source", BattleTeam.GHOST.source().name(),
 				"format", Map.of("id", format.id(), "name", format.name(), "battle_rules", format.battleRules(),
 						"adjust_level", format.adjustLevel())));
 		view.put("intro", java.util.concurrent.ThreadLocalRandom.current().nextInt(INTRO_COUNT));
 		view.put("ai", npc.getAi());
 		view.put("npc_uuid", npc.getUuid());
+		view.put("ambiance", lobby.ambiance);
 		if (npc.getSkin() != null) {
 			view.put("npc_skin", npc.getSkin());
 		}
 		sessionRegistry.send(playerUuid, WsMessage.of("BattleSessionStarted", view));
-		if (choice.isGhost()) {
-			ghostRecall.recall(playerUuid, "battle started");
+		ghostRecall.recall(playerUuid, "battle started");
+		if (lobby.timerBy != null) {
+			enableTimer(battle, lobby.timerBy);
 		}
 		refreshViewers(battle);
 	}
