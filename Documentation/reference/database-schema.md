@@ -349,7 +349,7 @@ membres du hub).
 | `server_fingerprint`, `dimension` | VARCHAR(128) | NOT NULL | Où il se tient (index `event_npcs_place`) |
 | `x`, `y`, `z`, `yaw` | DOUBLE, REAL | NOT NULL | |
 | `team` | JSONB | NOT NULL, défaut `[]` | Copie de Pokémon (même forme que les équipes d'un combat), 6 au plus |
-| `ai` | VARCHAR(16) | NOT NULL, défaut `normal` | `random`, `easy`, `normal`, `hard`, `veryhard`, `expert` (contrôle applicatif) |
+| `ai` | VARCHAR(16) | NOT NULL, défaut `normal` | `random`, `easy`, `normal`, `hard`, `veryhard`, `expert`, `reborn` (contrôle applicatif) |
 | `ai_debug` | BOOLEAN | NOT NULL, défaut `false` (V24) | Son IA explique chaque décision dans le chat du joueur qui l'affronte |
 | `format_id` | VARCHAR(64) | NOT NULL, défaut `free` | Format de combat (inconnu : Libre) |
 | `created_by` | UUID | NOT NULL | L'admin (pas de FK) |
