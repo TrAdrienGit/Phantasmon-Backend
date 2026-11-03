@@ -210,6 +210,8 @@ public class MirrorService {
 	private final Map<UUID, Set<UUID>> subscribers = new ConcurrentHashMap<>();
 	/** Hub → the players in its source zone, shown its ghost blocks. */
 	private final Map<UUID, Set<UUID>> watchers = new ConcurrentHashMap<>();
+	/** Hub → what its copies were sent lately, for the copy our own dedicated server builds (it polls). Memory only. */
+	private final Map<UUID, Feed> feeds = new ConcurrentHashMap<>();
 	/** Hub → its ghost blocks, {@link #ghostKey} → state. Memory only. */
 	private final Map<UUID, Map<Long, String>> ghosts = new ConcurrentHashMap<>();
 
@@ -410,10 +412,25 @@ public class MirrorService {
 		Hub hub = hubRepository.findByNameIgnoreCase(String.valueOf(data.get("hub"))).filter(Hub::isMirror).orElse(null);
 		if (hub == null || !(data.get("changes") instanceof List<?> changes) || changes.size() > MAX_CHANGES
 				|| !adminService.isAdmin(playerUuid)
-				|| anchorRepository.findByOwnerUuidAndHubUuid(playerUuid, hub.getUuid())
-						.filter(anchor -> HubAnchor.ROLE_COPY.equals(anchor.getRole())).isEmpty()) {
+				|| anchorRepository.findByOwnerUuidAndHubUuidAndRole(playerUuid, hub.getUuid(), HubAnchor.ROLE_COPY).isEmpty()) {
 			return;
 		}
+		applyGhosts(hub, changes);
+	}
+
+	/**
+	 * Ghost blocks placed or broken by hand in the copy our own dedicated server builds (its server mod, by
+	 * {@code POST /server/mirror/{hub}/ghosts}): handled as an admin's copy's. How many changed.
+	 */
+	public int receiveServerGhosts(String hubName, Object rawChanges) {
+		Hub hub = mirrorHub(hubName);
+		if (!(rawChanges instanceof List<?> changes) || changes.size() > MAX_CHANGES) {
+			throw new ApiException(HttpStatus.BAD_REQUEST, "ERROR_VALIDATION_FAILED", Map.of("field", "changes"));
+		}
+		return applyGhosts(hub, changes);
+	}
+
+	private int applyGhosts(Hub hub, List<?> changes) {
 		Terrain terrain = terrain(hub);
 		Map<Long, String> hubGhosts = ghosts.computeIfAbsent(hub.getUuid(), uuid -> new ConcurrentHashMap<>());
 		List<List<Object>> applied = new ArrayList<>();
@@ -432,6 +449,7 @@ public class MirrorService {
 			}
 		}
 		publishGhosts(hub, applied);
+		return applied.size();
 	}
 
 	/** Removes all the hub's ghost blocks; how many there were. */
@@ -487,6 +505,73 @@ public class MirrorService {
 
 	private void publish(Hub hub, WsMessage message) {
 		subscribers.getOrDefault(hub.getUuid(), Set.of()).forEach(subscriber -> sessionRegistry.send(subscriber, message));
+		feeds.computeIfAbsent(hub.getUuid(), uuid -> new Feed()).add(message);
+	}
+
+	/**
+	 * What a hub's copies were sent ({@code EventsMirrorBlocks}, {@code EventsMirrorTileChanged},
+	 * {@code EventsMirrorGhosts}, {@code EventsMirrorReset}), numbered, the last {@value #FEED_SIZE} kept: our dedicated
+	 * server's copy reads them by polling ({@link #feed}) instead of a WebSocket.
+	 */
+	private static final class Feed {
+		private final java.util.ArrayDeque<Object[]> messages = new java.util.ArrayDeque<>();
+		private long next = 1;
+
+		synchronized void add(WsMessage message) {
+			messages.addLast(new Object[] { next++, message });
+			while (messages.size() > FEED_SIZE) {
+				messages.removeFirst();
+			}
+		}
+
+		/** After {@code since}: the messages and the next number; {@code reset} if some were dropped meanwhile. */
+		synchronized Map<String, Object> since(long since) {
+			long oldest = messages.isEmpty() ? next : (long) messages.peekFirst()[0];
+			if (since > 0 && since < oldest - 1) {
+				return Map.of("reset", true, "next", next - 1);
+			}
+			List<Object> out = new ArrayList<>();
+			for (Object[] entry : messages) {
+				if ((long) entry[0] > since) {
+					WsMessage message = (WsMessage) entry[1];
+					out.add(Map.of("type", message.type(), "data", message.data()));
+				}
+			}
+			return Map.of("reset", false, "next", next - 1, "messages", out);
+		}
+	}
+
+	private static final int FEED_SIZE = 2000;
+
+	/** {@code GET /server/mirror/{hub}/feed?since=}: see {@link Feed}. {@code since} 0: just the current number. */
+	public Map<String, Object> feed(String hubName, long since) {
+		Hub hub = mirrorHub(hubName);
+		Feed feed = feeds.computeIfAbsent(hub.getUuid(), uuid -> new Feed());
+		return since <= 0 ? Map.of("reset", false, "next", feed.since(Long.MAX_VALUE).get("next"), "messages", List.of())
+				: feed.since(since);
+	}
+
+	/**
+	 * The mirror copies posed on a server ({@code serverFingerprint}): {@code hub}, {@code dimension}, the zone's
+	 * north-west corner ({@code min_x}, {@code min_z}) and side, as the clients compute it from the anchor.
+	 */
+	public List<Map<String, Object>> copiesOn(String serverFingerprint) {
+		List<Map<String, Object>> copies = new ArrayList<>();
+		for (com.mystaria.phantasmon_backend.hub.HubAnchor anchor : anchorRepository.findAll()) {
+			if (!com.mystaria.phantasmon_backend.hub.HubAnchor.ROLE_COPY.equals(anchor.getRole())
+					|| !serverFingerprint.equals(anchor.getServerFingerprint())) {
+				continue;
+			}
+			Hub hub = hubRepository.findById(anchor.getHubUuid()).filter(Hub::isMirror).orElse(null);
+			if (hub == null) {
+				continue;
+			}
+			int side = 2 * hub.getRadius() + 1;
+			copies.add(Map.of("hub", hub.getName(), "dimension", anchor.getDimension(),
+					"min_x", (int) Math.floor(anchor.getOriginX()) - side / 2,
+					"min_z", (int) Math.floor(anchor.getOriginZ()) - side / 2, "side", side));
+		}
+		return copies;
 	}
 
 	/** {@code EventsMirrorSubscribe} / {@code EventsMirrorUnsubscribe} {@code {hub}}: an admin building a copy. */

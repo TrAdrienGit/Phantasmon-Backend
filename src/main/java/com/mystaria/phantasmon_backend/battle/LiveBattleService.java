@@ -831,6 +831,13 @@ public class LiveBattleService {
 			sendError(playerUuid, "ERROR_NPC_EMPTY_TEAM");
 			return;
 		}
+		// One battle at a time (Adrien 2026-11-03): the NPC is already battling someone.
+		for (LiveBattle other : battlesByPlayer.values()) {
+			if (npc.getUuid().equals(other.aiOpponent)) {
+				sendError(playerUuid, "ERROR_NPC_BUSY");
+				return;
+			}
+		}
 		BattleTeam choice;
 		try {
 			choice = partyParser.parse(playerUuid, message);
@@ -1022,6 +1029,9 @@ public class LiveBattleService {
 			if (battle.viewers.add(viewer)) {
 				sessionRegistry.send(battle.hostUuid, WsMessage.of("BattleFieldViewerJoined",
 						Map.of("battle_uuid", battle.uuid, "viewer_uuid", viewer)));
+				// Its ambiance, restricted to its field for those who only see it (Adrien 2026-11-02); "" = their own.
+				sessionRegistry.send(viewer, WsMessage.of("BattleFieldAmbiance",
+						Map.of("battle_uuid", battle.uuid, "ambiance", battle.ambiance)));
 			}
 		}
 	}

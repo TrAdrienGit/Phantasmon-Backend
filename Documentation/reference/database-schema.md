@@ -345,6 +345,7 @@ membres du hub).
 | `event_name` | VARCHAR(32) | NOT NULL, FK `event_groups` `ON DELETE CASCADE` | |
 | `name` | VARCHAR(32) | NOT NULL | |
 | `skin` | VARCHAR(16) | | Pseudo Minecraft dont il porte le skin ; null : son nom |
+| `hub_uuid` | UUID | FK `hubs` `ON DELETE CASCADE`, index `event_npcs_hub` (V23) | Le hub auquel il appartient : `x`, `y`, `z`, `yaw` sont alors ses coordonnées dans le hub, et chaque client le place dans chaque zone de ce hub ; null : une place dans le monde |
 | `server_fingerprint`, `dimension` | VARCHAR(128) | NOT NULL | Où il se tient (index `event_npcs_place`) |
 | `x`, `y`, `z`, `yaw` | DOUBLE, REAL | NOT NULL | |
 | `team` | JSONB | NOT NULL, défaut `[]` | Copie de Pokémon (même forme que les équipes d'un combat), 6 au plus |
@@ -390,6 +391,7 @@ Tout est perdu au redémarrage du backend (comportement voulu) et n'est pas part
 | V20 | `V20__trainer_profiles.sql` | 2026-10-30 | Profils d'animation des dresseurs (Cobblemon Spectacle E3) : table `trainer_profiles` |
 | V21 | `V21__hub_chat_mutes.sql` | 2026-11-01 | Modération du chat des hubs (TODO-31) : table `hub_chat_mutes` |
 | V22 | `V22__event_npcs.sql` | 2026-11-02 | Phantasmon Events : tables `event_groups` et `event_npcs` (dresseurs PNJ) |
+| V23 | `V23__event_npcs_in_hubs.sql` | 2026-11-03 | `event_npcs.hub_uuid` : un dresseur PNJ peut appartenir à un hub |
 
 ## 10. Décisions de schéma
 

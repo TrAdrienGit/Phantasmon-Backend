@@ -33,8 +33,8 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class EventNpcService {
 
-	/** AI levels (Cobblemon's random AI, then its "strong" AI at rising skill); {@code expert} comes later. */
-	public static final Set<String> AIS = Set.of("random", "easy", "normal", "hard", "veryhard");
+	/** AI levels: Cobblemon's random AI, its "strong" AI at rising skill, then Phantasmon's own {@code expert}. */
+	public static final Set<String> AIS = Set.of("random", "easy", "normal", "hard", "veryhard", "expert");
 	static final Pattern NAME = Pattern.compile("[A-Za-z0-9_ éèêàçÉÈ'-]{1,32}");
 	static final Pattern EVENT = Pattern.compile("[a-z0-9_]{1,32}");
 	static final Pattern SKIN = Pattern.compile("[A-Za-z0-9_]{1,16}");
@@ -46,9 +46,14 @@ public class EventNpcService {
 	private final PokemonService pokemonService;
 	private final SessionRegistry sessionRegistry;
 	private final Clock clock;
+	private final com.mystaria.phantasmon_backend.hub.HubRepository hubs;
+	private final com.mystaria.phantasmon_backend.hub.HubAnchorRepository anchors;
 
 	public EventNpcService(EventNpcRepository npcs, EventGroupRepository events, AdminService adminService,
-			PokemonService pokemonService, SessionRegistry sessionRegistry, Clock clock) {
+			PokemonService pokemonService, SessionRegistry sessionRegistry, Clock clock,
+			com.mystaria.phantasmon_backend.hub.HubRepository hubs, com.mystaria.phantasmon_backend.hub.HubAnchorRepository anchors) {
+		this.hubs = hubs;
+		this.anchors = anchors;
 		this.npcs = npcs;
 		this.events = events;
 		this.adminService = adminService;
@@ -57,12 +62,27 @@ public class EventNpcService {
 		this.clock = clock;
 	}
 
-	/** The NPCs of this server and dimension the caller may see: those of open events, or all for an admin. */
+	/**
+	 * The NPCs the caller may see here (those of open events, or all for an admin): posed in this server and
+	 * dimension outside any hub, and those of every hub with an anchor here (Adrien 2026-11-03: a hub's NPC is shared by
+	 * all its zones; the client places it in each).
+	 */
 	@Transactional(readOnly = true)
 	public List<Map<String, Object>> here(UUID caller, String serverFingerprint, String dimension) {
 		boolean admin = adminService.isAdmin(caller);
 		List<Map<String, Object>> result = new ArrayList<>();
+		List<EventNpc> seen = new ArrayList<>();
 		for (EventNpc npc : npcs.findByServerFingerprintAndDimension(serverFingerprint, dimension)) {
+			if (npc.getHubUuid() == null) {
+				seen.add(npc);
+			}
+		}
+		java.util.Set<UUID> hubsHere = new java.util.HashSet<>();
+		anchors.findByServerFingerprintAndDimension(serverFingerprint, dimension).forEach(anchor -> hubsHere.add(anchor.getHubUuid()));
+		if (!hubsHere.isEmpty()) {
+			seen.addAll(npcs.findByHubUuidIn(hubsHere));
+		}
+		for (EventNpc npc : seen) {
 			boolean open = events.findById(npc.getEventName()).map(EventGroup::isOpen).orElse(false);
 			if (open || admin) {
 				result.add(view(npc, open, admin));
@@ -91,6 +111,7 @@ public class EventNpcService {
 		EventGroup group = events.findById(event).orElseGet(() -> events.save(new EventGroup(event, clock.instant())));
 		EventNpc npc = new EventNpc(UUID.randomUUID(), group.getName(), name, server, dimension, number(body, "x"),
 				number(body, "y"), number(body, "z"), (float) number(body, "yaw"), admin, clock.instant());
+		npc.setHubUuid(hubOf(body));
 		npcs.save(npc);
 		log.info("Event NPC {} '{}' posed by {} in event {}", npc.getUuid(), name, admin, event);
 		changed();
@@ -131,6 +152,7 @@ public class EventNpcService {
 			npc.setY(number(body, "y"));
 			npc.setZ(number(body, "z"));
 			npc.setYaw((float) number(body, "yaw"));
+			npc.setHubUuid(hubOf(body));
 		}
 		npc.setUpdatedAt(clock.instant());
 		changed();
@@ -187,6 +209,16 @@ public class EventNpcService {
 		return npc;
 	}
 
+	/** {@code hub} (a hub's name) when the place is given in that hub's coordinates; absent or null: a world place. */
+	private UUID hubOf(Map<String, Object> body) {
+		Object name = body.get("hub");
+		if (name == null || name.toString().isBlank()) {
+			return null;
+		}
+		return hubs.findByNameIgnoreCase(name.toString().strip()).map(com.mystaria.phantasmon_backend.hub.Hub::getUuid)
+				.orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "ERROR_HUB_NOT_FOUND", Map.of("hub", name.toString())));
+	}
+
 	private EventNpc find(UUID uuid) {
 		return npcs.findById(uuid).orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "ERROR_NPC_NOT_FOUND", Map.of()));
 	}
@@ -195,9 +227,12 @@ public class EventNpcService {
 		sessionRegistry.broadcast(WsMessage.of("EventsNpcsChanged", Map.of()));
 	}
 
-	private static Map<String, Object> view(EventNpc npc, boolean open, boolean admin) {
+	private Map<String, Object> view(EventNpc npc, boolean open, boolean admin) {
 		Map<String, Object> view = new LinkedHashMap<>();
 		view.put("uuid", npc.getUuid());
+		// In a hub: x, y, z, yaw are hub coordinates.
+		view.put("hub", npc.getHubUuid() == null ? null
+				: hubs.findById(npc.getHubUuid()).map(com.mystaria.phantasmon_backend.hub.Hub::getName).orElse(null));
 		view.put("event", npc.getEventName());
 		view.put("open", open);
 		view.put("name", npc.getName());

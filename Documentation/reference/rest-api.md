@@ -570,15 +570,19 @@ Phantasmon Events (Adrien 2026-11-02). Un dresseur PNJ appartient à un événem
 défient que si l'événement est ouvert, les admins toujours (pour le régler). Chaque changement envoie
 `EventsNpcsChanged` à tous les clients connectés, qui relisent la liste.
 
-- `GET /events/npcs?server=<empreinte>&dimension=<id>` → `[{ "uuid", "event", "open", "name", "skin", "x", "y", "z",
-  "yaw", "ai", "format_id", "team_size", "team_species" }]` (`team_species` : admins seulement).
+- `GET /events/npcs?server=<empreinte>&dimension=<id>` → `[{ "uuid", "event", "open", "name", "skin", "hub", "x", "y",
+  "z", "yaw", "ai", "format_id", "team_size", "team_species" }]` (`team_species` : admins seulement) : ceux posés ici
+  hors hub, et ceux de chaque hub qui a une ancre ici (`hub` non null : `x`, `y`, `z`, `yaw` en coordonnées du hub, le
+  client les place dans chaque zone de ce hub).
 - `GET /admin/events` → `[{ "name", "open", "npcs" }]`.
 - `POST /admin/events/npcs` `{ "event", "name", "server_fingerprint", "dimension", "x", "y", "z", "yaw" }` → le PNJ ;
   l'événement est créé (fermé) s'il n'existe pas. `400 ERROR_EVENT_NAME` (minuscules, chiffres, `_`, 32 au plus),
   `ERROR_NPC_NAME`.
 - `POST /admin/events/npcs/{uuid}` : chaque champ facultatif — `name`, `skin` (pseudo Minecraft, vide : aucun,
   `ERROR_NPC_SKIN`), `event`, `ai` (`random`, `easy`, `normal`, `hard`, `veryhard`, `ERROR_NPC_AI`), `format_id`, et
-  la place (`server_fingerprint`, `dimension`, `x`, `y`, `z`, `yaw` ensemble). `404 ERROR_NPC_NOT_FOUND`.
+  la place (`server_fingerprint`, `dimension`, `x`, `y`, `z`, `yaw` ensemble, et `hub` : le nom du hub si la place est
+  donnée dans ses coordonnées, absent ou null sinon). `404 ERROR_NPC_NOT_FOUND`, `ERROR_HUB_NOT_FOUND`. `POST
+  /admin/events/npcs` accepte aussi `hub`.
 - `POST /admin/events/npcs/{uuid}/team` `{ "team": "GHOST" }` ou `{ "team": "COBBLEMON", "party": [...] }` (comme une
   invitation) : l'équipe du PNJ devient une copie de celle de l'admin (6 au plus). `400 ERROR_BATTLE_EMPTY_TEAM`,
   `ERROR_BATTLE_INVALID_PARTY`.
@@ -586,3 +590,22 @@ défient que si l'événement est ouvert, les admins toujours (pour le régler).
 - `POST /admin/events/{name}/open` `{ "open": bool }` → `{ "name", "open" }` ; `404 ERROR_EVENT_NOT_FOUND`.
 
 Le combat contre un PNJ passe par le WebSocket (`BattleNpcStart`).
+
+## Copie miroir du serveur dédié
+
+Notre propre serveur Minecraft (son mod `phantasmon-mirror-server`) construit les copies posées sur lui. Pas un joueur :
+en-tête `X-Phantasmon-Server-Token` = `phantasmon.mirror.server-token` (`PHANTASMON_MIRROR_SERVER_TOKEN`) ; sans jeton
+configuré, `404` ; jeton faux, `403 ERROR_SERVER_TOKEN`.
+
+- `GET /server/mirror/copies?fingerprint=<empreinte>` → `[{ "hub", "dimension", "min_x", "min_z", "side" }]` : les
+  ancres COPY posées sur ce serveur.
+- `GET /server/mirror/{hub}`, `/server/mirror/{hub}/tile/{tx}/{tz}`, `/server/mirror/{hub}/ghosts` : comme
+  `/events/mirror/...`.
+- `GET /server/mirror/{hub}/feed?since=<n>` → `{ "reset", "next", "messages": [{ "type", "data" }] }` : les messages
+  envoyés aux copies depuis le numéro `n` (`EventsMirrorBlocks`, `EventsMirrorTileChanged`, `EventsMirrorGhosts`,
+  `EventsMirrorReset`), les 2 000 derniers par hub ; `reset: true` s'il en manque (la copie est refaite) ; `since=0` :
+  seulement le numéro actuel.
+- `POST /server/mirror/{hub}/ghosts` `{ "changes": [[x, y, z, state], ...] }` → `{ "changed" }` : blocs posés
+  (`state`) ou cassés (`""`) à la main par un opérateur dans la copie de ce serveur, traités comme les blocs fantômes
+  d'une copie solo (montrés dans la zone source et les autres copies).
+

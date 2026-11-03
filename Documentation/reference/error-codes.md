@@ -124,6 +124,7 @@ Les codes marqués « — » côté client concernent des routes REST que le cli
 | `ERROR_HUB_CHAT_LOCKED` | — | WS | Chat des hubs verrouillé par un admin (seuls les admins écrivent) | `phantasmon.hub.error.chat_locked` |
 | `ERROR_NPC_NOT_FOUND` | 404 | REST, WS | Dresseur PNJ inconnu, ou son événement est fermé (joueur) | `phantasmon.battle.error.npc_not_found` |
 | `ERROR_NPC_EMPTY_TEAM` | — | WS | `BattleNpcStart` : ce PNJ n'a pas encore d'équipe | `phantasmon.battle.error.npc_empty_team` |
+| `ERROR_NPC_BUSY` | — | WS | `BattleNpcStart` : ce PNJ est déjà en combat avec quelqu'un (un combat à la fois) | `phantasmon.battle.error.npc_busy` |
 | `ERROR_NPC_NAME`, `ERROR_NPC_SKIN`, `ERROR_NPC_AI` | 400 | REST | Nom (32 au plus), skin (pseudo Minecraft) ou IA invalides | `phantasmon_events.error.*` (Events) |
 | `ERROR_EVENT_NAME` | 400 | REST | Nom d'événement invalide (minuscules, chiffres, `_`) | `phantasmon_events.error.error_event_name` |
 | `ERROR_EVENT_NOT_FOUND` | 404 | REST | Événement inconnu | `phantasmon_events.error.error_event_not_found` |

@@ -10,4 +10,6 @@ public interface EventNpcRepository extends JpaRepository<EventNpc, UUID> {
 	List<EventNpc> findByServerFingerprintAndDimension(String serverFingerprint, String dimension);
 
 	List<EventNpc> findByEventName(String eventName);
+
+	List<EventNpc> findByHubUuidIn(java.util.Collection<UUID> hubUuids);
 }

@@ -39,6 +39,9 @@ public class SecurityConfig {
 						.requestMatchers(HttpMethod.GET, "/t", "/t/", "/t/*", "/public/tournaments", "/public/tournaments/*").permitAll()
 						.requestMatchers(HttpMethod.POST, "/auth/challenge", "/auth/session", "/auth/refresh").permitAll()
 						.requestMatchers("/ws").permitAll()
+						// Our dedicated server's mirror copy: checked by its own token (ServerMirrorController).
+						.requestMatchers(HttpMethod.GET, "/server/mirror/**").permitAll()
+						.requestMatchers(HttpMethod.POST, "/server/mirror/*/ghosts").permitAll()
 						.anyRequest().authenticated())
 				.addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 		return http.build();

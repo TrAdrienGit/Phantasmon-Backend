@@ -39,6 +39,10 @@ public class EventNpc {
 	/** The Minecraft account whose skin it wears; null: its own name's. */
 	private String skin;
 
+	/** The hub it belongs to (V23): then {@code x, y, z, yaw} are hub coordinates; null: a place in the world. */
+	@Column(name = "hub_uuid")
+	private UUID hubUuid;
+
 	@Column(name = "server_fingerprint", nullable = false)
 	private String serverFingerprint;
 
