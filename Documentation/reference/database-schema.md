@@ -349,7 +349,8 @@ membres du hub).
 | `server_fingerprint`, `dimension` | VARCHAR(128) | NOT NULL | Où il se tient (index `event_npcs_place`) |
 | `x`, `y`, `z`, `yaw` | DOUBLE, REAL | NOT NULL | |
 | `team` | JSONB | NOT NULL, défaut `[]` | Copie de Pokémon (même forme que les équipes d'un combat), 6 au plus |
-| `ai` | VARCHAR(16) | NOT NULL, défaut `normal` | `random`, `easy`, `normal`, `hard`, `veryhard` (contrôle applicatif) |
+| `ai` | VARCHAR(16) | NOT NULL, défaut `normal` | `random`, `easy`, `normal`, `hard`, `veryhard`, `expert` (contrôle applicatif) |
+| `ai_debug` | BOOLEAN | NOT NULL, défaut `false` (V24) | Son IA explique chaque décision dans le chat du joueur qui l'affronte |
 | `format_id` | VARCHAR(64) | NOT NULL, défaut `free` | Format de combat (inconnu : Libre) |
 | `created_by` | UUID | NOT NULL | L'admin (pas de FK) |
 | `updated_at` | TIMESTAMPTZ | NOT NULL | |
@@ -392,6 +393,7 @@ Tout est perdu au redémarrage du backend (comportement voulu) et n'est pas part
 | V21 | `V21__hub_chat_mutes.sql` | 2026-11-01 | Modération du chat des hubs (TODO-31) : table `hub_chat_mutes` |
 | V22 | `V22__event_npcs.sql` | 2026-11-02 | Phantasmon Events : tables `event_groups` et `event_npcs` (dresseurs PNJ) |
 | V23 | `V23__event_npcs_in_hubs.sql` | 2026-11-03 | `event_npcs.hub_uuid` : un dresseur PNJ peut appartenir à un hub |
+| V24 | `V24__event_npcs_ai_debug.sql` | 2026-11-03 | `event_npcs.ai_debug` : le débogage de l'IA d'un PNJ |
 
 ## 10. Décisions de schéma
 

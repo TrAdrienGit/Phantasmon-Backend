@@ -579,7 +579,7 @@ défient que si l'événement est ouvert, les admins toujours (pour le régler).
   l'événement est créé (fermé) s'il n'existe pas. `400 ERROR_EVENT_NAME` (minuscules, chiffres, `_`, 32 au plus),
   `ERROR_NPC_NAME`.
 - `POST /admin/events/npcs/{uuid}` : chaque champ facultatif — `name`, `skin` (pseudo Minecraft, vide : aucun,
-  `ERROR_NPC_SKIN`), `event`, `ai` (`random`, `easy`, `normal`, `hard`, `veryhard`, `ERROR_NPC_AI`), `format_id`, et
+  `ERROR_NPC_SKIN`), `event`, `ai` (`random`, `easy`, `normal`, `hard`, `veryhard`, `expert`, `ERROR_NPC_AI`), `ai_debug` (bool : l'IA explique chaque décision dans le chat du joueur), `format_id`, et
   la place (`server_fingerprint`, `dimension`, `x`, `y`, `z`, `yaw` ensemble, et `hub` : le nom du hub si la place est
   donnée dans ses coordonnées, absent ou null sinon). `404 ERROR_NPC_NOT_FOUND`, `ERROR_HUB_NOT_FOUND`. `POST
   /admin/events/npcs` accepte aussi `hub`.

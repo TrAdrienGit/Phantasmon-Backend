@@ -137,6 +137,9 @@ public class EventNpcService {
 			}
 			npc.setAi(ai);
 		}
+		if (body.containsKey("ai_debug")) {
+			npc.setAiDebug(Boolean.TRUE.equals(body.get("ai_debug")));
+		}
 		if (body.containsKey("format_id")) {
 			npc.setFormatId(required(body, "format_id"));
 		}
@@ -242,6 +245,7 @@ public class EventNpcService {
 		view.put("z", npc.getZ());
 		view.put("yaw", npc.getYaw());
 		view.put("ai", npc.getAi());
+		view.put("ai_debug", npc.isAiDebug());
 		view.put("format_id", npc.getFormatId());
 		List<String> species = new ArrayList<>();
 		for (PokemonResponse pokemon : npc.getTeam()) {

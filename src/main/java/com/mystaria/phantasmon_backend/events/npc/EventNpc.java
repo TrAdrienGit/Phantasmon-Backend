@@ -62,6 +62,10 @@ public class EventNpc {
 	@Column(nullable = false)
 	private String ai;
 
+	/** Its AI explains each decision in the player's chat (V24). */
+	@Column(name = "ai_debug", nullable = false)
+	private boolean aiDebug;
+
 	@Column(name = "format_id", nullable = false)
 	private String formatId;
 

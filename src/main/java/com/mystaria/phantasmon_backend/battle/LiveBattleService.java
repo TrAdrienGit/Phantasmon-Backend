@@ -918,6 +918,7 @@ public class LiveBattleService {
 						"adjust_level", format.adjustLevel())));
 		view.put("intro", java.util.concurrent.ThreadLocalRandom.current().nextInt(INTRO_COUNT));
 		view.put("ai", npc.getAi());
+		view.put("ai_debug", npc.isAiDebug());
 		view.put("npc_uuid", npc.getUuid());
 		view.put("ambiance", lobby.ambiance);
 		if (npc.getSkin() != null) {
