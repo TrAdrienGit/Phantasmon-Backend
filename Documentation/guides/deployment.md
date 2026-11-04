@@ -100,7 +100,7 @@ powershell -ExecutionPolicy Bypass -File scripts\backup-database.ps1
 ### 3.2 Planifier (tâche Windows, à faire sur la machine qui héberge la base)
 
 ```powershell
-$script = 'D:\Main_user_data\Documents\GitHub\Phantasmon-Backend\scripts\backup-database.ps1'
+$script = 'W:\GitHub\Phantasmon-Backend\scripts\backup-database.ps1'
 $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$script`""
 $trigger = New-ScheduledTaskTrigger -Daily -At 4am
 Register-ScheduledTask -TaskName 'Phantasmon - sauvegarde base' -Action $action -Trigger $trigger
