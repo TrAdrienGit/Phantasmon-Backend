@@ -15,7 +15,7 @@ import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
-/** A player's trainer animation profile (Cobblemon Spectacle, phase E3): moment id → animation name. */
+/** A player's trainer animation profile (Cobblemon Battle Showtime, phase E3): moment id → animation name. */
 @Entity
 @Table(name = "trainer_profiles")
 @Getter

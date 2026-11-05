@@ -124,7 +124,7 @@ public class LiveBattleService {
 		UUID aiOpponent;
 		/** A tournament match's game: the tournament is told how it ended. */
 		UUID tournamentMatch;
-		/** The lobby's ambiance (Spectacle A3), sent to spectators too; "" = each their own. */
+		/** The lobby's ambiance (Showtime A3), sent to spectators too; "" = each their own. */
 		String ambiance = "";
 		/** Watching players, in arrival order. */
 		final java.util.Set<UUID> spectators = new java.util.LinkedHashSet<>();
@@ -169,7 +169,7 @@ public class LiveBattleService {
 		/** A tournament match's game (Phantasmon Events): its format is the tournament's, not changeable. */
 		UUID tournamentMatch;
 		/**
-		 * The battle ambiance both players see (Cobblemon Spectacle phase A3), picked by either: an ambiance id
+		 * The battle ambiance both players see (Cobblemon Battle Showtime phase A3), picked by either: an ambiance id
 		 * ({@code namespace:name}), or "" for each player's own choice.
 		 */
 		String ambiance = "";
@@ -492,7 +492,7 @@ public class LiveBattleService {
 
 	private static final java.util.regex.Pattern AMBIANCE_ID = java.util.regex.Pattern.compile("[a-z0-9_.-]{1,64}:[a-z0-9_./-]{1,64}");
 
-	/** Battle ambiance (Spectacle A3): either player picks it, for both; "" = each player's own. Nobody is unreadied. */
+	/** Battle ambiance (Showtime A3): either player picks it, for both; "" = each player's own. Nobody is unreadied. */
 	public synchronized void setLobbyAmbiance(UUID playerUuid, UUID lobbyUuid, String ambiance) {
 		Lobby lobby = lobbyOf(playerUuid, lobbyUuid);
 		if (lobby == null) {

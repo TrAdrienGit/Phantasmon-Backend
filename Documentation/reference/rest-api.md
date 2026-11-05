@@ -542,9 +542,9 @@ hub, `HubLeft` `ANCHOR_DELETED`), le dossier est renommé `hub_<name>.deleted-<a
 hub). Refusé : `422 ERROR_HUB_SCHEMATIC_INVALID` (`details.reason`), la construction précédente reste.
 `403 ERROR_ADMIN_REQUIRED`, `404 ERROR_HUB_NOT_FOUND`.
 
-## Profils d'animation des dresseurs (Cobblemon Spectacle E3)
+## Profils d'animation des dresseurs (Cobblemon Battle Showtime E3)
 
-Chaque joueur choisit dans Spectacle une animation par moment du combat ; Phantasmon l'envoie ici et lit celles des
+Chaque joueur choisit dans Showtime une animation par moment du combat ; Phantasmon l'envoie ici et lit celles des
 dresseurs que le client voit (adversaire, combats regardés, avatars de hub). Moments : `guard`, `send_out`,
 `recall`, `attack`, `victory`, `defeat` ; une animation s'appelle `<moment>_<style>` (minuscules, chiffres, `_`, 64
 caractères au plus). Le reste est ignoré sans erreur ; un moment absent = l'animation par défaut.

@@ -20,7 +20,7 @@ import org.springframework.web.bind.annotation.RestController;
 import com.mystaria.phantasmon_backend.common.ApiException;
 
 /**
- * Trainers' animation profiles (Cobblemon Spectacle, phase E3): each client sends its own and reads those of the
+ * Trainers' animation profiles (Cobblemon Battle Showtime, phase E3): each client sends its own and reads those of the
  * trainers it sees (opponent, spectated battles, hub avatars), so everyone sees each trainer's style.
  *
  * <ul>

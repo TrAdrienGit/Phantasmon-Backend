@@ -49,7 +49,7 @@ Pour ajouter une décision : prendre le numéro suivant, dater, et mettre à jou
 | D-34 | Construction du Global Hub par un schematic en blocs client | Acceptée | 2026-10-08 |
 | D-35 | Plusieurs hubs créés par les admins, chacun espace séparé | Acceptée | 2026-10-08 |
 | D-36 | Vocal dans les hubs par Simple Voice Chat, dépendance facultative | Acceptée | 2026-10-09 |
-| D-37 | Mise en scène des combats sortie dans le mod Cobblemon Spectacle | Acceptée | 2026-10-29 |
+| D-37 | Mise en scène des combats sortie dans le mod Cobblemon Battle Showtime | Acceptée | 2026-10-29 |
 | D-38 | Hubs miroirs : terrain d'un serveur copié dans un monde solo (Phantasmon Events) | Acceptée | 2026-10-29 |
 
 ---
@@ -482,45 +482,45 @@ Pour ajouter une décision : prendre le numéro suivant, dater, et mettre à jou
 - **Conséquences** : LIM-15 (dépend du serveur de chacun) ; la voix passe par TCP (WebSocket) : une perte réseau
   retarde au lieu de couper (TODO-34 : UDP / WebRTC si besoin).
 
-## D-37 — Mise en scène des combats sortie dans le mod Cobblemon Spectacle
+## D-37 — Mise en scène des combats sortie dans le mod Cobblemon Battle Showtime
 
 - **Contexte** : Adrien (2026-10-29) voit Phantasmon devenir un fourre-tout (Ghost, mise en scène, hubs, bientôt des
   événements) et veut le découper en mods qu'il fera évoluer un par un. Le premier découpage : la mise en scène des
   combats, qui doit aussi servir aux combats Cobblemon classiques **et** rester toujours compatible avec Phantasmon.
 - **Décision (choix d'Adrien)** :
-  - nouveau mod client **Cobblemon Spectacle** (`Cobblemon-Spectacle`, mod id `cobblemon_spectacle`), qui ne dépend
+  - nouveau mod client **Cobblemon Battle Showtime** (`Cobblemon-Battle-Showtime`, mod id `cobblemon_battle_showtime`), qui ne dépend
     que de Cobblemon et d'aucun backend ;
-  - **deux jars séparés** : Phantasmon le déclare obligatoire (`"cobblemon_spectacle": ">=0.1.0 <0.2.0"`) et ne
+  - **deux jars séparés** : Phantasmon le déclare obligatoire (`"cobblemon_battle_showtime": ">=0.1.0 <0.2.0"`) et ne
     l'embarque pas ;
   - combats classiques mis en scène plus tard (phase S2) : joueur contre joueur et dresseurs PNJ, pas les sauvages ;
     intros en PvP seulement.
 - **Choix de Claude** :
-  - partent dans Spectacle : `BattleCinematic` + les 5 intros (`BattleIntroScreen`), `BattleCameraDirector`,
-    `BattleSpectacle` + `SpectacleOverlay`, la colonne de boutons de l'écran de combat et 4 mixins (`CameraMixin`,
-    `GameRendererSpectacleMixin`, `BattleGuiSpectacleMixin`, `EntityGlowMixin`) ; restent dans Phantasmon le moteur
+  - partent dans Showtime : `BattleCinematic` + les 5 intros (`BattleIntroScreen`), `BattleCameraDirector`,
+    `BattleShowtime` + `ShowtimeOverlay`, la colonne de boutons de l'écran de combat et 4 mixins (`CameraMixin`,
+    `GameRendererShowtimeMixin`, `BattleGuiShowtimeMixin`, `EntityGlowMixin`) ; restent dans Phantasmon le moteur
     sur l'hôte, le relais, les entités locales (`BattleVisuals`, `BattleFieldScenes`) et la relecture des
     animations d'attaque (`ActionEffectPlayer`, propre aux combats sans serveur) ;
-  - contrat : l'API de Spectacle (`BattleStage`, `Transformation`, `BattleButton`, `SpectacleHooks`) et les méthodes
+  - contrat : l'API de Showtime (`BattleStage`, `Transformation`, `BattleButton`, `ShowtimeHooks`) et les méthodes
     publiques de ses trois classes ; Phantasmon donne sa scène au démarrage du combat, ses avatars de hub et ses
-    halos gardés par `SpectacleHooks`, ajoute ses boutons musique et chrono, et démarre lui-même sa musique
+    halos gardés par `ShowtimeHooks`, ajoute ses boutons musique et chrono, et démarre lui-même sa musique
     d'intro (`startIntro(..., onIntroEnd)`) ;
   - Phantasmon se compile contre le jar publié dans le Maven local (`publishToMavenLocal`) : un changement d'API qui
     le casse casse sa compilation ; le script de déploiement construit et installe les deux jars ;
-  - les aperçus `/phantasmon admin debug intro|spectacle` deviennent `/spectacle preview intro|<effet>`, ouverts à
+  - les aperçus `/phantasmon admin debug intro|spectacle` deviennent `/showtime preview intro|<effet>`, ouverts à
     tous (l'aperçu d'intro n'a plus de musique).
-- **Complément (Adrien, 2026-10-29)** : les musiques de combat vont aussi dans Spectacle (`BattleMusic`, réglages
-  `MusicSettings`, `MusicManagerMixin`, bouton « musique suivante ») ; Spectacle joue lui-même la musique d'intro
+- **Complément (Adrien, 2026-10-29)** : les musiques de combat vont aussi dans Showtime (`BattleMusic`, réglages
+  `MusicSettings`, `MusicManagerMixin`, bouton « musique suivante ») ; Showtime joue lui-même la musique d'intro
   puis de combat ; Phantasmon garde la main sur le lobby, la victoire, la défaite et l'arrêt, et garde son écran de
-  musiques (touche N), qui utilise ceux de Spectacle. Le pack de ressources devient « Cobblemon Spectacle Music »
-  (`assets/cobblemon_spectacle/`), l'ancien `assets/phantasmon/` reste lu.
-- **Conséquences** : Phantasmon passe à 16 mixins (5 dans Spectacle) ; la CI de Phantasmon récupère le dépôt `Cobblemon-Spectacle`
-  avant de compiler ; plan complet et phases suivantes dans `Cobblemon-Spectacle/Documentation/plan-decoupage.md`.
+  musiques (touche N), qui utilise ceux de Showtime. Le pack de ressources devient « Cobblemon Battle Showtime Music »
+  (`assets/cobblemon_battle_showtime/`), l'ancien `assets/phantasmon/` reste lu.
+- **Conséquences** : Phantasmon passe à 16 mixins (5 dans Showtime) ; la CI de Phantasmon récupère le dépôt `Cobblemon-Battle-Showtime`
+  avant de compiler ; plan complet et phases suivantes dans `Cobblemon-Battle-Showtime/Documentation/plan-decoupage.md`.
 
 ## D-38 — Hubs miroirs : terrain d'un serveur copié dans un monde solo (Phantasmon Events)
 
 - **Contexte** : Adrien (2026-10-29) veut animer ses événements depuis un monde solo (tous les droits) sur le terrain
   réel d'une zone d'un serveur multijoueur, sans mod serveur (D-01) : les blocs vont du serveur vers le monde solo,
-  jamais l'inverse. Add-on séparé `Phantasmon-Events`, qui dépend de Phantasmon et de Cobblemon Spectacle.
+  jamais l'inverse. Add-on séparé `Phantasmon-Events`, qui dépend de Phantasmon et de Cobblemon Battle Showtime.
 - **Décision (choix d'Adrien)** :
   - un hub peut être **miroir** (`hubs.mirror`) : créé, redimensionné, supprimé par les admins seulement
     (`/events hub create <nom> <rayon>`, `resize <hub> <±N>`, `delete <hub>`) ;
@@ -561,3 +561,16 @@ Pour ajouter une décision : prendre le numéro suivant, dater, et mettre à jou
 - **Conséquences** : `PokemonCommandHandler` devient `PcOpener` ; `TradeCommandHandler`, `TradeClient` et leurs DTO
   sont retirés ; la portée de visée des avatars du Hub passe de 10 à 20 blocs (la roue des vrais joueurs suit
   Cobblemon, 64 blocs).
+
+## D-40 — Cobblemon Spectacle devient Cobblemon Battle Showtime
+
+- **Date** : 2026-11-05.
+- **Contexte** : le mod ajoute à un combat tout ce qui le rend plus spectaculaire, à la vue comme à l'oreille :
+  animations des dresseurs, des Pokémon et des attaques, caméra, effets, musique. « Stage » a été écarté, car il
+  évoque une arène de combat, à laquelle le mod ne touche pas.
+- **Décision** : nom officiel **Cobblemon Battle Showtime**, mod id `cobblemon_battle_showtime`, package
+  `com.mystaria.showtime`, commande `/showtime`, dépôt `Cobblemon-Battle-Showtime`.
+- **Conséquences** : au premier lancement, `LegacySettings` déplace les réglages `config/cobblemon_spectacle*.json`
+  vers le nouveau nom ; le namespace `cobblemon_spectacle` reste lu pour les packs de musique déjà créés ; le script
+  de déploiement retire l'ancien jar. Le mot « spectacle » reste un nom commun dans les docs en français, et la
+  migration Flyway V20, déjà appliquée, garde l'ancien nom dans son commentaire.

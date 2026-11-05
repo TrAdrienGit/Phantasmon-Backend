@@ -34,7 +34,7 @@ Le projet passe à **Phantasmon Network** (couche inter-serveurs), développé d
 **Jalon 1 (« Hub social minimal ») et jalon 2 (« Interactions » : échange et combat entre serveurs) terminés et
 validés en jeu le 2026-10-07.**
 
-**2026-10-30 — Une seule branche.** Depuis le découpage en mods (Spectacle, Events, Trahison), chaque dépôt vit sur `main` uniquement ; `dev` a été fusionnée puis supprimée.
+**2026-10-30 — Une seule branche.** Depuis le découpage en mods (Showtime, Events, Trahison), chaque dépôt vit sur `main` uniquement ; `dev` a été fusionnée puis supprimée.
 
 | Étape Network | Périmètre | Statut |
 |---|---|---|
@@ -94,5 +94,5 @@ Suivis dans [`known-issues.md`](known-issues.md) (identifiants `BUG-n`, `TODO-n`
 |---|---|---|
 | Tests automatisés | 220 tests (JUnit 5 + Testcontainers, 2026-10-09) | 70 tests (logique pure, 2026-10-08) |
 | Migrations Flyway | V1 à V14 | — |
-| Mixins | — | 16 (dont 1 accesseur) ; 5 de plus dans Cobblemon Spectacle (D-37) |
+| Mixins | — | 16 (dont 1 accesseur) ; 5 de plus dans Cobblemon Battle Showtime (D-37) |
 | Langues | — | `fr_fr`, `en_us` (~224 clés) |

@@ -310,7 +310,7 @@ membres du hub).
   `wins2`, `winner_uuid`, `status` (`PENDING`, `PLAYING`, `DONE`), `forfeit`, `wave` (V19 : vague où un admin ouvre le match d'un arbre, 0 en ronde
   suisse). Effacer un tournoi annulé ou terminé efface ses joueurs et ses matchs.
 
-## 7 sexies. `trainer_profiles` (Cobblemon Spectacle E3, V20)
+## 7 sexies. `trainer_profiles` (Cobblemon Battle Showtime E3, V20)
 
 | Colonne | Type | Contraintes | Notes |
 |---|---|---|---|
@@ -389,7 +389,7 @@ Tout est perdu au redémarrage du backend (comportement voulu) et n'est pas part
 | V17 | `V17__mirror_hubs_no_radius_cap.sql` | 2026-10-29 | Plus de plafond de rayon pour les hubs miroirs (admins seulement) |
 | V18 | `V18__tournaments.sql` | 2026-10-29 | Tournois : tables `tournaments`, `tournament_players`, `tournament_matches` |
 | V19 | `V19__tournament_match_wave.sql` | 2026-10-30 | `tournament_matches.wave` (double élimination) |
-| V20 | `V20__trainer_profiles.sql` | 2026-10-30 | Profils d'animation des dresseurs (Cobblemon Spectacle E3) : table `trainer_profiles` |
+| V20 | `V20__trainer_profiles.sql` | 2026-10-30 | Profils d'animation des dresseurs (Cobblemon Battle Showtime E3) : table `trainer_profiles` |
 | V21 | `V21__hub_chat_mutes.sql` | 2026-11-01 | Modération du chat des hubs (TODO-31) : table `hub_chat_mutes` |
 | V22 | `V22__event_npcs.sql` | 2026-11-02 | Phantasmon Events : tables `event_groups` et `event_npcs` (dresseurs PNJ) |
 | V23 | `V23__event_npcs_in_hubs.sql` | 2026-11-03 | `event_npcs.hub_uuid` : un dresseur PNJ peut appartenir à un hub |
