@@ -34,7 +34,7 @@ import lombok.extern.slf4j.Slf4j;
 public class EventNpcService {
 
 	/** AI levels: Cobblemon's random AI, its "strong" AI at rising skill, then Phantasmon's own {@code expert}. */
-	public static final Set<String> AIS = Set.of("random", "easy", "normal", "hard", "veryhard", "expert", "reborn");
+	public static final Set<String> AIS = Set.of("random", "easy", "normal", "hard", "veryhard", "expert", "reborn", "reborn_tweak");
 	static final Pattern NAME = Pattern.compile("[A-Za-z0-9_ éèêàçÉÈ'-]{1,32}");
 	static final Pattern EVENT = Pattern.compile("[a-z0-9_]{1,32}");
 	static final Pattern SKIN = Pattern.compile("[A-Za-z0-9_]{1,16}");
