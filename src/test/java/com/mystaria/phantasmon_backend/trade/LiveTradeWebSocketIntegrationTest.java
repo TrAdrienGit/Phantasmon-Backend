@@ -58,6 +58,9 @@ class LiveTradeWebSocketIntegrationTest {
 	@Autowired
 	private ObjectMapper objectMapper;
 
+	@Autowired
+	private com.mystaria.phantasmon_backend.websocket.SessionRegistry sessionRegistry;
+
 	private UUID aliceUuid;
 	private UUID bobUuid;
 	private RecordingHandler alice;
@@ -84,6 +87,10 @@ class LiveTradeWebSocketIntegrationTest {
 		bob = new RecordingHandler();
 		aliceSession = connect(aliceUuid, "Alice", alice);
 		bobSession = connect(bobUuid, "Bob", bob);
+		// The client's handshake can complete before the server has registered the session: a message sent at once
+		// then finds its target "not connected" (a flaky CI failure, 2026-11-07).
+		awaitRegistered(aliceUuid);
+		awaitRegistered(bobUuid);
 	}
 
 	@AfterEach
@@ -113,6 +120,16 @@ class LiveTradeWebSocketIntegrationTest {
 		return pokemonRepository.saveAndFlush(new Pokemon(UUID.randomUUID(), ownerUuid, "eevee", null,
 				(short) 10, "timid", "adaptability", false, (short) 1, (short) 1, null, "1.8.1",
 				Map.of("ivs", Map.of(), "evs", Map.of())));
+	}
+
+	private void awaitRegistered(UUID playerUuid) throws InterruptedException {
+		long deadline = System.currentTimeMillis() + 5000;
+		while (!sessionRegistry.isConnected(playerUuid)) {
+			if (System.currentTimeMillis() > deadline) {
+				throw new AssertionError("Player " + playerUuid + " never registered by the server");
+			}
+			Thread.sleep(10);
+		}
 	}
 
 	private static void send(WebSocketSession session, String type, String dataJson) throws Exception {
