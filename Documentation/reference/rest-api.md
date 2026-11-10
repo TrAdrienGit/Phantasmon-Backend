@@ -55,6 +55,9 @@
 | `POST` | [`/admin/hubs`](#post-adminhubs) | Bearer admin | Créer un hub |
 | `DELETE` | [`/admin/hubs/{name}`](#delete-adminhubsname) | Bearer admin | Supprimer un hub et ses Anchors |
 | `POST` | [`/admin/hubs/{name}/reload`](#post-adminhubsnamereload) | Bearer admin | Relire le dossier de schematics d'un hub |
+| `GET` | [`/admin/hubs`](#gestionnaire-des-hubs-admins) | Bearer admin | Gestionnaire des hubs : tous les hubs, création, ancres |
+| `GET` | [`/admin/hubs/{name}/anchors`](#gestionnaire-des-hubs-admins) | Bearer admin | Les ancres d'un hub, sur tous les serveurs |
+| `POST` | [`/admin/hubs/{name}/rename`](#gestionnaire-des-hubs-admins) | Bearer admin | Renommer un hub |
 
 ---
 
@@ -539,6 +542,22 @@ hub, `HubLeft` `ANCHOR_DELETED`), le dossier est renommé `hub_<name>.deleted-<a
 `200` + le hub : le dossier est relu avec les contrôles du démarrage (au plus un fichier, lisible, de la taille du
 hub). Refusé : `422 ERROR_HUB_SCHEMATIC_INVALID` (`details.reason`), la construction précédente reste.
 `403 ERROR_ADMIN_REQUIRED`, `404 ERROR_HUB_NOT_FOUND`.
+
+### Gestionnaire des hubs (admins)
+
+Routes de l'écran « Gestionnaire des hubs » du client (2026-11-10), toutes `403 ERROR_ADMIN_REQUIRED` hors admin.
+
+- `GET /admin/hubs` → tous les hubs, de tous les types, même ceux dont l'add-on n'est pas chargé :
+  `[{ "name", "kind", "size": { "x", "y", "z" }, "schematic", "available", "created_at", "created_by",
+  "created_by_name", "anchors", ...champs du type }]`. `available` : `false` pour un hub caché aux joueurs (D-41) ;
+  `anchors` : nombre d'ancres qui y mènent, tous serveurs confondus ; `created_by_name` : `null` pour `global`.
+- `GET /admin/hubs/{name}/anchors` → `[{ "uuid", "name", "owner_uuid", "owner_name", "server_fingerprint",
+  "dimension", "x", "y", "z", "yaw", "role", "created_at" }]`, de la plus ancienne à la plus récente. Une ancre se
+  supprime par `DELETE /hub/anchors/{uuid}` (un admin peut supprimer celle de n'importe qui).
+- `POST /admin/hubs/{name}/rename` `{ "name": "<nouveau>" }` → le hub ; même règle de nom qu'à la création
+  (`400 ERROR_HUB_INVALID_NAME`, `409 ERROR_HUB_NAME_TAKEN`). Le dossier `hub_<ancien>/` devient `hub_<nouveau>/`
+  (`409 ERROR_HUB_FOLDER_TAKEN` s'il existe déjà, `500 ERROR_HUB_FOLDER_MOVE` si le déplacement échoue : rien n'est
+  changé) ; ancres et membres restent ; `HubCatalogChanged` est diffusé.
 
 ## Profils d'animation des dresseurs (Cobblemon Battle Showtime E3)
 

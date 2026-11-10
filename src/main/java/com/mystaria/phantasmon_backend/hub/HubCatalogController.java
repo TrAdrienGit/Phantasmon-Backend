@@ -85,6 +85,31 @@ public class HubCatalogController {
 		return catalog.delete(admin, name);
 	}
 
+	/** The hub manager (admins): every hub with its creation, build, anchor count and availability. */
+	@GetMapping("/admin/hubs")
+	public List<HubCatalogService.HubAdminView> adminList(Authentication authentication) {
+		adminService.requireAdmin(caller(authentication));
+		return catalog.adminList();
+	}
+
+	/** The hub manager: the anchors leading to a hub, on every server, with their owners. */
+	@GetMapping("/admin/hubs/{name}/anchors")
+	public List<HubCatalogService.AnchorAdminView> adminAnchors(@PathVariable String name, Authentication authentication) {
+		adminService.requireAdmin(caller(authentication));
+		return catalog.adminAnchors(name);
+	}
+
+	public record HubRenameRequest(String name) {
+	}
+
+	@PostMapping("/admin/hubs/{name}/rename")
+	public HubCatalogService.HubView rename(@PathVariable String name, @RequestBody(required = false) HubRenameRequest request,
+			Authentication authentication) {
+		UUID admin = caller(authentication);
+		adminService.requireAdmin(admin);
+		return catalog.rename(admin, name, request == null ? null : request.name());
+	}
+
 	@PostMapping("/admin/hubs/{name}/reload")
 	public HubCatalogService.HubView reload(@PathVariable String name, Authentication authentication) {
 		UUID admin = caller(authentication);

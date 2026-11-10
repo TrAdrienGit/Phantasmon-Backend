@@ -81,7 +81,8 @@ compatibilité avec Battle Extras (3 mixins), musique du lobby jouée par Showti
 | Modération du chat du hub | Rendre muet pour une durée, rétablir, verrouiller le chat, annonces (TODO-31) | `/phantasmon admin hub mute / unmute / lock` |
 | Terrain visible alentour | Les joueurs du même serveur et, si un joueur y est, du Global Hub voient les Pokémon d'un combat sans le regarder (D-33) ; validé en jeu, à revoir | Automatique |
 | Combat solo (admin) | Combat contre un miroir de son équipe, joué par l'IA de Cobblemon, regardable, non stocké (D-32) | `/phantasmon admin battle solo` |
-| API pour add-ons | `PhantasmonApi` : session, requêtes au backend, messages WebSocket, équipe Cobblemon, roues d'interaction sur d'autres entités, combat contre un PNJ | Utilisée par Phantasmon Events |
+| Gestionnaire des hubs (admin) | Liste des hubs (taille, construction, ancres, création), renommer, relire, supprimer, créer ; ancres de chaque hub sur tous les serveurs, supprimables une à une ; onglets ajoutables par les add-ons | Touche **H** |
+| API pour add-ons | `PhantasmonApi` : session, requêtes au backend, messages WebSocket, équipe Cobblemon, roues d'interaction sur d'autres entités, combat contre un PNJ, onglets du gestionnaire des hubs | Utilisée par Phantasmon Events |
 | Langues | Français et anglais | Langue du jeu |
 
 ## 3. Non implémenté (prévu par le CAD)
@@ -107,7 +108,7 @@ Suivis dans [`known-issues.md`](known-issues.md) (identifiants `BUG-n`, `TODO-n`
 
 | | Backend | Client |
 |---|---|---|
-| Tests automatisés | 222 tests (JUnit 5 + Testcontainers, 2026-11-10) ; module Events : 11 | 77 tests (logique pure, 2026-11-10) |
+| Tests automatisés | 223 tests (JUnit 5 + Testcontainers, 2026-11-10) ; module Events : 11 | 77 tests (logique pure, 2026-11-10) |
 | Migrations Flyway | V1 à V25 (V18-V19 et V22-V24 passés dans le module Events, qui a ses propres V1 à V3, D-41) | — |
 | Mixins | — | 20 (dont 1 accesseur et 3 pour Battle Extras) ; ceux de la mise en scène sont dans Cobblemon Battle Showtime (D-37) |
 | Langues | — | `fr_fr`, `en_us` (399 clés) |

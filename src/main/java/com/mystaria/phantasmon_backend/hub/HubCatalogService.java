@@ -81,6 +81,7 @@ public class HubCatalogService {
 
 	private final HubRepository hubRepository;
 	private final HubAnchorRepository anchorRepository;
+	private final com.mystaria.phantasmon_backend.player.PlayerRepository playerRepository;
 	private final HubService hubService;
 	private final SessionRegistry sessionRegistry;
 	/** Hub kinds of add-ons (D-41): their fields in the views. */
@@ -90,12 +91,14 @@ public class HubCatalogService {
 	private final Map<UUID, Schematic> schematics = new ConcurrentHashMap<>();
 
 	public HubCatalogService(HubRepository hubRepository, HubAnchorRepository anchorRepository, HubService hubService,
-			SessionRegistry sessionRegistry, HubKinds hubKinds, @Value("${phantasmon.hub.schematics-dir:hub_schematics}") String schematicsDir) {
+			SessionRegistry sessionRegistry, HubKinds hubKinds,
+			com.mystaria.phantasmon_backend.player.PlayerRepository playerRepository, @Value("${phantasmon.hub.schematics-dir:hub_schematics}") String schematicsDir) {
 		this.hubRepository = hubRepository;
 		this.anchorRepository = anchorRepository;
 		this.hubService = hubService;
 		this.sessionRegistry = sessionRegistry;
 		this.hubKinds = hubKinds;
+		this.playerRepository = playerRepository;
 		this.root = Path.of(schematicsDir);
 	}
 
@@ -247,6 +250,104 @@ public class HubCatalogService {
 		result.put("anchors_deleted", anchors.size());
 		result.put("archived_as", archive);
 		return result;
+	}
+
+	// ---------------------------------------------------------------- hub manager (admins, 2026-11-10)
+
+	/**
+	 * A hub as the admins' hub manager shows it: its view, when and by whom it was created, how many anchors lead to it,
+	 * and whether its kind's add-on is loaded ({@code available}; false: hidden from players, D-41).
+	 */
+	public record HubAdminView(String name, String kind, HubView.Size size, HubView.SchematicView schematic, boolean available,
+			java.time.Instant createdAt, UUID createdBy, String createdByName, int anchors,
+			@com.fasterxml.jackson.annotation.JsonIgnore Map<String, Object> extras) {
+
+		@com.fasterxml.jackson.annotation.JsonAnyGetter
+		public Map<String, Object> extraFields() {
+			return extras;
+		}
+	}
+
+	/** An anchor as the hub manager lists it, with its owner's name. */
+	public record AnchorAdminView(UUID uuid, String name, UUID ownerUuid, String ownerName, String serverFingerprint,
+			String dimension, double x, double y, double z, int yaw, String role, java.time.Instant createdAt) {
+	}
+
+	/** Every hub, of every kind, for the hub manager. */
+	@Transactional(readOnly = true)
+	public List<HubAdminView> adminList() {
+		List<Hub> hubs = hubRepository.findAllByOrderByNameAsc();
+		Map<UUID, Integer> anchorCounts = new HashMap<>();
+		anchorRepository.findAll().forEach(anchor -> anchorCounts.merge(anchor.getHubUuid(), 1, Integer::sum));
+		Map<UUID, String> names = playerNames(hubs.stream().map(Hub::getCreatedBy).toList());
+		return hubs.stream().map(hub -> {
+			HubView view = view(hub);
+			return new HubAdminView(hub.getName(), hub.getKind(), view.size(), view.schematic(), hubKinds.available(hub),
+					hub.getCreatedAt(), hub.getCreatedBy(), hub.getCreatedBy() == null ? null : names.get(hub.getCreatedBy()),
+					anchorCounts.getOrDefault(hub.getUuid(), 0), view.extras());
+		}).toList();
+	}
+
+	/** The anchors leading to a hub, on every server, oldest first. */
+	@Transactional(readOnly = true)
+	public List<AnchorAdminView> adminAnchors(String name) {
+		Hub hub = require(name);
+		List<HubAnchor> anchors = anchorRepository.findByHubUuid(hub.getUuid()).stream()
+				.sorted(java.util.Comparator.comparing(HubAnchor::getCreatedAt, java.util.Comparator.nullsLast(java.util.Comparator.naturalOrder())))
+				.toList();
+		Map<UUID, String> names = playerNames(anchors.stream().map(HubAnchor::getOwnerUuid).toList());
+		return anchors.stream().map(anchor -> new AnchorAdminView(anchor.getUuid(), anchor.getName(), anchor.getOwnerUuid(),
+				names.get(anchor.getOwnerUuid()), anchor.getServerFingerprint(), anchor.getDimension(), anchor.getOriginX(),
+				anchor.getOriginY(), anchor.getOriginZ(), anchor.getYaw(), anchor.getRole(), anchor.getCreatedAt())).toList();
+	}
+
+	private Map<UUID, String> playerNames(List<UUID> uuids) {
+		Map<UUID, String> names = new HashMap<>();
+		playerRepository.findAllById(uuids.stream().filter(java.util.Objects::nonNull).distinct().toList())
+				.forEach(player -> names.put(player.getUuid(), player.getLastUsername()));
+		return names;
+	}
+
+	/**
+	 * Renames a hub: same rules as a new name; its schematic folder follows ({@code hub_<old>} → {@code hub_<new>}), its
+	 * anchors and members stay. Everyone is told the catalog changed.
+	 */
+	@Transactional
+	public HubView rename(UUID adminUuid, String name, String rawNewName) {
+		Hub hub = require(name);
+		String newName = rawNewName == null ? "" : rawNewName.strip().toLowerCase(Locale.ROOT);
+		if (!NAME.matcher(newName).matches()) {
+			throw new ApiException(HttpStatus.BAD_REQUEST, "ERROR_HUB_INVALID_NAME", Map.of("name", newName));
+		}
+		if (newName.equals(hub.getName())) {
+			return view(hub);
+		}
+		if (hubRepository.findByNameIgnoreCase(newName).isPresent()) {
+			throw new ApiException(HttpStatus.CONFLICT, "ERROR_HUB_NAME_TAKEN", Map.of("hub", newName));
+		}
+		Path from = folderOf(hub.getName());
+		Path to = folderOf(newName);
+		if (Files.exists(to)) {
+			throw new ApiException(HttpStatus.CONFLICT, "ERROR_HUB_FOLDER_TAKEN", Map.of("hub", newName,
+					"folder", to.getFileName().toString()));
+		}
+		String oldName = hub.getName();
+		hub.rename(newName);
+		hubRepository.saveAndFlush(hub);
+		try {
+			if (Files.isDirectory(from)) {
+				Files.move(from, to);
+			} else {
+				Files.createDirectories(to);
+			}
+		} catch (IOException ex) {
+			// The transaction rolls the name back: the folder and the database never disagree.
+			throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "ERROR_HUB_FOLDER_MOVE", Map.of("hub", oldName,
+					"reason", String.valueOf(ex.getMessage())));
+		}
+		log.info("Admin {} renamed hub {} to {}", adminUuid, oldName, newName);
+		announce();
+		return view(hub);
 	}
 
 	/** Reads the hub's folder again; a folder the startup would refuse is refused here, the previous build kept. */

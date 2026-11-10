@@ -125,7 +125,7 @@ Les codes marqués « — » côté client concernent des routes REST que le cli
 | `ERROR_NPC_NOT_FOUND` | 404 | REST, WS | Dresseur PNJ inconnu, ou son événement est fermé (joueur) | `phantasmon.battle.error.npc_not_found` |
 | `ERROR_NPC_EMPTY_TEAM` | — | WS | `BattleNpcStart` : ce PNJ n'a pas encore d'équipe | `phantasmon.battle.error.npc_empty_team` |
 | `ERROR_NPC_BUSY` | — | WS | `BattleNpcStart` : ce PNJ est déjà en combat avec quelqu'un (un combat à la fois) | `phantasmon.battle.error.npc_busy` |
-| `ERROR_HUB_KIND_UNAVAILABLE` | 409 | REST | `POST /hub/anchors` dans un hub d'un type dont l'add-on n'est pas chargé (D-41 ; hub miroir sans Phantasmon Events) | — |
+| `ERROR_HUB_KIND_UNAVAILABLE` | 409 | REST | `POST /hub/anchors` dans un hub d'un type dont l'add-on n'est pas chargé (D-41 ; hub miroir sans Phantasmon Events), ou `HubJoin` vers un tel hub | `phantasmon.hub.error.kind_unavailable` |
 | `ERROR_HUB_MUTE_DURATION` | 400 | REST | `POST /admin/hub/mute` : durée hors de 1 minute à 365 jours (`details.max_minutes`) | `phantasmon.admin.hub.bad_duration` |
 | `ERROR_HUB_NOT_FOUND` | 404 | REST | Aucun hub de ce nom (`details.hub`) | `phantasmon.hub.error.not_found` |
 | `ERROR_TOO_MANY_PLAYERS` | 400 | REST | `GET /trainer-profiles` : plus de 64 joueurs demandés (`details.max`) | — (jamais montré : Phantasmon demande par petits groupes) |
@@ -134,6 +134,8 @@ Les codes marqués « — » côté client concernent des routes REST que le cli
 | `ERROR_HUB_INVALID_SIZE` | 400 | REST | Admin : dimension absente ou hors de 3 à 64 | `phantasmon.hub.error.invalid_size` |
 | `ERROR_HUB_SCHEMATIC_INVALID` | 422 | REST | Admin, rechargement : dossier refusé (plusieurs fichiers, illisible, mauvaise taille ; `details.reason`), l'ancienne construction reste | `phantasmon.hub.error.schematic_invalid` (le client affiche `details.reason`) |
 | `ERROR_HUB_SCHEMATIC_NONE` | 404 | REST | Fichier demandé pour un hub sans construction | `phantasmon.hub.error.schematic_none` |
+| `ERROR_HUB_FOLDER_TAKEN` | 409 | REST | Renommage : un dossier `hub_<nouveau nom>/` existe déjà sur le backend | `phantasmon.hub.error.folder_taken` |
+| `ERROR_HUB_FOLDER_MOVE` | 500 | REST | Renommage : le dossier du hub n'a pas pu être déplacé (rien n'est changé) | `phantasmon.hub.error.folder_move` |
 
 ## Protocole WebSocket
 

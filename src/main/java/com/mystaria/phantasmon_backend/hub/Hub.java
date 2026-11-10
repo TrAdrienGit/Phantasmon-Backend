@@ -73,6 +73,11 @@ public class Hub {
 		this.kind = kind;
 	}
 
+	/** A new name (admin, hub manager); its schematic folder is moved by the catalog. */
+	public void rename(String newName) {
+		this.name = newName;
+	}
+
 	public boolean isNormal() {
 		return KIND_NORMAL.equals(kind);
 	}
