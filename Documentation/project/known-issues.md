@@ -25,7 +25,6 @@ Identifiants : `BUG-n` (comportement incorrect), `SEC-n` (sécurité, voir [`sec
 | TODO-21 | basse | Client | Effets sonores : premiers sons faits (PC, boutons de confirmation, journal §4.87) embarqués dans le mod (`assets/phantasmon/sounds/sfx/`) ; d'autres à venir selon Adrien. |
 | TODO-29 | basse | Client + Backend | Network : Hubs privés (Anchor ou Hub réservé à un groupe, par code d'invitation). Jalon 1 = un seul Hub public (cahier des charges Network §5.3). |
 | TODO-30 | basse | Backend | Network : instances multiples du Hub au-delà de 50 joueurs (aujourd'hui : refus `ERROR_HUB_FULL`). |
-| TODO-32 | basse | Client + Backend | Network : émotes dans le Hub (écartées du jalon 2 par Adrien le 2026-10-07). Pistes : bulles au-dessus de la tête, ou vraies animations du corps (Mixin de rendu ou mod d'animation). |
 | TODO-34 | basse | Client + Backend | Network, vocal du hub (D-36) : la voix passe par le WebSocket (TCP) ; sur un réseau qui perd des paquets elle prend du retard au lieu de sauter. Si besoin : canal UDP / WebRTC dédié. |
 
 ## 3. Dette technique
@@ -111,4 +110,5 @@ Identifiants : `BUG-n` (comportement incorrect), `SEC-n` (sécurité, voir [`sec
 | TODO-31 | 2026-11-02 | Modération du chat du hub par les admins : `/phantasmon admin hub mute <joueur> <durée>`, `unmute`, `lock` (chat verrouillé), annonces dans le hub (V21 `hub_chat_mutes`). L'exclusion d'un joueur du hub n'a pas été faite. |
 | TODO-27 | 2026-11-10 | Combats scénarisés : relèvent de Phantasmon Events, pas de Phantasmon (Adrien). À reprendre dans la doc d'Events. |
 | TODO-35 | 2026-11-10 | Phantasmon Events séparé de Phantasmon (D-41) : points d'extension `addon` du backend, types de hub (V25), module `Phantasmon-Events/backend` chargé depuis `addons/` avec ses propres migrations, IA expert / Reborn dans le mod Events (`PhantasmonApi.registerBattleAi`), doc du module dans `Phantasmon-Events/Documentation/backend-reference.md`. Déployé ; IA validées en jeu par Adrien. |
+| TODO-32 | 2026-11-10 | Émotes dans le hub : les emotes Emotecraft d'un joueur sont jouées sur son avatar, animation complète transmise (trame binaire `0x02`), visibles même par ceux qui ne l'ont pas ; aussi la pose de Crawl et l'empilement de Player Ladder. |
 | — | 2026-11-10 | Validés en jeu par Adrien : vocal du hub (D-36), terrain d'un combat visible sans le regarder (D-33, à revoir une fois), blocs fantômes des hubs miroirs (D-38), debug de l'IA des PNJ. |

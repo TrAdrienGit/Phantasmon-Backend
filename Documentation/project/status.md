@@ -101,7 +101,7 @@ Suivis dans [`known-issues.md`](known-issues.md) (identifiants `BUG-n`, `TODO-n`
 ## 5. Pistes envisagées (non engagées)
 
 - Pathfinding Cobblemon pour les Ghost (actuellement : déplacement direct avec saut d'un bloc).
-- Écran de connexion dédié et paramètres utilisateur (URL du backend, chrono par défaut…).
+- Écran de connexion dédié ; autres paramètres (chrono par défaut…). L'adresse du backend se règle dans l'écran de paramètres (2026-11-10).
 - Équipes multiples nommées (D-03).
 - Hébergement définitif du backend (VPS ou autre) et stratégie de sauvegarde associée.
 
