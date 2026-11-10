@@ -301,6 +301,17 @@ class HubWebSocketIntegrationTest {
 		bob.send("HubEmote", "{\"emote_uuid\":null}");
 		assertThat(alice.await("HubPlayerEmote").get("emote_uuid").isNull()).isTrue();
 
+		// The emote's full animation, for those who lack it: relayed as is with who plays it; too big: dropped.
+		byte[] animation = new byte[6000];
+		animation[0] = 42;
+		bob.session.sendMessage(new org.springframework.web.socket.BinaryMessage(
+				java.nio.ByteBuffer.allocate(1 + animation.length).put((byte) 2).put(animation).array()));
+		java.nio.ByteBuffer relayed = java.nio.ByteBuffer.wrap(alice.awaitVoice());
+		assertThat(relayed.get()).isEqualTo((byte) 2);
+		assertThat(new UUID(relayed.getLong(), relayed.getLong())).isEqualTo(bob.uuid);
+		assertThat(relayed.remaining()).isEqualTo(6000);
+		assertThat(relayed.get()).isEqualTo((byte) 42);
+
 		bob.send("HubMove", """
 				{"x":1,"z":1,"y_offset":1.8,"yaw":0,"head_yaw":0,"pitch":0,"pose":"CRAWLING","on_ground":true,
 				 "riding":"%s"}""".formatted(alice.uuid));

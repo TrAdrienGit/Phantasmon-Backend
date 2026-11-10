@@ -291,7 +291,10 @@ le vrai joueur. Le chat va à tous les membres du hub.
 | C2S | trame **binaire** `[0x01][flags][seq int32][Opus]` | 20 ms de voix encodée en Opus par Simple Voice Chat ; `flags` bit 0 = chuchotement ; au plus 1 024 octets d'audio. Relayée telle quelle ; ignorée si l'émetteur n'est pas dans un hub avec la voix, si elle est mal formée, ou au-delà de 60 trames/s (rafale 120, budget à part des messages texte) |
 | S2C | trame **binaire** `[0x01][flags][seq int32][uuid de l'orateur, 16 octets][Opus]` | Les autres membres du hub qui ont la voix. Le backend ne décode jamais l'audio |
 
-Entiers et UUID en big-endian. Les trames binaires ne servent qu'à la voix ; tout le reste reste en JSON.
+| C2S | trame **binaire** `[0x02][animation]` | L'animation complète d'une emote Emotecraft (le client l'encode : `[version int32][uuid de l'emote][AnimationBinary de playerAnimator]`), envoyée juste avant son `HubEmote`, pour que les membres qui n'ont pas cette emote la voient quand même ; au plus 64 Kio, sinon ignorée (l'emote part alors par son uuid seul) |
+| S2C | trame **binaire** `[0x02][uuid de l'émetteur, 16 octets][animation]` | Ceux qui voient l'émetteur ; le client la garde (64 dernières) et la joue au `HubPlayerEmote` qui suit |
+
+Entiers et UUID en big-endian. Les trames binaires servent à la voix (`0x01`) et aux animations d'emotes (`0x02`) ; tout le reste reste en JSON.
 
 **Sorties automatiques** :
 

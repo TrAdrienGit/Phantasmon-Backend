@@ -150,6 +150,11 @@ public class PhantasmonWebSocketHandler extends TextWebSocketHandler {
 		HubVoice.Frame frame = HubVoice.parse(message.getPayload());
 		if (frame != null) {
 			hubService.relayVoice(playerUuid(session), frame);
+			return;
+		}
+		byte[] emote = com.mystaria.phantasmon_backend.hub.HubEmoteFrame.parse(message.getPayload());
+		if (emote != null) {
+			hubService.relayEmoteAnimation(playerUuid(session), emote);
 		}
 	}
 

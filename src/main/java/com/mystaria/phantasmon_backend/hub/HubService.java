@@ -428,6 +428,16 @@ public class HubService {
 		visibleTo(member).forEach(other -> sessionRegistry.send(other.playerUuid(), relay));
 	}
 
+	/** An emote's full animation ({@link HubEmoteFrame}): relayed as is to those who see the member. */
+	public void relayEmoteAnimation(UUID playerUuid, byte[] animation) {
+		Member member = members.get(playerUuid);
+		if (member == null) {
+			return;
+		}
+		byte[] out = HubEmoteFrame.toListeners(playerUuid, animation);
+		visibleTo(member).forEach(other -> sessionRegistry.sendBinary(other.playerUuid(), out));
+	}
+
 	// ---------------------------------------------------------------- voice (D-36)
 
 	/**
