@@ -125,9 +125,7 @@ Les codes marqués « — » côté client concernent des routes REST que le cli
 | `ERROR_NPC_NOT_FOUND` | 404 | REST, WS | Dresseur PNJ inconnu, ou son événement est fermé (joueur) | `phantasmon.battle.error.npc_not_found` |
 | `ERROR_NPC_EMPTY_TEAM` | — | WS | `BattleNpcStart` : ce PNJ n'a pas encore d'équipe | `phantasmon.battle.error.npc_empty_team` |
 | `ERROR_NPC_BUSY` | — | WS | `BattleNpcStart` : ce PNJ est déjà en combat avec quelqu'un (un combat à la fois) | `phantasmon.battle.error.npc_busy` |
-| `ERROR_NPC_NAME`, `ERROR_NPC_SKIN`, `ERROR_NPC_AI` | 400 | REST | Nom (32 au plus), skin (pseudo Minecraft) ou IA invalides | `phantasmon_events.error.*` (Events) |
-| `ERROR_EVENT_NAME` | 400 | REST | Nom d'événement invalide (minuscules, chiffres, `_`) | `phantasmon_events.error.error_event_name` |
-| `ERROR_EVENT_NOT_FOUND` | 404 | REST | Événement inconnu | `phantasmon_events.error.error_event_not_found` |
+| `ERROR_HUB_KIND_UNAVAILABLE` | 409 | REST | `POST /hub/anchors` dans un hub d'un type dont l'add-on n'est pas chargé (D-41 ; hub miroir sans Phantasmon Events) | — |
 | `ERROR_HUB_MUTE_DURATION` | 400 | REST | `POST /admin/hub/mute` : durée hors de 1 minute à 365 jours (`details.max_minutes`) | `phantasmon.admin.hub.bad_duration` |
 | `ERROR_HUB_NOT_FOUND` | 404 | REST | Aucun hub de ce nom (`details.hub`) | `phantasmon.hub.error.not_found` |
 | `ERROR_TOO_MANY_PLAYERS` | 400 | REST | `GET /trainer-profiles` : plus de 64 joueurs demandés (`details.max`) | — (jamais montré : Phantasmon demande par petits groupes) |

@@ -38,8 +38,9 @@ validés en jeu le 2026-10-07.**
 
 **Découpage en mods (depuis le 2026-10-29).** La mise en scène des combats est le mod **Cobblemon Battle Showtime**
 (D-37, D-40), dont Phantasmon dépend (`>=1.0.0 <2.0.0`). **Phantasmon Events** est un add-on qui dépend de Phantasmon
-(`>=0.1.0 <0.2.0`). Mais une partie du code d'Events vit encore dans les dépôts Phantasmon (hubs miroirs, tournois,
-PNJ d'événements et leurs IA) : séparation à faire, [TODO-35](known-issues.md).
+(`>=0.1.0 <0.2.0`). **Séparé le 2026-11-10 (D-41, TODO-35)** : le backend Phantasmon ne connaît Events que par
+ses points d'extension (`addon`) et charge le module `Phantasmon-Events/backend` depuis son dossier `addons/` ;
+sans lui, Phantasmon tourne seul. Les IA des PNJ sont dans le mod Events.
 
 **Novembre 2026.** Modération du chat du hub (TODO-31), sol du hub (TODO-33), import d'équipe complète (Méga et
 Primo importés sous leur forme de base), vrais objets tenus, talents importés et amitié dans les combats Ghost,

@@ -28,12 +28,8 @@ erDiagram
     PLAYERS ||--o{ HUB_ANCHORS : "crée (un par hub, V14)"
     HUBS ||--o{ HUB_ANCHORS : "mène à (V14)"
     PLAYERS |o--o{ HUBS : "crée (admin, V14)"
-    TOURNAMENTS ||--o{ TOURNAMENT_PLAYERS : "inscrits (V18)"
-    PLAYERS ||--o{ TOURNAMENT_PLAYERS : "s'inscrit (V18)"
-    TOURNAMENTS ||--o{ TOURNAMENT_MATCHES : "matchs (V18)"
     PLAYERS ||--o| TRAINER_PROFILES : "profil d'animation (V20)"
     PLAYERS ||--o| HUB_CHAT_MUTES : "muet dans le chat des hubs (V21)"
-    EVENT_GROUPS ||--o{ EVENT_NPCS : "dresseurs PNJ (V22)"
 
     PLAYERS {
         uuid uuid PK
@@ -86,6 +82,7 @@ erDiagram
         smallint size_x
         smallint size_y
         smallint size_z
+        varchar kind "NORMAL ou type d'un add-on (V25)"
         uuid created_by FK "nullable"
         timestamptz created_at
     }
@@ -291,7 +288,7 @@ membres du hub).
 > par `hubs.kind = 'MIRROR'` (le rayon se déduit de la taille : `(size_x - 1) / 2`), `hub_anchors.role` devient un
 > rôle libre (VARCHAR(16), sans liste de valeurs) et le cœur ne garde que `uq_hub_anchor_owner_hub` sur les Anchors
 > `NORMAL`. Les règles des Anchors miroirs (une `SOURCE` par hub, une `COPY` par admin) sont recréées par les
-> migrations du module Events (§7 nonies). Ce qui suit décrit V15 à V17, l'historique.
+> migrations du module Events (référence d'Events). Ce qui suit décrit V15 à V17, l'historique.
 
 - `hubs.mirror` (BOOLEAN, défaut `false`) : hub miroir (D-38), son terrain est le vrai sol d'une zone d'un serveur
   multijoueur, copié dans les mondes solo des admins.
@@ -303,19 +300,11 @@ membres du hub).
   les Anchors qui ne sont pas des sources.
 - Le terrain lui-même est hors base (`hub_schematics/hub_<nom>/mirror.bin`), les blocs fantômes en mémoire.
 
-## 7 quinquies. Tournois (Phantasmon Events, V18 et V19)
+## 7 quinquies. Tables de Phantasmon Events (D-41)
 
-- `tournaments` : `uuid` PK, `name` (unique casse ignorée parmi les tournois ni terminés ni annulés,
-  `uq_tournament_open_name`), `kind` (`SWISS` | `BRACKET`), `best_of` (1, 3 ou 5), `format_id`, `status`
-  (`REGISTRATION`, `CHECK_IN`, `RUNNING`, `FINISHED`, `CANCELLED`), `starts_at`, `registration_opens_at`,
-  `registration_closes_at`, `planned_rounds`, `current_round`, `created_by` (FK `players` `ON DELETE SET NULL`),
-  `created_at`.
-- `tournament_players` : PK (`tournament_uuid`, `player_uuid`), FK `ON DELETE CASCADE` des deux côtés, `username`,
-  `checked_in`, `dropped`, `registered_at`.
-- `tournament_matches` : `uuid` PK, `tournament_uuid` (FK `ON DELETE CASCADE`), `round`, `bracket` (`SWISS`,
-  `WINNERS`, `LOSERS`, `FINAL`, `RESET`), `position`, `player1_uuid`, `player2_uuid` (null : exempt), `wins1`,
-  `wins2`, `winner_uuid`, `status` (`PENDING`, `PLAYING`, `DONE`), `forfeit`, `wave` (V19 : vague où un admin ouvre le match d'un arbre, 0 en ronde
-  suisse). Effacer un tournoi annulé ou terminé efface ses joueurs et ses matchs.
+Tournois (`tournaments`, `tournament_players`, `tournament_matches`) et dresseurs PNJ (`event_groups`, `event_npcs`) :
+créés par les migrations du module Phantasmon Events (`db/events`, historique `flyway_schema_history_events`), décrits
+dans [`Phantasmon-Events/Documentation/backend-reference.md`](../../../Phantasmon-Events/Documentation/backend-reference.md). Sans le module, une base n'a pas ces tables.
 
 ## 7 sexies. `trainer_profiles` (Cobblemon Battle Showtime E3, V20)
 
@@ -333,47 +322,6 @@ membres du hub).
 | `muted_until` | TIMESTAMPTZ | NOT NULL | Fin du silence ; une ligne échue est effacée au message suivant du joueur |
 | `muted_by` | UUID | NOT NULL | L'admin (pas de FK) |
 | `muted_at` | TIMESTAMPTZ | NOT NULL, défaut `now()` | |
-
-## 7 octies. `event_groups` et `event_npcs` (Phantasmon Events, dresseurs PNJ, V22)
-
-`event_groups` : un événement qu'un admin ouvre et ferme.
-
-| Colonne | Type | Contraintes | Notes |
-|---|---|---|---|
-| `name` | VARCHAR(32) | PK | Minuscules, chiffres, `_` |
-| `open` | BOOLEAN | NOT NULL, défaut `false` | Ses PNJ ne sont vus et défiés par les joueurs que s'il est ouvert (les admins les voient toujours) |
-| `created_at` | TIMESTAMPTZ | NOT NULL, défaut `now()` | |
-
-`event_npcs` : un dresseur PNJ d'un événement.
-
-| Colonne | Type | Contraintes | Notes |
-|---|---|---|---|
-| `uuid` | UUID | PK | Aussi l'UUID de son entité côté client (intro, caméra) |
-| `event_name` | VARCHAR(32) | NOT NULL, FK `event_groups` `ON DELETE CASCADE` | |
-| `name` | VARCHAR(32) | NOT NULL | |
-| `skin` | VARCHAR(16) | | Pseudo Minecraft dont il porte le skin ; null : son nom |
-| `hub_uuid` | UUID | FK `hubs` `ON DELETE CASCADE`, index `event_npcs_hub` (V23) | Le hub auquel il appartient : `x`, `y`, `z`, `yaw` sont alors ses coordonnées dans le hub, et chaque client le place dans chaque zone de ce hub ; null : une place dans le monde |
-| `server_fingerprint`, `dimension` | VARCHAR(128) | NOT NULL | Où il se tient (index `event_npcs_place`) |
-| `x`, `y`, `z`, `yaw` | DOUBLE, REAL | NOT NULL | |
-| `team` | JSONB | NOT NULL, défaut `[]` | Copie de Pokémon (même forme que les équipes d'un combat), 6 au plus |
-| `ai` | VARCHAR(16) | NOT NULL, défaut `normal` | `random`, `easy`, `normal`, `hard`, `veryhard`, `expert`, `reborn`, `reborn_tweak` (contrôle applicatif) |
-| `ai_debug` | BOOLEAN | NOT NULL, défaut `false` (V24) | Son IA explique chaque décision dans le chat du joueur qui l'affronte |
-| `format_id` | VARCHAR(64) | NOT NULL, défaut `free` | Format de combat (inconnu : Libre) |
-| `created_by` | UUID | NOT NULL | L'admin (pas de FK) |
-| `updated_at` | TIMESTAMPTZ | NOT NULL | |
-
-## 7 nonies. Migrations du module Phantasmon Events (D-41)
-
-Le module backend de Phantasmon Events (`Phantasmon-Events/backend`, chargé depuis le dossier `addons/`) a ses
-propres migrations : `db/events/`, historique dans `flyway_schema_history_events`, jouées juste après celles du cœur
-et avant JPA. Sans le module, une base n'a aucune de ces tables. Sur une base qui les avait déjà (créées par le cœur
-en V18-V19 et V22-V24), la ligne de base `0` puis les `IF NOT EXISTS` ne changent rien.
-
-| Version | Fichier | Contenu |
-|---|---|---|
-| 1 | `V1__tournaments.sql` | Ancien V18 + V19 : `tournaments`, `tournament_players`, `tournament_matches` (§7 quinquies) |
-| 2 | `V2__event_npcs.sql` | Ancien V22 à V24 : `event_groups`, `event_npcs` (§7 octies) |
-| 3 | `V3__mirror_anchor_roles.sql` | Règles des Anchors miroirs : `uq_events_mirror_source` (une `SOURCE` par hub), `uq_events_mirror_copy` (une `COPY` par admin et par hub) |
 
 ## 8. État hors base
 

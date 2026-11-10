@@ -46,13 +46,6 @@
 | `POST` | [`/admin/hub/mute`](#administration) | Admin | Rendre un joueur muet dans le chat des hubs, pour un temps |
 | `POST` | [`/admin/hub/unmute`](#administration) | Admin | Lever ce silence |
 | `POST` | [`/admin/hub/lock`](#administration) | Admin | Verrouiller / déverrouiller le chat des hubs |
-| `GET` | [`/events/npcs`](#dresseurs-pnj-des-événements) | Joueur | Dresseurs PNJ visibles ici |
-| `GET` | [`/admin/events`](#dresseurs-pnj-des-événements) | Admin | Événements, ouverts ou non |
-| `POST` | [`/admin/events/npcs`](#dresseurs-pnj-des-événements) | Admin | Poser un dresseur PNJ |
-| `POST` | [`/admin/events/npcs/{uuid}`](#dresseurs-pnj-des-événements) | Admin | Le modifier (nom, skin, événement, IA, format, place) |
-| `POST` | [`/admin/events/npcs/{uuid}/team`](#dresseurs-pnj-des-événements) | Admin | Son équipe : copie de celle de l'admin |
-| `DELETE` | [`/admin/events/npcs/{uuid}`](#dresseurs-pnj-des-événements) | Admin | Le supprimer |
-| `POST` | [`/admin/events/{name}/open`](#dresseurs-pnj-des-événements) | Admin | Ouvrir ou fermer un événement |
 | `GET` | [`/hub/anchors`](#get-hubanchors) | Bearer | Anchors d'un serveur et d'une dimension |
 | `POST` | [`/hub/anchors`](#post-hubanchors) | Bearer | Créer son Anchor |
 | `GET` | [`/hub/anchors/mine`](#get-hubanchorsmine) | Bearer | Ses Anchors (un par hub au plus) |
@@ -569,48 +562,8 @@ plus : `400 ERROR_TOO_MANY_PLAYERS` (`details.max`).
 `GET/PUT /players/{uuid}/team`, `POST /pokemon/import-showdown`, `GET /pokemon/{uuid}/export`, routes `/admin/*`.
 Raisons : décisions D-09 et D-20 ([`architecture/decisions.md`](../architecture/decisions.md)).
 
-## Dresseurs PNJ des événements
+## Phantasmon Events
 
-Phantasmon Events (Adrien 2026-11-02). Un dresseur PNJ appartient à un événement ; les joueurs ne le voient et ne le
-défient que si l'événement est ouvert, les admins toujours (pour le régler). Chaque changement envoie
-`EventsNpcsChanged` à tous les clients connectés, qui relisent la liste.
-
-- `GET /events/npcs?server=<empreinte>&dimension=<id>` → `[{ "uuid", "event", "open", "name", "skin", "hub", "x", "y",
-  "z", "yaw", "ai", "format_id", "team_size", "team_species" }]` (`team_species` : admins seulement) : ceux posés ici
-  hors hub, et ceux de chaque hub qui a une ancre ici (`hub` non null : `x`, `y`, `z`, `yaw` en coordonnées du hub, le
-  client les place dans chaque zone de ce hub).
-- `GET /admin/events` → `[{ "name", "open", "npcs" }]`.
-- `POST /admin/events/npcs` `{ "event", "name", "server_fingerprint", "dimension", "x", "y", "z", "yaw" }` → le PNJ ;
-  l'événement est créé (fermé) s'il n'existe pas. `400 ERROR_EVENT_NAME` (minuscules, chiffres, `_`, 32 au plus),
-  `ERROR_NPC_NAME`.
-- `POST /admin/events/npcs/{uuid}` : chaque champ facultatif — `name`, `skin` (pseudo Minecraft, vide : aucun,
-  `ERROR_NPC_SKIN`), `event`, `ai` (`random`, `easy`, `normal`, `hard`, `veryhard`, `expert`, `reborn`, `reborn_tweak`, `ERROR_NPC_AI`), `ai_debug` (bool : l'IA explique chaque décision dans le chat du joueur), `format_id`, et
-  la place (`server_fingerprint`, `dimension`, `x`, `y`, `z`, `yaw` ensemble, et `hub` : le nom du hub si la place est
-  donnée dans ses coordonnées, absent ou null sinon). `404 ERROR_NPC_NOT_FOUND`, `ERROR_HUB_NOT_FOUND`. `POST
-  /admin/events/npcs` accepte aussi `hub`.
-- `POST /admin/events/npcs/{uuid}/team` `{ "team": "GHOST" }` ou `{ "team": "COBBLEMON", "party": [...] }` (comme une
-  invitation) : l'équipe du PNJ devient une copie de celle de l'admin (6 au plus). `400 ERROR_BATTLE_EMPTY_TEAM`,
-  `ERROR_BATTLE_INVALID_PARTY`.
-- `DELETE /admin/events/npcs/{uuid}` → `{ "deleted": true }`.
-- `POST /admin/events/{name}/open` `{ "open": bool }` → `{ "name", "open" }` ; `404 ERROR_EVENT_NOT_FOUND`.
-
-Le combat contre un PNJ passe par le WebSocket (`BattleNpcStart`).
-
-## Copie miroir du serveur dédié
-
-Notre propre serveur Minecraft (son mod `phantasmon-mirror-server`) construit les copies posées sur lui. Pas un joueur :
-en-tête `X-Phantasmon-Server-Token` = `phantasmon.mirror.server-token` (`PHANTASMON_MIRROR_SERVER_TOKEN`) ; sans jeton
-configuré, `404` ; jeton faux, `403 ERROR_SERVER_TOKEN`.
-
-- `GET /server/mirror/copies?fingerprint=<empreinte>` → `[{ "hub", "dimension", "min_x", "min_z", "side" }]` : les
-  ancres COPY posées sur ce serveur.
-- `GET /server/mirror/{hub}`, `/server/mirror/{hub}/tile/{tx}/{tz}`, `/server/mirror/{hub}/ghosts` : comme
-  `/events/mirror/...`.
-- `GET /server/mirror/{hub}/feed?since=<n>` → `{ "reset", "next", "messages": [{ "type", "data" }] }` : les messages
-  envoyés aux copies depuis le numéro `n` (`EventsMirrorBlocks`, `EventsMirrorTileChanged`, `EventsMirrorGhosts`,
-  `EventsMirrorReset`), les 2 000 derniers par hub ; `reset: true` s'il en manque (la copie est refaite) ; `since=0` :
-  seulement le numéro actuel.
-- `POST /server/mirror/{hub}/ghosts` `{ "changes": [[x, y, z, state], ...] }` → `{ "changed" }` : blocs posés
-  (`state`) ou cassés (`""`) à la main par un opérateur dans la copie de ce serveur, traités comme les blocs fantômes
-  d'une copie solo (montrés dans la zone source et les autres copies).
-
+Les routes du module Phantasmon Events (D-41 : dresseurs PNJ, tournois, hubs miroirs, copie du serveur dédié),
+chargé depuis le dossier `addons/` du backend, sont décrites dans [`Phantasmon-Events/Documentation/backend-reference.md`](../../../Phantasmon-Events/Documentation/backend-reference.md).
+Le combat contre un PNJ reste un message du cœur (`BattleNpcStart`, [websocket-protocol.md](websocket-protocol.md)).

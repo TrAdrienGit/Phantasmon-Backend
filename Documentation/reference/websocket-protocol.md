@@ -277,7 +277,6 @@ le vrai joueur. Le chat va à tous les membres du hub.
 | `HubChatMuted` | `{ "until" }` | Le joueur qu'un admin vient de rendre muet dans le chat des hubs (TODO-31) |
 | `HubChatUnmuted` | `{}` | Le joueur dont un admin vient de lever le silence |
 | `HubChatLock` | `{ "locked" }` | Tous les membres des hubs : un admin a verrouillé ou déverrouillé le chat |
-| `EventsNpcsChanged` | `{}` | **Tous les clients connectés** : un dresseur PNJ ou un événement a changé ; le client relit `GET /events/npcs` |
 | `HubCatalogChanged` | `{}` | **Tous les clients connectés** : un admin a créé, supprimé ou rechargé un hub (D-35) ; le client relit `GET /hubs` (suggestions de commandes, constructions) et les Anchors |
 
 **Vocal du hub** (D-36, avec le mod facultatif Simple Voice Chat) :
@@ -301,6 +300,11 @@ Entiers et UUID en big-endian. Les trames binaires ne servent qu'à la voix ; to
 Les Ghost suivent toujours leur propriétaire : `SendOutGhost` / `RecallGhost` (et les rappels automatiques) envoient
 à la fois `GhostEntity*` au groupe serveur et `HubGhost*` au Hub (`GhostRecall`, `HubService.onGhostSentOut` /
 `onGhostRecalled`).
+
+## 6 ter. Messages des add-ons (D-41)
+
+Tout type que le cœur ne connaît pas est confié aux add-ons chargés (`addon/WsMessageHandler`) ; aucun ne le prend :
+`ERROR_WS_UNKNOWN_MESSAGE_TYPE`. Les messages `Events*` de Phantasmon Events sont décrits dans [`Phantasmon-Events/Documentation/backend-reference.md`](../../../Phantasmon-Events/Documentation/backend-reference.md).
 
 ## 7. Écarts avec le CAD
 
