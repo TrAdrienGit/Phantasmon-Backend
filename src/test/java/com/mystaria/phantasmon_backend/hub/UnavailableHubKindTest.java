@@ -74,6 +74,10 @@ class UnavailableHubKindTest {
 						.param("server_fingerprint", server).param("dimension", "minecraft:overworld"))
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.length()").value(0));
+		mockMvc.perform(get("/hubs/overview").header("Authorization", token))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$[*].name", not(hasItem(hub.getName()))))
+				.andExpect(jsonPath("$[*].kind", not(hasItem("MIRROR"))));
 		mockMvc.perform(get("/hub/anchors/mine").header("Authorization", token))
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.length()").value(0));

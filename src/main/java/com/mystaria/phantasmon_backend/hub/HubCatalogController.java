@@ -37,6 +37,12 @@ public class HubCatalogController {
 		return catalog.list();
 	}
 
+	/** The hub manager for players: joinable hubs with their size, build, creation date and anchor count. */
+	@GetMapping("/hubs/overview")
+	public List<HubCatalogService.HubAdminView> overview() {
+		return catalog.playerList();
+	}
+
 	@GetMapping("/hubs/{name}/schematic/file")
 	public ResponseEntity<byte[]> schematicFile(@PathVariable String name) {
 		HubCatalogService.Schematic schematic = catalog.schematicOf(name);

@@ -55,6 +55,7 @@
 | `POST` | [`/admin/hubs`](#post-adminhubs) | Bearer admin | Créer un hub |
 | `DELETE` | [`/admin/hubs/{name}`](#delete-adminhubsname) | Bearer admin | Supprimer un hub et ses Anchors |
 | `POST` | [`/admin/hubs/{name}/reload`](#post-adminhubsnamereload) | Bearer admin | Relire le dossier de schematics d'un hub |
+| `GET` | [`/hubs/overview`](#gestionnaire-des-hubs-admins) | Bearer | Gestionnaire des hubs d'un joueur : hubs joignables, sans leur auteur |
 | `GET` | [`/admin/hubs`](#gestionnaire-des-hubs-admins) | Bearer admin | Gestionnaire des hubs : tous les hubs, création, ancres |
 | `GET` | [`/admin/hubs/{name}/anchors`](#gestionnaire-des-hubs-admins) | Bearer admin | Les ancres d'un hub, sur tous les serveurs |
 | `POST` | [`/admin/hubs/{name}/rename`](#gestionnaire-des-hubs-admins) | Bearer admin | Renommer un hub |
@@ -545,7 +546,11 @@ hub). Refusé : `422 ERROR_HUB_SCHEMATIC_INVALID` (`details.reason`), la constru
 
 ### Gestionnaire des hubs (admins)
 
-Routes de l'écran « Gestionnaire des hubs » du client (2026-11-10), toutes `403 ERROR_ADMIN_REQUIRED` hors admin.
+Routes de l'écran « Gestionnaire des hubs » du client (2026-11-10). Pour tous les joueurs : `GET /hubs/overview`, même
+contenu que `GET /admin/hubs` mais seulement les hubs classiques (`kind` `NORMAL` : jamais ceux d'un add-on, comme les
+hubs miroirs d'Events) et sans `created_by` / `created_by_name`
+(toujours `null`) ; leurs ancres : `GET /hub/anchors/mine`, supprimées par `DELETE /hub/anchors/{uuid}`. Les autres
+routes ci-dessous : `403 ERROR_ADMIN_REQUIRED` hors admin.
 
 - `GET /admin/hubs` → tous les hubs, de tous les types, même ceux dont l'add-on n'est pas chargé :
   `[{ "name", "kind", "size": { "x", "y", "z" }, "schematic", "available", "created_at", "created_by",

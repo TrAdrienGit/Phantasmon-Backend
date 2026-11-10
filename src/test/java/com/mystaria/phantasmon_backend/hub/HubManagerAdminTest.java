@@ -104,6 +104,11 @@ class HubManagerAdminTest {
 				.andExpect(jsonPath("$[?(@.name == '%s')].available".formatted(hub)).value(true))
 				.andExpect(jsonPath("$[?(@.name == '%s')].kind".formatted(hub)).value("NORMAL"))
 				.andExpect(jsonPath("$[?(@.name == '%s')].created_at".formatted(hub)).isNotEmpty());
+		mockMvc.perform(get("/hubs/overview").header("Authorization", playerToken))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$[?(@.name == '%s')].anchors".formatted(hub)).value(1))
+				.andExpect(jsonPath("$[?(@.name == '%s')].created_at".formatted(hub)).isNotEmpty())
+				.andExpect(jsonPath("$[?(@.name == '%s')].created_by_name".formatted(hub)).value(org.hamcrest.Matchers.contains((Object) null)));
 		mockMvc.perform(get("/admin/hubs/" + hub + "/anchors").header("Authorization", adminToken))
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$[0].name").value("chez moi"))

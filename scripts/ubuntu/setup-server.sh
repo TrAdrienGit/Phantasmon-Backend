@@ -76,13 +76,21 @@ log "Installing the backend in $APP..."
 install -m 644 "$STAGING/phantasmon-backend.jar" "$APP/phantasmon-backend.jar"
 install -m 600 "$STAGING/env" "$APP/.env"
 tar -xf "$STAGING/hub_schematics.tar" -C "$APP"
-# Add-ons (D-41): exactly the ones of this deployment (none: Phantasmon alone).
-mkdir -p "$APP/addons"
+# Add-ons (D-41): every add-on built is kept in addons-available/ (the server manager's card turns one on or off by
+# copying it into addons/ or removing it, then restarting); addons/ gets exactly the ones this deployment enables
+# (listed in addons-enabled; none: Phantasmon alone).
+mkdir -p "$APP/addons" "$APP/addons-available"
 rm -f "$APP/addons/"*.jar
 for addon in "$STAGING"/addon-*.jar; do
 	[[ -f "$addon" ]] || continue
-	install -m 644 "$addon" "$APP/addons/${addon##*/addon-}"
-	log "Add-on installed: ${addon##*/addon-}"
+	name="${addon##*/addon-}"
+	install -m 644 "$addon" "$APP/addons-available/$name"
+	if grep -qxF "$name" "$STAGING/addons-enabled" 2>/dev/null; then
+		install -m 644 "$addon" "$APP/addons/$name"
+		log "Add-on enabled: $name"
+	else
+		log "Add-on available, not enabled: $name"
+	fi
 done
 if [[ -f "$STAGING/admins.txt" && ! -f "$APP/admins.txt" ]]; then
 	# Only the first time: afterwards the server's own admin list is kept.

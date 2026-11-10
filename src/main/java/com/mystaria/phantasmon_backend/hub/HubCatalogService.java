@@ -288,6 +288,19 @@ public class HubCatalogService {
 		}).toList();
 	}
 
+	/**
+	 * The hub manager as players see it (2026-11-10): Phantasmon's classic hubs only (an add-on's hubs and their
+	 * anchors are the admins' business, Adrien), with the same details as the admins' list except who created them
+	 * ({@code created_by}, {@code created_by_name}: always null).
+	 */
+	@Transactional(readOnly = true)
+	public List<HubAdminView> playerList() {
+		return adminList().stream().filter(hub -> Hub.KIND_NORMAL.equals(hub.kind()))
+				.map(hub -> new HubAdminView(hub.name(), hub.kind(), hub.size(), hub.schematic(), true, hub.createdAt(), null,
+						null, hub.anchors(), hub.extras()))
+				.toList();
+	}
+
 	/** The anchors leading to a hub, on every server, oldest first. */
 	@Transactional(readOnly = true)
 	public List<AnchorAdminView> adminAnchors(String name) {

@@ -5,7 +5,8 @@
 #                                          local one (scripts/backup-database.ps1) — asks for confirmation
 #   --yes                                  no confirmation (with --migrate-db)
 #   --no-events                            without the Phantasmon Events module (D-41): the server's addons/ is emptied
-# By default, when ../Phantasmon-Events/backend exists, its module is built and installed in the server's addons/.
+# When ../Phantasmon-Events/backend exists, its module is always built and kept in the server's addons-available/ (the
+# server manager can turn it on later); it is also put in addons/ (enabled) unless --no-events.
 # Target: PHANTASMON_DEPLOY_HOST (default root@100.101.1.79, the "server-linux" Tailscale node).
 # What it installs and how to run it: Documentation/guides/deploying-ubuntu.md.
 set -euo pipefail
@@ -44,10 +45,14 @@ STAGE="$(mktemp -d)"
 trap 'rm -rf "$STAGE"' EXIT
 cp "$JAR" "$STAGE/phantasmon-backend.jar"
 EVENTS_DIR="$ROOT/../Phantasmon-Events/backend"
-if ((EVENTS)) && [[ -d "$EVENTS_DIR" ]]; then
+touch "$STAGE/addons-enabled"
+if [[ -d "$EVENTS_DIR" ]]; then
 	log "Building the Phantasmon Events module..."
 	(cd "$EVENTS_DIR" && ./gradlew -q jar)
 	cp "$(ls -t "$EVENTS_DIR"/build/libs/phantasmon-events-backend-*.jar | head -1)" "$STAGE/addon-phantasmon-events-backend.jar"
+	if ((EVENTS)); then
+		echo "phantasmon-events-backend.jar" > "$STAGE/addons-enabled"
+	fi
 fi
 cp .env "$STAGE/env"
 # Only what the server's setup needs to create the role; never printed.

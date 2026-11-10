@@ -12,6 +12,7 @@ Le backend tourne sur le serveur Ubuntu `server-linux` (nœud Tailscale `100.101
 | Utilisateur système | `phantasmon` | Sans shell ; propriétaire de `/opt/phantasmon` |
 | Application | `/opt/phantasmon/` | `phantasmon-backend.jar`, `.env` (600), `hub_schematics/`, `admins.txt`, `log/`, `showdown-data/`, `addons/` |
 | Add-ons (D-41) | `/opt/phantasmon/addons/` | Jars chargés au démarrage par le backend (`Loader-Path: addons/` du jar) : le module de Phantasmon Events ; dossier vide = Phantasmon seul |
+| Add-ons disponibles | `/opt/phantasmon/addons-available/` | Chaque module construit au déploiement, activé ou non : l'activer = le copier dans `addons/` puis redémarrer `phantasmon-backend` ; le désactiver = le retirer de `addons/` puis redémarrer (carte du gestionnaire serveur) |
 | Service | `phantasmon-backend` (`/etc/systemd/system/phantasmon-backend.service`) | Démarre au boot, relancé en cas d'échec ; `BDD_HOST=localhost`, `BDD_PORT=5432`, écoute sur `127.0.0.1:8080` seulement |
 | Sauvegarde | timer `phantasmon-backup.timer` (4 h, rattrapé au démarrage) → `/opt/phantasmon/backup-database.sh` | `pg_dump -Fc` dans `backups/daily/` (14 jours), copie du dimanche dans `backups/weekly/` (92 jours) ; dossier à `postgres` |
 | Publication | `tailscale funnel --bg 8080` | HTTPS public (WebSocket compris) vers `127.0.0.1:8080` ; aucun port ouvert sur le réseau local |
@@ -33,7 +34,7 @@ cœur et des add-ons.
 
 Si `../Phantasmon-Events/backend` existe, le module Events est compilé et installé dans `addons/` (le cœur est d'abord
 publié dans le Maven local, le module se compile contre lui). `--no-events` déploie Phantasmon seul : `addons/` est
-vidé. Chaque déploiement installe exactement ses add-ons. `GET /version` liste ceux qui sont chargés (`addons`).
+vidé, le module restant rangé dans `addons-available/`. Chaque déploiement installe exactement ses add-ons. `GET /version` liste ceux qui sont chargés (`addons`).
 
 ```bash
 bash scripts/deploy-ubuntu.sh --migrate-db
