@@ -81,7 +81,8 @@ compatibilité avec Battle Extras (3 mixins), musique du lobby jouée par Showti
 | Modération du chat du hub | Rendre muet pour une durée, rétablir, verrouiller le chat, annonces (TODO-31) | `/phantasmon admin hub mute / unmute / lock` |
 | Terrain visible alentour | Les joueurs du même serveur et, si un joueur y est, du Global Hub voient les Pokémon d'un combat sans le regarder (D-33) ; validé en jeu, à revoir | Automatique |
 | Combat solo (admin) | Combat contre un miroir de son équipe, joué par l'IA de Cobblemon, regardable, non stocké (D-32) | `/phantasmon admin battle solo` |
-| Gestionnaire des hubs | Joueurs : hubs (taille, construction, date, ancres), leurs ancres, pose avec aperçu (verte / rouge, boutons [Accepter] / [Annuler] du chat), suppression. Admins : en plus renommer, envoyer ou retirer le schematic, relire, supprimer, créer, toutes les ancres de tous les serveurs ; onglets ajoutables par les add-ons. Remplace les commandes de gestion des hubs et des ancres | Touche **H** |
+| Avatars du hub : compatibilités | Icônes de Simple Voice Chat à côté du pseudo, pose du mod Crawl, empilement de Player Ladder, emotes d'Emotecraft (tous facultatifs) | 2026-11-10 |
+| Gestionnaire des hubs | Joueurs : hubs (taille, construction, date, ancres), leurs ancres, pose avec aperçu (verte / rouge, boutons [Accepter] / [Annuler] du chat), suppression. Admins : en plus renommer, envoyer, copier depuis la zone en jeu ou retirer le schematic, relire, supprimer, créer, toutes les ancres de tous les serveurs ; onglets ajoutables par les add-ons. Remplace les commandes de gestion des hubs et des ancres | Touche **H** |
 | API pour add-ons | `PhantasmonApi` : session, requêtes au backend, messages WebSocket, équipe Cobblemon, roues d'interaction sur d'autres entités, combat contre un PNJ, onglets du gestionnaire des hubs | Utilisée par Phantasmon Events |
 | Langues | Français et anglais | Langue du jeu |
 

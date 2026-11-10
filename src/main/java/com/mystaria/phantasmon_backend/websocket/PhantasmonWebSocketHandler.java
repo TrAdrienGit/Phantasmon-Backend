@@ -251,7 +251,9 @@ public class PhantasmonWebSocketHandler extends TextWebSocketHandler {
 			case "HubLeave" -> hubService.leave(playerUuid, "LEFT");
 			case "HubMove" -> hubService.move(playerUuid, incoming.data());
 			case "HubChat" -> hubService.chat(playerUuid, incoming.data().get("message"));
-			case "HubVoiceState" -> hubService.setVoice(playerUuid, Boolean.TRUE.equals(incoming.data().get("enabled")));
+			case "HubEmote" -> hubService.emote(playerUuid, incoming.data().get("emote_uuid"));
+			case "HubVoiceState" -> hubService.setVoice(playerUuid, Boolean.TRUE.equals(incoming.data().get("enabled")),
+					Boolean.TRUE.equals(incoming.data().get("muted")), Boolean.TRUE.equals(incoming.data().get("deafened")));
 			case "Heartbeat" -> {
 				presenceService.heartbeat(playerUuid);
 				send(session, WsMessage.of("HeartbeatAck", Map.of()));

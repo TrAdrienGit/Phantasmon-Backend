@@ -52,7 +52,8 @@ public class HubService {
 	static final String ANNOUNCEMENT_TAG = "!!";
 	/** Cape, jacket, both sleeves, both pant legs, hat: Minecraft's {@code PlayerModelPart} masks. */
 	static final int MAX_SKIN_PARTS = 0x7F;
-	private static final Set<String> POSES = Set.of("STANDING", "CROUCHING", "SWIMMING", "FALL_FLYING");
+	/** CRAWLING: the Crawl mod's pose (fewizz, 2026-11-10); a client without it shows the avatar swimming instead. */
+	private static final Set<String> POSES = Set.of("STANDING", "CROUCHING", "SWIMMING", "FALL_FLYING", "CRAWLING");
 	private static final List<String> NUMBERS = List.of("x", "z", "y_offset", "yaw", "head_yaw", "pitch");
 
 	/**
@@ -88,6 +89,8 @@ public class HubService {
 	private volatile boolean chatLocked;
 	/** Members whose client can talk and listen (Simple Voice Chat present and connected, D-36). */
 	private final Set<UUID> voiceEnabled = ConcurrentHashMap.newKeySet();
+	/** Each member's voice state as the others are shown it ({@code HubVoiceStatus}): enabled, muted, deafened. */
+	private final Map<UUID, Map<String, Object>> voiceStatus = new ConcurrentHashMap<>();
 	private final HubAnchorRepository anchorRepository;
 	private final HubRepository hubRepository;
 	private final PresenceService presenceService;
@@ -165,6 +168,13 @@ public class HubService {
 			WsMessage spawn = WsMessage.of("HubGhostSpawn", ghost);
 			others.forEach(other -> sessionRegistry.send(other.playerUuid(), spawn));
 		});
+		// The voice icons of those already there (their own client told the backend).
+		others.forEach(other -> {
+			Map<String, Object> status = voiceStatus.get(other.playerUuid());
+			if (status != null) {
+				sessionRegistry.send(playerUuid, WsMessage.of("HubVoiceStatus", status));
+			}
+		});
 	}
 
 	/**
@@ -173,6 +183,7 @@ public class HubService {
 	 */
 	public synchronized void leave(UUID playerUuid, String reason) {
 		voiceEnabled.remove(playerUuid);
+		voiceStatus.remove(playerUuid);
 		Member member = members.remove(playerUuid);
 		if (member == null) {
 			return;
@@ -236,6 +247,15 @@ public class HubService {
 				return;
 			}
 			state.put("skin_parts", parts);
+		}
+		// Optional (Player Ladder, 2026-11-10): the player this one sits on, so their avatars stack the same way.
+		if (data.get("riding") instanceof String riding) {
+			try {
+				state.put("riding", UUID.fromString(riding).toString());
+			} catch (IllegalArgumentException ex) {
+				error(playerUuid, "ERROR_WS_MALFORMED_MESSAGE", Map.of());
+				return;
+			}
 		}
 		// Optional (mirror hubs, D-38): the exact height, the same on both sides of the copy; within the world.
 		if (data.get("y") instanceof Number y && Double.isFinite(y.doubleValue())
@@ -380,14 +400,43 @@ public class HubService {
 		return members.containsKey(playerUuid);
 	}
 
+	// ---------------------------------------------------------------- emotes (Emotecraft, 2026-11-10)
+
+	/**
+	 * {@code HubEmote}: the member plays an Emotecraft emote ({@code emote_uuid}) or stops it (null); relayed to those
+	 * who see them as {@code HubPlayerEmote}, whose clients play it on the avatar if they have that emote.
+	 */
+	public void emote(UUID playerUuid, Object emoteUuid) {
+		Member member = members.get(playerUuid);
+		if (member == null) {
+			error(playerUuid, "ERROR_HUB_NOT_JOINED", Map.of());
+			return;
+		}
+		String emote = null;
+		if (emoteUuid != null) {
+			try {
+				emote = UUID.fromString(String.valueOf(emoteUuid)).toString();
+			} catch (IllegalArgumentException ex) {
+				error(playerUuid, "ERROR_WS_MALFORMED_MESSAGE", Map.of());
+				return;
+			}
+		}
+		Map<String, Object> data = new LinkedHashMap<>();
+		data.put("player_uuid", playerUuid.toString());
+		data.put("emote_uuid", emote);
+		WsMessage relay = WsMessage.of("HubPlayerEmote", data);
+		visibleTo(member).forEach(other -> sessionRegistry.send(other.playerUuid(), relay));
+	}
+
 	// ---------------------------------------------------------------- voice (D-36)
 
 	/**
 	 * {@code HubVoiceState}: whether this member's client can talk and listen in the hub (Simple Voice Chat installed
 	 * and connected on their own server). Only members with voice receive the voice frames.
 	 */
-	public void setVoice(UUID playerUuid, boolean enabled) {
-		if (!members.containsKey(playerUuid)) {
+	public void setVoice(UUID playerUuid, boolean enabled, boolean muted, boolean deafened) {
+		Member member = members.get(playerUuid);
+		if (member == null) {
 			error(playerUuid, "ERROR_HUB_NOT_JOINED", Map.of());
 			return;
 		}
@@ -395,6 +444,13 @@ public class HubService {
 			voiceEnabled.add(playerUuid);
 		} else {
 			voiceEnabled.remove(playerUuid);
+		}
+		// HubVoiceStatus: the icon the others show next to this member's name, as Simple Voice Chat does (2026-11-10).
+		Map<String, Object> status = Map.of("player_uuid", playerUuid.toString(), "enabled", enabled,
+				"muted", enabled && muted, "deafened", enabled && deafened);
+		if (!status.equals(voiceStatus.put(playerUuid, status))) {
+			WsMessage message = WsMessage.of("HubVoiceStatus", status);
+			visibleTo(member).forEach(other -> sessionRegistry.send(other.playerUuid(), message));
 		}
 	}
 

@@ -275,6 +275,41 @@ class HubWebSocketIntegrationTest {
 	}
 
 	@Test
+	void voiceIconsEmotesCrawlingAndRidingReachTheOthers() throws Exception {
+		// 2026-11-10: Simple Voice Chat's icons, Emotecraft's emotes, Crawl's pose and Player Ladder's stacking.
+		Client alice = inAnchor("Al", server());
+		alice.await("HubJoined");
+		alice.send("HubVoiceState", "{\"enabled\":true,\"muted\":true,\"deafened\":false}");
+		Client bob = inAnchor("Bo", server());
+		bob.await("HubJoined");
+		JsonNode aliceVoice = bob.await("HubVoiceStatus");
+		assertThat(aliceVoice.get("player_uuid").asString()).as("those already there, sent to the newcomer").isEqualTo(alice.uuid.toString());
+		assertThat(aliceVoice.get("enabled").asBoolean()).isTrue();
+		assertThat(aliceVoice.get("muted").asBoolean()).isTrue();
+		bob.send("HubVoiceState", "{\"enabled\":true,\"muted\":false,\"deafened\":true}");
+		JsonNode bobVoice = alice.await("HubVoiceStatus");
+		assertThat(bobVoice.get("player_uuid").asString()).isEqualTo(bob.uuid.toString());
+		assertThat(bobVoice.get("deafened").asBoolean()).isTrue();
+		bob.send("HubVoiceState", "{\"enabled\":true,\"muted\":false,\"deafened\":true}");
+		alice.expectNo("HubVoiceStatus");
+
+		UUID emote = UUID.randomUUID();
+		bob.send("HubEmote", "{\"emote_uuid\":\"" + emote + "\"}");
+		JsonNode played = alice.await("HubPlayerEmote");
+		assertThat(played.get("player_uuid").asString()).isEqualTo(bob.uuid.toString());
+		assertThat(played.get("emote_uuid").asString()).isEqualTo(emote.toString());
+		bob.send("HubEmote", "{\"emote_uuid\":null}");
+		assertThat(alice.await("HubPlayerEmote").get("emote_uuid").isNull()).isTrue();
+
+		bob.send("HubMove", """
+				{"x":1,"z":1,"y_offset":1.8,"yaw":0,"head_yaw":0,"pitch":0,"pose":"CRAWLING","on_ground":true,
+				 "riding":"%s"}""".formatted(alice.uuid));
+		JsonNode state = alice.await("HubPlayerMove").get("state");
+		assertThat(state.get("pose").asString()).isEqualTo("CRAWLING");
+		assertThat(state.get("riding").asString()).isEqualTo(alice.uuid.toString());
+	}
+
+	@Test
 	void voiceNeedsToBeInAHub() throws Exception {
 		Client alice = connect("Al");
 		alice.joinServer(server());
