@@ -24,6 +24,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -131,5 +132,47 @@ class HubManagerAdminTest {
 		assertThat(SCHEMATICS.resolve("hub_" + hub)).doesNotExist();
 		mockMvc.perform(get("/admin/hubs/" + renamed + "/anchors").header("Authorization", adminToken))
 				.andExpect(jsonPath("$.length()").value(1));
+	}
+
+	@Test
+	void adminsGiveAHubItsSchematicAndTakeItBack() throws Exception {
+		mockMvc.perform(post("/admin/hubs").header("Authorization", adminToken).contentType(MediaType.APPLICATION_JSON)
+						.content("{\"name\":\"%s\",\"length\":21,\"width\":21,\"height\":21}".formatted(hub)))
+				.andExpect(status().isCreated());
+		byte[] arena = Files.readAllBytes(Path.of("src/test/resources/schematics/arena.litematic"));
+		byte[] room = Files.readAllBytes(Path.of("src/test/resources/schematics/room_v3.schem"));
+
+		mockMvc.perform(put("/admin/hubs/" + hub + "/schematic").param("file_name", "arena.litematic")
+						.header("Authorization", playerToken).contentType(MediaType.APPLICATION_OCTET_STREAM).content(arena))
+				.andExpect(status().isForbidden());
+		mockMvc.perform(put("/admin/hubs/" + hub + "/schematic").param("file_name", "../evil.txt")
+						.header("Authorization", adminToken).contentType(MediaType.APPLICATION_OCTET_STREAM).content(arena))
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.error_code").value("ERROR_HUB_SCHEMATIC_NAME"));
+		mockMvc.perform(put("/admin/hubs/" + hub + "/schematic").param("file_name", "room.schem")
+						.header("Authorization", adminToken).contentType(MediaType.APPLICATION_OCTET_STREAM).content(room))
+				.andExpect(status().isUnprocessableEntity())
+				.andExpect(jsonPath("$.error_code").value("ERROR_HUB_SCHEMATIC_INVALID"));
+
+		mockMvc.perform(put("/admin/hubs/" + hub + "/schematic").param("file_name", "My Arena.litematic")
+						.header("Authorization", adminToken).contentType(MediaType.APPLICATION_OCTET_STREAM).content(arena))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.schematic.name").value("My Arena.litematic"));
+		assertThat(SCHEMATICS.resolve("hub_" + hub).resolve("My Arena.litematic")).isRegularFile();
+		// A second upload replaces it; the first one is kept aside.
+		mockMvc.perform(put("/admin/hubs/" + hub + "/schematic").param("file_name", "arena.litematic")
+						.header("Authorization", adminToken).contentType(MediaType.APPLICATION_OCTET_STREAM).content(arena))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.schematic.name").value("arena.litematic"));
+		assertThat(SCHEMATICS.resolve("hub_" + hub).resolve("My Arena.litematic")).doesNotExist();
+		try (var replaced = Files.list(SCHEMATICS.resolve("hub_" + hub).resolve("replaced"))) {
+			assertThat(replaced.count()).isEqualTo(1);
+		}
+
+		mockMvc.perform(delete("/admin/hubs/" + hub + "/schematic").header("Authorization", adminToken))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.schematic").doesNotExist());
+		mockMvc.perform(get("/hubs/" + hub + "/schematic/file").header("Authorization", playerToken))
+				.andExpect(status().isNotFound());
 	}
 }

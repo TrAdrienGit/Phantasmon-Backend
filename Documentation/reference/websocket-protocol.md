@@ -277,6 +277,7 @@ le vrai joueur. Le chat va à tous les membres du hub.
 | `HubChatMuted` | `{ "until" }` | Le joueur qu'un admin vient de rendre muet dans le chat des hubs (TODO-31) |
 | `HubChatUnmuted` | `{}` | Le joueur dont un admin vient de lever le silence |
 | `HubChatLock` | `{ "locked" }` | Tous les membres des hubs : un admin a verrouillé ou déverrouillé le chat |
+| `HubAnchorsChanged` | `{ "server_fingerprint", "dimension" }` | **Tous les clients connectés** : une ancre de ce serveur a été posée ou supprimée ; les clients de ce serveur relisent aussitôt ses ancres (constructions qui apparaissent ou disparaissent) au lieu d'attendre leur rafraîchissement de 30 s |
 | `HubCatalogChanged` | `{}` | **Tous les clients connectés** : un admin a créé, supprimé ou rechargé un hub (D-35) ; le client relit `GET /hubs` (suggestions de commandes, constructions) et les Anchors |
 
 **Vocal du hub** (D-36, avec le mod facultatif Simple Voice Chat) :

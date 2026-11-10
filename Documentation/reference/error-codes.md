@@ -134,6 +134,9 @@ Les codes marqués « — » côté client concernent des routes REST que le cli
 | `ERROR_HUB_INVALID_SIZE` | 400 | REST | Admin : dimension absente ou hors de 3 à 64 | `phantasmon.hub.error.invalid_size` |
 | `ERROR_HUB_SCHEMATIC_INVALID` | 422 | REST | Admin, rechargement : dossier refusé (plusieurs fichiers, illisible, mauvaise taille ; `details.reason`), l'ancienne construction reste | `phantasmon.hub.error.schematic_invalid` (le client affiche `details.reason`) |
 | `ERROR_HUB_SCHEMATIC_NONE` | 404 | REST | Fichier demandé pour un hub sans construction | `phantasmon.hub.error.schematic_none` |
+| `ERROR_HUB_SCHEMATIC_KIND` | 400 | REST | Schematic envoyé à un hub d'add-on (seuls les hubs classiques en reçoivent) | `phantasmon.hub.error.schematic_kind` |
+| `ERROR_HUB_SCHEMATIC_NAME` | 400 | REST | Nom de fichier refusé (caractères, extension `.schem` / `.litematic`) | `phantasmon.hub.error.schematic_name` |
+| `ERROR_HUB_SCHEMATIC_TOO_LARGE` | 413 | REST | Schematic vide ou de plus de 16 Mio | `phantasmon.hub.error.schematic_too_large` |
 | `ERROR_HUB_FOLDER_TAKEN` | 409 | REST | Renommage : un dossier `hub_<nouveau nom>/` existe déjà sur le backend | `phantasmon.hub.error.folder_taken` |
 | `ERROR_HUB_FOLDER_MOVE` | 500 | REST | Renommage : le dossier du hub n'a pas pu être déplacé (rien n'est changé) | `phantasmon.hub.error.folder_move` |
 

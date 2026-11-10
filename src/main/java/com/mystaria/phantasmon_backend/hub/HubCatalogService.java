@@ -385,6 +385,93 @@ public class HubCatalogService {
 		return view(hub);
 	}
 
+	// ---------------------------------------------------------------- schematics (hub manager, admins)
+
+	/** Largest schematic an admin may upload (a 64³ hub's file is far below). */
+	static final int MAX_SCHEMATIC_BYTES = 16 * 1024 * 1024;
+	private static final Pattern FILE_NAME = Pattern.compile("[A-Za-z0-9 _.()-]{1,100}\\.(schem|litematic)", Pattern.CASE_INSENSITIVE);
+
+	/**
+	 * An admin gives a classic hub its build from the hub manager (Adrien 2026-11-10): the file is checked like the
+	 * startup does (readable, the hub's size) before anything changes; then the folder's previous schematic is moved to
+	 * {@code hub_<name>/replaced/} and the new one takes its place. Refused: nothing changes.
+	 */
+	@Transactional(readOnly = true)
+	public HubView uploadSchematic(UUID adminUuid, String name, String rawFileName, byte[] bytes) {
+		Hub hub = require(name);
+		if (!hub.isNormal()) {
+			throw new ApiException(HttpStatus.BAD_REQUEST, "ERROR_HUB_SCHEMATIC_KIND", Map.of("hub", hub.getName(), "kind", hub.getKind()));
+		}
+		String fileName = rawFileName == null ? "" : Path.of(rawFileName.replace('\\', '/')).getFileName().toString().strip();
+		if (!FILE_NAME.matcher(fileName).matches()) {
+			throw new ApiException(HttpStatus.BAD_REQUEST, "ERROR_HUB_SCHEMATIC_NAME", Map.of("file_name", fileName));
+		}
+		if (bytes == null || bytes.length == 0 || bytes.length > MAX_SCHEMATIC_BYTES) {
+			throw new ApiException(HttpStatus.PAYLOAD_TOO_LARGE, "ERROR_HUB_SCHEMATIC_TOO_LARGE",
+					Map.of("bytes", bytes == null ? 0 : bytes.length, "max_bytes", MAX_SCHEMATIC_BYTES));
+		}
+		Format format = formatOf(Path.of(fileName));
+		int[] size;
+		try {
+			size = dimensions(NbtReader.read(bytes), format);
+		} catch (IOException | RuntimeException ex) {
+			throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, "ERROR_HUB_SCHEMATIC_INVALID",
+					Map.of("hub", hub.getName(), "reason", "unreadable file: " + ex.getMessage()));
+		}
+		if (size[0] != hub.getSizeX() || size[1] != hub.getSizeY() || size[2] != hub.getSizeZ()) {
+			throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, "ERROR_HUB_SCHEMATIC_INVALID", Map.of("hub", hub.getName(),
+					"reason", fileName + " is " + size[0] + "x" + size[1] + "x" + size[2] + " (width x height x length), hub "
+							+ hub.getName() + " is " + hub.getSizeX() + "x" + hub.getSizeY() + "x" + hub.getSizeZ()));
+		}
+		Path folder = folderOf(hub.getName());
+		try {
+			Files.createDirectories(folder);
+			String archived = archiveSchematics(folder);
+			Files.write(folder.resolve(fileName), bytes);
+			log.info("Admin {} gave hub {} the build {} ({} bytes){}", adminUuid, hub.getName(), fileName, bytes.length,
+					archived == null ? "" : ", previous one moved to replaced/");
+		} catch (IOException ex) {
+			throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "ERROR_HUB_FOLDER_MOVE",
+					Map.of("hub", hub.getName(), "reason", String.valueOf(ex.getMessage())));
+		}
+		return reload(adminUuid, hub.getName());
+	}
+
+	/** The hub goes without a build: its schematic is moved to {@code hub_<name>/replaced/}. */
+	@Transactional(readOnly = true)
+	public HubView removeSchematic(UUID adminUuid, String name) {
+		Hub hub = require(name);
+		if (!hub.isNormal()) {
+			throw new ApiException(HttpStatus.BAD_REQUEST, "ERROR_HUB_SCHEMATIC_KIND", Map.of("hub", hub.getName(), "kind", hub.getKind()));
+		}
+		Path folder = folderOf(hub.getName());
+		try {
+			Files.createDirectories(folder);
+			archiveSchematics(folder);
+		} catch (IOException ex) {
+			throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "ERROR_HUB_FOLDER_MOVE",
+					Map.of("hub", hub.getName(), "reason", String.valueOf(ex.getMessage())));
+		}
+		log.info("Admin {} removed the build of hub {}", adminUuid, hub.getName());
+		return reload(adminUuid, hub.getName());
+	}
+
+	/** Moves the folder's .schem / .litematic files to {@code replaced/<stamp>-<file>}; the last one moved, or null. */
+	private static String archiveSchematics(Path folder) throws IOException {
+		List<Path> files;
+		try (Stream<Path> entries = Files.list(folder)) {
+			files = entries.filter(Files::isRegularFile).filter(path -> formatOf(path) != null).toList();
+		}
+		String last = null;
+		for (Path file : files) {
+			Path replaced = Files.createDirectories(folder.resolve("replaced"));
+			Path target = replaced.resolve(LocalDateTime.now().format(ARCHIVE_STAMP) + "-" + file.getFileName());
+			Files.move(file, target);
+			last = target.getFileName().toString();
+		}
+		return last;
+	}
+
 	private void announce() {
 		sessionRegistry.broadcast(WsMessage.of("HubCatalogChanged", Map.of()));
 	}

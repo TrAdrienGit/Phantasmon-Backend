@@ -38,7 +38,9 @@ le hub fonctionne sans construction. Les `.schem` / `.litematic` ne sont **jamai
 fixtures de `src/test/resources/`) : chaque backend a les siens. Une arène d'exemple pour le hub `global` se génère avec
 `python scripts/generate_hub_schematics.py` (`hub_global/phantasmon_default_hub.schem`) : la **remplacer** par la vraie
 construction, ne pas l'ajouter à côté. Le centre de la couche du bas se place sous les pieds du joueur qui pose l'Anchor ; le +Z du schematic est
-l'avant de l'Anchor. Après avoir déposé ou remplacé un fichier : RELIRE LA CONSTRUCTION dans le gestionnaire (sans
+l'avant de l'Anchor. Plus simple : SCHEMATIC dans le gestionnaire envoie un fichier du dossier `schematics/` de l'instance d'un admin,
+vérifié puis mis en place (l'ancien rangé dans `replaced/`). Après avoir déposé ou remplacé un fichier à la main :
+RELIRE LA CONSTRUCTION dans le gestionnaire (sans
 redémarrer) ; les clients le téléchargent seuls. Un hub supprimé laisse son dossier renommé
 `hub_<nom>.deleted-<date>`.
 

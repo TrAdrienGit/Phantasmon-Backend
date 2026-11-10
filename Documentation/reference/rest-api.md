@@ -59,6 +59,8 @@
 | `GET` | [`/admin/hubs`](#gestionnaire-des-hubs-admins) | Bearer admin | Gestionnaire des hubs : tous les hubs, création, ancres |
 | `GET` | [`/admin/hubs/{name}/anchors`](#gestionnaire-des-hubs-admins) | Bearer admin | Les ancres d'un hub, sur tous les serveurs |
 | `POST` | [`/admin/hubs/{name}/rename`](#gestionnaire-des-hubs-admins) | Bearer admin | Renommer un hub |
+| `PUT` | [`/admin/hubs/{name}/schematic`](#gestionnaire-des-hubs-admins) | Bearer admin | Donner son schematic à un hub classique |
+| `DELETE` | [`/admin/hubs/{name}/schematic`](#gestionnaire-des-hubs-admins) | Bearer admin | Retirer la construction d'un hub |
 
 ---
 
@@ -563,6 +565,13 @@ routes ci-dessous : `403 ERROR_ADMIN_REQUIRED` hors admin.
   (`400 ERROR_HUB_INVALID_NAME`, `409 ERROR_HUB_NAME_TAKEN`). Le dossier `hub_<ancien>/` devient `hub_<nouveau>/`
   (`409 ERROR_HUB_FOLDER_TAKEN` s'il existe déjà, `500 ERROR_HUB_FOLDER_MOVE` si le déplacement échoue : rien n'est
   changé) ; ancres et membres restent ; `HubCatalogChanged` est diffusé.
+- `PUT /admin/hubs/{name}/schematic?file_name=<nom>.schem|.litematic`, corps = le fichier (`application/octet-stream`,
+  16 Mio au plus) → le hub. Vérifié comme au démarrage avant tout changement : `400 ERROR_HUB_SCHEMATIC_KIND` (hub d'un
+  add-on), `400 ERROR_HUB_SCHEMATIC_NAME` (nom : lettres, chiffres, espace, `_ . ( ) -`, extension `.schem` ou
+  `.litematic`), `413 ERROR_HUB_SCHEMATIC_TOO_LARGE`, `422 ERROR_HUB_SCHEMATIC_INVALID` (illisible ou mauvaise taille,
+  `details.reason`). Accepté : l'ancien fichier part dans `hub_<nom>/replaced/<date>-<fichier>`, le nouveau prend sa
+  place, le hub est relu et `HubCatalogChanged` diffusé.
+- `DELETE /admin/hubs/{name}/schematic` → le hub, sans construction (fichier rangé dans `replaced/` de la même façon).
 
 ## Profils d'animation des dresseurs (Cobblemon Battle Showtime E3)
 

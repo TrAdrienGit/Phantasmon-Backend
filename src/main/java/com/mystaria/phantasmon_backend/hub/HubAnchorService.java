@@ -28,14 +28,17 @@ public class HubAnchorService {
 	private final AdminService adminService;
 	private final HubService hubService;
 	private final HubKinds hubKinds;
+	private final com.mystaria.phantasmon_backend.websocket.SessionRegistry sessionRegistry;
 
 	public HubAnchorService(HubAnchorRepository repository, HubRepository hubRepository, AdminService adminService,
-			HubService hubService, HubKinds hubKinds) {
+			HubService hubService, HubKinds hubKinds,
+			com.mystaria.phantasmon_backend.websocket.SessionRegistry sessionRegistry) {
 		this.repository = repository;
 		this.hubRepository = hubRepository;
 		this.adminService = adminService;
 		this.hubService = hubService;
 		this.hubKinds = hubKinds;
+		this.sessionRegistry = sessionRegistry;
 	}
 
 	@Transactional
@@ -50,6 +53,7 @@ public class HubAnchorService {
 		}
 		if (kind != null) {
 			HubAnchor anchor = repository.saveAndFlush(kind.anchor(ownerUuid, hub, request, role));
+			announce(anchor);
 			return HubAnchorResponse.from(anchor, hub, hubKinds.view(hub));
 		}
 		short yaw = snapYaw(request.yaw());
@@ -66,6 +70,7 @@ public class HubAnchorService {
 		HubAnchor anchor = repository.saveAndFlush(new HubAnchor(UUID.randomUUID(), ownerUuid, hub.getUuid(), request.name(),
 				request.serverFingerprint(), request.dimension(),
 				request.origin().x(), request.origin().y(), request.origin().z(), yaw, role));
+		announce(anchor);
 		return HubAnchorResponse.from(anchor, hub, Map.of());
 	}
 
@@ -115,6 +120,16 @@ public class HubAnchorService {
 		}
 		repository.delete(anchor);
 		hubService.onAnchorDeleted(anchorUuid);
+		announce(anchor);
+	}
+
+	/**
+	 * {@code HubAnchorsChanged}: the players of that server reload its anchors at once (their builds appear or go),
+	 * instead of at their next 30 s refresh (Adrien 2026-11-10: a deleted anchor stayed ~20 s).
+	 */
+	private void announce(HubAnchor anchor) {
+		sessionRegistry.broadcast(com.mystaria.phantasmon_backend.websocket.WsMessage.of("HubAnchorsChanged",
+				Map.of("server_fingerprint", anchor.getServerFingerprint(), "dimension", anchor.getDimension())));
 	}
 
 	/** Any Minecraft yaw (unbounded, possibly negative) → the nearest of 0, 90, 180, 270. */

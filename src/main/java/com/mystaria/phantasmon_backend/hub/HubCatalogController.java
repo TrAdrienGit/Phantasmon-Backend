@@ -116,6 +116,25 @@ public class HubCatalogController {
 		return catalog.rename(admin, name, request == null ? null : request.name());
 	}
 
+	/** The hub manager: gives a classic hub its build (the file's bytes as the body, {@code file_name} in the query). */
+	@org.springframework.web.bind.annotation.PutMapping(value = "/admin/hubs/{name}/schematic",
+			consumes = MediaType.APPLICATION_OCTET_STREAM_VALUE)
+	public HubCatalogService.HubView uploadSchematic(@PathVariable String name,
+			@org.springframework.web.bind.annotation.RequestParam("file_name") String fileName, @RequestBody byte[] body,
+			Authentication authentication) {
+		UUID admin = caller(authentication);
+		adminService.requireAdmin(admin);
+		return catalog.uploadSchematic(admin, name, fileName, body);
+	}
+
+	/** The hub manager: the hub goes without a build. */
+	@DeleteMapping("/admin/hubs/{name}/schematic")
+	public HubCatalogService.HubView removeSchematic(@PathVariable String name, Authentication authentication) {
+		UUID admin = caller(authentication);
+		adminService.requireAdmin(admin);
+		return catalog.removeSchematic(admin, name);
+	}
+
 	@PostMapping("/admin/hubs/{name}/reload")
 	public HubCatalogService.HubView reload(@PathVariable String name, Authentication authentication) {
 		UUID admin = caller(authentication);
