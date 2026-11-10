@@ -22,7 +22,7 @@ Chaque phase liste : objectif, livrables, definition of done (DoD).
 - Repos créés (`phantasmon-client`, `phantasmon-backend`, `phantasmon-docs`), `.gitignore` en place.
 - Licence déposée dans chaque repo (`LICENSE`).
 
-> **Note (2026-10-03)** : licence retenue : **GPL 3.0** (fichiers `LICENSE`). Les deux copies de ce plan divergeaient (GPL 3.0 / CC0 1.0) ; `fabric.mod.json` déclare `GPL-3.0-only` (BUG-1 résolu).
+> **Note (2026-10-03, mise à jour 2026-11-10)** : licence **Apache 2.0** depuis le 2026-10-30 (fichiers `LICENSE` et `NOTICE` créditant l’auteur, `fabric.mod.json` : `Apache-2.0`). Auparavant : GPL 3.0 (2026-10-03), après un CC0 1.0 initial.
 
 - Audit rapide de l'API publique Cobblemon (`CobblemonEvents` et équivalents) pour identifier ce qui est stable vs interne — notes à garder dans `phantasmon-docs`.
 - Squelette Spring Boot généré (auth, pokemon, trade, battle, presence, websocket, version, admin, common — voir `CONTEXT_CURSOR_BACKEND.md`).

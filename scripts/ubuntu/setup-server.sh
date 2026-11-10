@@ -2,7 +2,7 @@
 # Runs ON the Ubuntu server, as root, sent by scripts/deploy-ubuntu.sh. Idempotent: every deployment runs it again.
 #   setup-server.sh <staging dir> [--restore <dump file>]
 # The staging dir holds: phantasmon-backend.jar, env (the .env), db.env (BDD_USER/BDD_PASSWORD/BDD_NAME),
-# phantasmon-backend.service, hub_schematics.tar, optionally admins.txt.
+# phantasmon-backend.service, hub_schematics.tar, optionally admins.txt and add-on jars (addon-<name>.jar, D-41).
 set -euo pipefail
 
 STAGING="$1"
@@ -76,6 +76,14 @@ log "Installing the backend in $APP..."
 install -m 644 "$STAGING/phantasmon-backend.jar" "$APP/phantasmon-backend.jar"
 install -m 600 "$STAGING/env" "$APP/.env"
 tar -xf "$STAGING/hub_schematics.tar" -C "$APP"
+# Add-ons (D-41): exactly the ones of this deployment (none: Phantasmon alone).
+mkdir -p "$APP/addons"
+rm -f "$APP/addons/"*.jar
+for addon in "$STAGING"/addon-*.jar; do
+	[[ -f "$addon" ]] || continue
+	install -m 644 "$addon" "$APP/addons/${addon##*/addon-}"
+	log "Add-on installed: ${addon##*/addon-}"
+done
 if [[ -f "$STAGING/admins.txt" && ! -f "$APP/admins.txt" ]]; then
 	# Only the first time: afterwards the server's own admin list is kept.
 	install -m 644 "$STAGING/admins.txt" "$APP/admins.txt"

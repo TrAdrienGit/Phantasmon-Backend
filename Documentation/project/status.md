@@ -3,7 +3,7 @@
 > **Document miroir** : identique dans `Phantasmon-Backend/Documentation/project/` et
 > `Phantasmon-Client/Documentation/project/`. Toute modification doit être reportée dans les deux.
 >
-> **État au 2026-10-03.** À mettre à jour à chaque fin de phase, fonctionnalité livrée ou limite découverte.
+> **État au 2026-11-10.** À mettre à jour à chaque fin de phase, fonctionnalité livrée ou limite découverte.
 
 ## 1. Avancement par phase
 
@@ -11,7 +11,7 @@ Plan de référence : [`specifications/cad-4-plan-developpement.md`](../specific
 
 | Phase | Périmètre | Statut | Validation |
 |---|---|---|---|
-| 0 | Fondations : dépôts, squelettes, CI, OpenAPI, PostgreSQL local | ✅ Terminée | `docker-compose.yml` ajouté le 2026-10-03 ; licence GPL 3.0 |
+| 0 | Fondations : dépôts, squelettes, CI, OpenAPI, PostgreSQL local | ✅ Terminée | `docker-compose.yml` ajouté le 2026-10-03 ; licence Apache 2.0 depuis le 2026-10-30 (GPL 3.0 avant) |
 | 1 | Backend : joueurs, auth Mojang → JWT, CRUD Pokémon, légalité, idempotence, PC | ✅ Terminée | Légalité limitée aux IV/EV ([D-02](../architecture/decisions.md#d-02--légalité-vérifiée-par-le-backend-limitée-aux-ivev)) |
 | 2 | Backend : présence, WebSocket, heartbeat/TTL, `GET /version` | ✅ Terminée | Tests d'intégration WebSocket réels |
 | 3 | Backend : échanges REST atomiques | ✅ Terminée | |
@@ -35,6 +35,16 @@ Le projet passe à **Phantasmon Network** (couche inter-serveurs), développé d
 validés en jeu le 2026-10-07.**
 
 **2026-10-30 — Une seule branche.** Depuis le découpage en mods (Showtime, Events, Trahison), chaque dépôt vit sur `main` uniquement ; `dev` a été fusionnée puis supprimée.
+
+**Découpage en mods (depuis le 2026-10-29).** La mise en scène des combats est le mod **Cobblemon Battle Showtime**
+(D-37, D-40), dont Phantasmon dépend (`>=1.0.0 <2.0.0`). **Phantasmon Events** est un add-on qui dépend de Phantasmon
+(`>=0.1.0 <0.2.0`). Mais une partie du code d'Events vit encore dans les dépôts Phantasmon (hubs miroirs, tournois,
+PNJ d'événements et leurs IA) : séparation à faire, [TODO-35](known-issues.md).
+
+**Novembre 2026.** Modération du chat du hub (TODO-31), sol du hub (TODO-33), import d'équipe complète (Méga et
+Primo importés sous leur forme de base), vrais objets tenus, talents importés et amitié dans les combats Ghost,
+compatibilité avec Battle Extras (3 mixins), musique du lobby jouée par Showtime. Validés en jeu par Adrien : vocal du hub
+(D-36), terrain visible sans regarder (D-33, à revoir), blocs fantômes des hubs miroirs (D-38), debug de l'IA des PNJ.
 
 | Étape Network | Périmètre | Statut |
 |---|---|---|
@@ -63,19 +73,20 @@ validés en jeu le 2026-10-07.**
 | Spectateurs | Regarder un combat Ghost en cours, comme dans Cobblemon (D-31), aussi entre serveurs via le Global Hub | Roue Cobblemon (**R**) → « Regarder le combat Ghost » |
 | Construction du Hub | Chaque Anchor bâtit chez les clients du serveur le schematic de son hub en blocs client, incassables (D-34) | Automatique (`hub_schematics/hub_<nom>/`) |
 | Plusieurs hubs | Créés / supprimés / rechargés par les admins, espaces séparés, un Anchor par hub et par joueur, sans chevauchement (D-35) | `/phantasmon admin hub …`, `/phantasmon hub anchor create <hub>`, `/phantasmon hub list` |
-| Vocal du hub | Les membres d'un hub s'entendent en 3D depuis les avatars, avec Simple Voice Chat (facultatif, connecté sur le serveur de chacun) (D-36) | Touches de Simple Voice Chat |
-| Terrain visible alentour | Les joueurs du même serveur et, si un joueur y est, du Global Hub voient les Pokémon d'un combat sans le regarder (D-33) | Automatique |
+| Vocal du hub | Les membres d'un hub s'entendent en 3D depuis les avatars, avec Simple Voice Chat (facultatif, connecté sur le serveur de chacun) (D-36) ; validé en jeu | Touches de Simple Voice Chat |
+| Modération du chat du hub | Rendre muet pour une durée, rétablir, verrouiller le chat, annonces (TODO-31) | `/phantasmon admin hub mute / unmute / lock` |
+| Terrain visible alentour | Les joueurs du même serveur et, si un joueur y est, du Global Hub voient les Pokémon d'un combat sans le regarder (D-33) ; validé en jeu, à revoir | Automatique |
 | Combat solo (admin) | Combat contre un miroir de son équipe, joué par l'IA de Cobblemon, regardable, non stocké (D-32) | `/phantasmon admin battle solo` |
+| API pour add-ons | `PhantasmonApi` : session, requêtes au backend, messages WebSocket, équipe Cobblemon, roues d'interaction sur d'autres entités, combat contre un PNJ | Utilisée par Phantasmon Events |
 | Langues | Français et anglais | Langue du jeu |
 
 ## 3. Non implémenté (prévu par le CAD)
 
 | Élément | Référence CAD | Commentaire |
 |---|---|---|
-| Fonctions d'administration (`/admin/*`, rôle admin, inspection) | Partie 1 §37-38, Partie 2 §16 | [D-20](../architecture/decisions.md#d-20--fonctions-dadministration-et-limitation-de-débit-reportées) |
 | Limitation de débit par joueur | Partie 2 §13 | WebSocket limité (40 messages/s par connexion, SEC-5) ; rien côté REST (D-20) |
 | Sauvegardes hors serveur | Partie 3 §I, Phase 10 | Backend en production sur Ubuntu (2026-10-19) avec sauvegarde quotidienne locale ; copie hors serveur à faire (TODO-16) ; pas d'archivage WAL (LIM-8) |
-| Publication Modrinth / CurseForge | Partie 3 §J, Phase 10 | Lien de téléchargement factice dans le client (TODO-3) |
+| Publication Modrinth / CurseForge | Partie 3 §J, Phase 10 | En attendant, le lien de mise à jour pointe sur les versions GitHub (TODO-3) |
 
 ## 4. Bugs connus, TODO et dette technique
 
@@ -92,7 +103,7 @@ Suivis dans [`known-issues.md`](known-issues.md) (identifiants `BUG-n`, `TODO-n`
 
 | | Backend | Client |
 |---|---|---|
-| Tests automatisés | 220 tests (JUnit 5 + Testcontainers, 2026-10-09) | 70 tests (logique pure, 2026-10-08) |
-| Migrations Flyway | V1 à V14 | — |
-| Mixins | — | 16 (dont 1 accesseur) ; 5 de plus dans Cobblemon Battle Showtime (D-37) |
-| Langues | — | `fr_fr`, `en_us` (~224 clés) |
+| Tests automatisés | 221 tests (JUnit 5 + Testcontainers, 2026-11-10) ; module Events : 11 | 77 tests (logique pure, 2026-11-10) |
+| Migrations Flyway | V1 à V25 (V18-V19 et V22-V24 passés dans le module Events, qui a ses propres V1 à V3, D-41) | — |
+| Mixins | — | 20 (dont 1 accesseur et 3 pour Battle Extras) ; ceux de la mise en scène sont dans Cobblemon Battle Showtime (D-37) |
+| Langues | — | `fr_fr`, `en_us` (399 clés) |

@@ -24,9 +24,11 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Hub {
 
-	/** A mirror hub spans the whole height of the world (D-38): y {@value #MIRROR_MIN_Y} to 319. */
-	public static final int MIRROR_MIN_Y = -64;
-	public static final int MIRROR_HEIGHT = 384;
+	/** An ordinary hub: anyone's anchors, one per player, built from its schematic (D-34, D-35). */
+	public static final String KIND_NORMAL = "NORMAL";
+	/** The world's height: y {@value #WORLD_MIN_Y} to 319. */
+	public static final int WORLD_MIN_Y = -64;
+	public static final int WORLD_HEIGHT = 384;
 
 	@Id
 	private UUID uuid;
@@ -43,12 +45,12 @@ public class Hub {
 	@Column(name = "size_z", nullable = false)
 	private short sizeZ;
 
-	/** A mirror hub (D-38): its terrain is copied from its source anchor's zone, it never has a build. */
-	@Column(nullable = false)
-	private boolean mirror;
-
-	/** A mirror hub's radius (D-38): a square of side {@code 2 * radius + 1}; null for an ordinary hub. */
-	private Short radius;
+	/**
+	 * {@link #KIND_NORMAL}, or a kind an add-on defines ({@link com.mystaria.phantasmon_backend.addon.HubKind}; Phantasmon
+	 * Events' {@code MIRROR} hubs, D-38). D-41: the core knows nothing else of the other kinds.
+	 */
+	@Column(nullable = false, length = 16)
+	private String kind = KIND_NORMAL;
 
 	@Column(name = "created_by")
 	private UUID createdBy;
@@ -65,19 +67,21 @@ public class Hub {
 		this.createdBy = createdBy;
 	}
 
-	/** A mirror hub (D-38) of that radius. */
-	public static Hub mirror(UUID uuid, String name, int radius, UUID createdBy) {
-		Hub hub = new Hub(uuid, name, 2 * radius + 1, MIRROR_HEIGHT, 2 * radius + 1, createdBy);
-		hub.mirror = true;
-		hub.radius = (short) radius;
-		return hub;
+	/** A hub of an add-on's kind ({@link com.mystaria.phantasmon_backend.addon.HubKind}). */
+	public Hub(UUID uuid, String name, String kind, int sizeX, int sizeY, int sizeZ, UUID createdBy) {
+		this(uuid, name, sizeX, sizeY, sizeZ, createdBy);
+		this.kind = kind;
 	}
 
-	/** A mirror hub's new radius: it grows or shrinks around the same centre. */
-	public void resize(int newRadius) {
-		radius = (short) newRadius;
-		sizeX = (short) (2 * newRadius + 1);
-		sizeZ = sizeX;
+	public boolean isNormal() {
+		return KIND_NORMAL.equals(kind);
+	}
+
+	/** A new size (an add-on's kind, e.g. a mirror hub's radius changed). */
+	public void resize(int sizeX, int sizeY, int sizeZ) {
+		this.sizeX = (short) sizeX;
+		this.sizeY = (short) sizeY;
+		this.sizeZ = (short) sizeZ;
 	}
 
 	@PrePersist

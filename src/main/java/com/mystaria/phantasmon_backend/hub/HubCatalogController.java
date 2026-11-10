@@ -24,15 +24,12 @@ public class HubCatalogController {
 
 	private final HubCatalogService catalog;
 	private final AdminService adminService;
+	private final HubKinds hubKinds;
 
-	public HubCatalogController(HubCatalogService catalog, AdminService adminService) {
+	public HubCatalogController(HubCatalogService catalog, AdminService adminService, HubKinds hubKinds) {
 		this.catalog = catalog;
 		this.adminService = adminService;
-	}
-
-	/** {@code length} along the anchor's front (z), {@code width} across it (x), {@code height} (y). */
-	/** {@code mirror}: a mirror hub (D-38), sized by its {@code radius} only. */
-	public record HubCreateRequest(String name, Integer length, Integer width, Integer height, Boolean mirror, Integer radius) {
+		this.hubKinds = hubKinds;
 	}
 
 	@GetMapping("/hubs")
@@ -50,15 +47,35 @@ public class HubCatalogController {
 				.body(schematic.bytes());
 	}
 
+	/**
+	 * {@code name}; an ordinary hub: {@code length} along the anchor's front (z), {@code width} across it (x),
+	 * {@code height} (y). A body an add-on's hub kind recognizes (D-41; mirror hubs: {@code mirror: true} and
+	 * {@code radius}, D-38) creates a hub of that kind, sized by it.
+	 */
 	@PostMapping("/admin/hubs")
-	public ResponseEntity<HubCatalogService.HubView> create(@RequestBody(required = false) HubCreateRequest request,
+	public ResponseEntity<HubCatalogService.HubView> create(@RequestBody(required = false) Map<String, Object> request,
 			Authentication authentication) {
 		UUID admin = caller(authentication);
 		adminService.requireAdmin(admin);
-		HubCreateRequest body = request == null ? new HubCreateRequest(null, null, null, null, null, null) : request;
-		return ResponseEntity.status(HttpStatus.CREATED)
-				.body(Boolean.TRUE.equals(body.mirror()) ? catalog.createMirror(admin, body.name(), body.radius())
-						: catalog.create(admin, body.name(), body.length(), body.width(), body.height()));
+		Map<String, Object> body = request == null ? Map.of() : request;
+		String name = body.get("name") instanceof String text ? text : null;
+		return ResponseEntity.status(HttpStatus.CREATED).body(hubKinds.requested(body)
+				.map(kind -> catalog.create(admin, name, kind, body))
+				.orElseGet(() -> catalog.create(admin, name, integer(body, "length"), integer(body, "width"),
+						integer(body, "height"))));
+	}
+
+	/** An integer field of a JSON body; null if absent or not a whole number. */
+	public static Integer integer(Map<String, Object> body, String key) {
+		Object value = body.get(key);
+		if (value instanceof Integer number) {
+			return number;
+		}
+		if (value instanceof Number number && number.doubleValue() == Math.rint(number.doubleValue())
+				&& Math.abs(number.doubleValue()) <= Integer.MAX_VALUE) {
+			return number.intValue();
+		}
+		return null;
 	}
 
 	@DeleteMapping("/admin/hubs/{name}")
@@ -66,18 +83,6 @@ public class HubCatalogController {
 		UUID admin = caller(authentication);
 		adminService.requireAdmin(admin);
 		return catalog.delete(admin, name);
-	}
-
-	public record HubResizeRequest(Integer delta) {
-	}
-
-	/** A mirror hub's radius grows by {@code delta} (negative: shrinks), D-38. */
-	@PostMapping("/admin/hubs/{name}/resize")
-	public HubCatalogService.HubView resize(@PathVariable String name, @RequestBody(required = false) HubResizeRequest request,
-			Authentication authentication) {
-		UUID admin = caller(authentication);
-		adminService.requireAdmin(admin);
-		return catalog.resize(admin, name, request == null ? null : request.delta());
 	}
 
 	@PostMapping("/admin/hubs/{name}/reload")

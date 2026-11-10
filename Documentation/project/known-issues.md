@@ -3,7 +3,7 @@
 > **Document miroir** : identique dans `Phantasmon-Backend/Documentation/project/` et
 > `Phantasmon-Client/Documentation/project/`. Toute modification doit être reportée dans les deux.
 >
-> Mis à jour le 2026-10-03. Une entrée résolue n'est pas supprimée : elle passe dans §5 avec la date de résolution.
+> Mis à jour le 2026-11-10. Une entrée résolue n'est pas supprimée : elle passe dans §5 avec la date de résolution.
 
 Identifiants : `BUG-n` (comportement incorrect), `SEC-n` (sécurité, voir [`security-audit.md`](security-audit.md)), `TODO-n` (action à faire), `DEBT-n` (dette technique),
 `LIM-n` (limite connue, assumée pour l'instant). Priorité : **haute** (bloque une publication), **moyenne**,
@@ -13,23 +13,20 @@ Identifiants : `BUG-n` (comportement incorrect), `SEC-n` (sécurité, voir [`sec
 
 | ID | Priorité | Dépôt | Description | Piste |
 |---|---|---|---|---|
-| — | — | — | Aucun bug connu ouvert (BUG-1 à BUG-5 et SEC-1 à SEC-9 traités, voir §5 ; SEC-6 devenu LIM-9). | — |
+| BUG-6 | moyenne | Client | Hub entre un monde solo et un serveur (Adrien, 2026-11-10) : TheMashen en solo et MystAria_ sur le serveur de test, chacun dans son Anchor du hub `hub`. MystAria_ voit l'avatar de TheMashen ; TheMashen ne voit pas celui de MystAria_ (ni modèle ni boîte de collision avec F3+B), alors que le hub l'annonce comme membre. Le backend les a bien dans le même hub, et le client solo journalise « Hub avatar of MystAria_ shown » à chaque entrée. | L'entité est créée (`HubAvatars.update`, `level.addEntity`) mais n'est pas dans le monde affiché : chercher ce qui la retire ou l'empêche d'être suivie en solo (serveur intégré, pause, monde vide). Traité après la séparation d'Events (TODO-35), à la demande d'Adrien. |
 
 ## 2. TODO
 
-> **En suspens (Adrien, 2026-10-06)** : TODO-2, 3, 7 et 16 attendent la machine de production (phase 10) ; TODO-21
-> est un polissage au fil de l'eau ; TODO-27 viendra une fois le but du mod atteint (création de lore).
+> **En suspens (Adrien, 2026-10-06)** : TODO-16 attend la phase 10 ; TODO-21 est un polissage au fil de l'eau.
 
 | ID | Priorité | Dépôt | Action |
 |---|---|---|---|
+| TODO-35 | moyenne | Client + Backend | **Séparer Phantasmon Events de Phantasmon** : du code qui appartenait à l'add-on Events vivait dans les dépôts Phantasmon. Backend : package `events/` (hubs miroirs, tournois, PNJ d'événements), migrations V15-V19 et V22-V24, messages WebSocket `Events*`, routes `/events/*` (déplacés, E2). Client : IA des PNJ et leurs données (déplacées, E4). Phantasmon ne doit garder que des points d'extension génériques (`PhantasmonApi`, combat contre un PNJ, roue). Décision D-41 : module backend chargé depuis `addons/`, plan `Phantasmon-Events/Documentation/plan-separation.md`. **E1 faite le 2026-11-10** (points d'extension `addon`, le cœur n'importe plus `events`). **E4 faite le 2026-11-10** (IA expert / Reborn et leurs données dans le mod Events, enregistrées par `PhantasmonApi.registerBattleAi`). **E2 faite le 2026-11-10** (types de hub, V25, module `Phantasmon-Events/backend` chargé depuis `addons/`, Flyway propre). Reste E3 (déploiement) et E5 (doc). |
 | TODO-16 | moyenne | Serveur Ubuntu | **Sauvegarde quotidienne en place depuis le 2026-10-19** (timer `phantasmon-backup`, 14 jours + hebdomadaires 92 jours, `guides/deploying-ubuntu.md`). Reste : copier les dumps hors du serveur (autre machine ou cloud), une panne de disque les emporterait avec la base. |
 | TODO-21 | basse | Client | Effets sonores : premiers sons faits (PC, boutons de confirmation, journal §4.87) embarqués dans le mod (`assets/phantasmon/sounds/sfx/`) ; d'autres à venir selon Adrien. |
-| TODO-27 | basse | Client + Backend | Combats scénarisés : combats uniques préparés par l'admin (maître du jeu) — musique, intro, effets pendant le match choisis à l'avance. |
 | TODO-29 | basse | Client + Backend | Network : Hubs privés (Anchor ou Hub réservé à un groupe, par code d'invitation). Jalon 1 = un seul Hub public (cahier des charges Network §5.3). |
 | TODO-30 | basse | Backend | Network : instances multiples du Hub au-delà de 50 joueurs (aujourd'hui : refus `ERROR_HUB_FULL`). |
-| TODO-31 | moyenne | Client + Backend | Network : outils de modération du chat du Hub pour les admins (rendre muet, exclure du Hub) ; jalon 1 = longueur, débit, journalisation seulement. |
 | TODO-32 | basse | Client + Backend | Network : émotes dans le Hub (écartées du jalon 2 par Adrien le 2026-10-07). Pistes : bulles au-dessus de la tête, ou vraies animations du corps (Mixin de rendu ou mod d'animation). |
-| TODO-33 | moyenne | Client | Network, construction du Hub (D-34) : traiter le **sol** du schematic dans un hub — problème d'affichage entre le sol du serveur et celui du hub (signalé par Adrien le 2026-10-08, à préciser : la couche du bas du schematic se pose au niveau des pieds, au-dessus du vrai sol). |
 | TODO-34 | basse | Client + Backend | Network, vocal du hub (D-36) : la voix passe par le WebSocket (TCP) ; sur un réseau qui perd des paquets elle prend du retard au lieu de sauter. Si besoin : canal UDP / WebRTC dédié. |
 
 ## 3. Dette technique
@@ -110,3 +107,8 @@ Identifiants : `BUG-n` (comportement incorrect), `SEC-n` (sécurité, voir [`sec
 | TODO-7 | 2026-11-01 | Sans objet : la machine « production-server » (`100.106.248.73`) n'est plus utilisée ; les deux instances de test (MystAria_, TheMashen) sont sur la machine de développement et le script de déploiement les sert toutes deux en local. Le backend se déploie en SSH sur le serveur Ubuntu (`root@100.101.1.79`, `scripts/deploy-ubuntu.sh`), accès vérifié le 2026-11-01. |
 | TODO-2 | 2026-11-03 | `/phantasmon admin debug fingerprint` retirée : les tests se font sur notre serveur dédié (même adresse, même empreinte pour tous), plus en LAN (Adrien). |
 | TODO-3 | 2026-11-03 | `fabric.mod.json` : `homepage` / `sources` → `https://github.com/TrAdrienGit/Phantasmon-Client` ; lien de mise à jour (`AuthService`) → les versions GitHub du projet, en attendant une page Modrinth ou CurseForge. |
+| — | 2026-10-30 | Licence : **Apache 2.0** (remplace la GPL 3.0), avec un fichier `NOTICE` créditant l'auteur ; `fabric.mod.json` déclare `Apache-2.0`. |
+| TODO-33 | 2026-11-01 | Sol du hub : la couche du bas du schematic se pose un bloc sous les pieds, à la place du vrai sol, et ses blocs client masquent ceux du serveur (`HubBuildLayout`). |
+| TODO-31 | 2026-11-02 | Modération du chat du hub par les admins : `/phantasmon admin hub mute <joueur> <durée>`, `unmute`, `lock` (chat verrouillé), annonces dans le hub (V21 `hub_chat_mutes`). L'exclusion d'un joueur du hub n'a pas été faite. |
+| TODO-27 | 2026-11-10 | Combats scénarisés : relèvent de Phantasmon Events, pas de Phantasmon (Adrien). À reprendre dans la doc d'Events. |
+| — | 2026-11-10 | Validés en jeu par Adrien : vocal du hub (D-36), terrain d'un combat visible sans le regarder (D-33, à revoir une fois), blocs fantômes des hubs miroirs (D-38), debug de l'IA des PNJ. |

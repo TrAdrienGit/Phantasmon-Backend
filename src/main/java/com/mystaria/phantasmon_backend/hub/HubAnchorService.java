@@ -9,6 +9,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.mystaria.phantasmon_backend.addon.HubKind;
 import com.mystaria.phantasmon_backend.admin.AdminService;
 import com.mystaria.phantasmon_backend.common.ApiException;
 
@@ -16,8 +17,8 @@ import com.mystaria.phantasmon_backend.common.ApiException;
  * Hub Anchors (network-cahier-des-charges.md §5.2, D-28, D-30, D-35): any player creates one per hub, at most; an
  * anchor is shared by all the players of its server and dimension (listed and usable by them), never seen from another
  * server; names are unique per server, ignoring case; two anchors' boxes never overlap; the owner or an admin (D-26)
- * deletes it. A mirror hub (D-38) has admins' anchors only: one SOURCE (the server zone whose terrain is copied) and
- * one COPY per admin.
+ * deletes it. A hub of an add-on's kind (D-41; Phantasmon Events' mirror hubs, D-38) has its kind's own anchor
+ * rules ({@link HubKind}).
  */
 @Service
 public class HubAnchorService {
@@ -26,40 +27,30 @@ public class HubAnchorService {
 	private final HubRepository hubRepository;
 	private final AdminService adminService;
 	private final HubService hubService;
+	private final HubKinds hubKinds;
 
 	public HubAnchorService(HubAnchorRepository repository, HubRepository hubRepository, AdminService adminService,
-			HubService hubService) {
+			HubService hubService, HubKinds hubKinds) {
 		this.repository = repository;
 		this.hubRepository = hubRepository;
 		this.adminService = adminService;
 		this.hubService = hubService;
+		this.hubKinds = hubKinds;
 	}
 
 	@Transactional
 	public HubAnchorResponse create(UUID ownerUuid, HubAnchorCreateRequest request) {
 		Hub hub = hubRepository.findByNameIgnoreCase(request.hub().strip()).orElseThrow(() ->
 				new ApiException(HttpStatus.NOT_FOUND, "ERROR_HUB_NOT_FOUND", Map.of("hub", request.hub())));
-		String role = role(ownerUuid, hub, request.role());
-		if (HubAnchor.ROLE_SOURCE.equals(role)) {
-			repository.findByHubUuidAndRole(hub.getUuid(), HubAnchor.ROLE_SOURCE).ifPresent(existing -> {
-				throw new ApiException(HttpStatus.CONFLICT, "ERROR_HUB_SOURCE_TAKEN",
-						Map.of("anchor_uuid", existing.getUuid(), "name", existing.getName(), "hub", hub.getName()));
-			});
-		} else {
-			repository.findByOwnerUuidAndHubUuidAndRoleNot(ownerUuid, hub.getUuid(), HubAnchor.ROLE_SOURCE).ifPresent(existing -> {
-				throw new ApiException(HttpStatus.CONFLICT, "ERROR_HUB_ANCHOR_QUOTA",
-						Map.of("anchor_uuid", existing.getUuid(), "name", existing.getName(), "hub", hub.getName()));
-			});
-		}
+		// A hub of an add-on's kind (D-41; mirror hubs, D-38): its kind decides the role, the quota and the placement.
+		HubKind kind = hub.isNormal() ? null : hubKinds.require(hub);
+		String role = kind != null ? kind.anchorRole(ownerUuid, hub, request.role()) : normalRole(ownerUuid, hub, request.role());
 		if (repository.existsByServerFingerprintAndNameIgnoreCase(request.serverFingerprint(), request.name())) {
 			throw new ApiException(HttpStatus.CONFLICT, "ERROR_HUB_ANCHOR_NAME_TAKEN", Map.of("name", request.name()));
 		}
-		if (hub.isMirror()) {
-			// D-38: centred on the block posed from, the whole height of the world, never turned.
-			HubAnchor anchor = repository.saveAndFlush(new HubAnchor(UUID.randomUUID(), ownerUuid, hub.getUuid(), request.name(),
-					request.serverFingerprint(), request.dimension(), Math.floor(request.origin().x()) + 0.5, Hub.MIRROR_MIN_Y,
-					Math.floor(request.origin().z()) + 0.5, (short) 0, role));
-			return HubAnchorResponse.from(anchor, hub);
+		if (kind != null) {
+			HubAnchor anchor = repository.saveAndFlush(kind.anchor(ownerUuid, hub, request, role));
+			return HubAnchorResponse.from(anchor, hub, hubKinds.view(hub));
 		}
 		short yaw = snapYaw(request.yaw());
 		HubBox box = HubBox.of(request.origin().x(), request.origin().y(), request.origin().z(), yaw, hub.getSizeX(),
@@ -75,24 +66,20 @@ public class HubAnchorService {
 		HubAnchor anchor = repository.saveAndFlush(new HubAnchor(UUID.randomUUID(), ownerUuid, hub.getUuid(), request.name(),
 				request.serverFingerprint(), request.dimension(),
 				request.origin().x(), request.origin().y(), request.origin().z(), yaw, role));
-		return HubAnchorResponse.from(anchor, hub);
+		return HubAnchorResponse.from(anchor, hub, Map.of());
 	}
 
-	/** The anchor's role: NORMAL in an ordinary hub; in a mirror hub, SOURCE or COPY and admins only (D-38). */
-	private String role(UUID ownerUuid, Hub hub, String requested) {
-		if (!hub.isMirror()) {
-			if (requested != null && !HubAnchor.ROLE_NORMAL.equals(requested)) {
-				throw new ApiException(HttpStatus.BAD_REQUEST, "ERROR_HUB_ANCHOR_ROLE", Map.of("hub", hub.getName()));
-			}
-			return HubAnchor.ROLE_NORMAL;
-		}
-		if (!adminService.isAdmin(ownerUuid)) {
-			throw new ApiException(HttpStatus.FORBIDDEN, "ERROR_HUB_MIRROR_ADMIN_ONLY", Map.of("hub", hub.getName()));
-		}
-		if (!HubAnchor.ROLE_SOURCE.equals(requested) && !HubAnchor.ROLE_COPY.equals(requested)) {
+	/** An ordinary hub's anchor: role NORMAL only, one per player and hub (D-35). */
+	private String normalRole(UUID ownerUuid, Hub hub, String requested) {
+		if (requested != null && !HubAnchor.ROLE_NORMAL.equals(requested)) {
 			throw new ApiException(HttpStatus.BAD_REQUEST, "ERROR_HUB_ANCHOR_ROLE", Map.of("hub", hub.getName()));
 		}
-		return requested;
+		repository.findByOwnerUuidAndHubUuidAndRole(ownerUuid, hub.getUuid(), HubAnchor.ROLE_NORMAL).stream().findFirst()
+				.ifPresent(existing -> {
+					throw new ApiException(HttpStatus.CONFLICT, "ERROR_HUB_ANCHOR_QUOTA",
+							Map.of("anchor_uuid", existing.getUuid(), "name", existing.getName(), "hub", hub.getName()));
+				});
+		return HubAnchor.ROLE_NORMAL;
 	}
 
 	/** The anchors of one server and dimension: what its players see and may enter a hub through. */
@@ -110,8 +97,10 @@ public class HubAnchorService {
 	private List<HubAnchorResponse> withHubs(List<HubAnchor> anchors) {
 		Map<UUID, Hub> hubs = new HashMap<>();
 		return anchors.stream()
-				.map(anchor -> HubAnchorResponse.from(anchor,
-						hubs.computeIfAbsent(anchor.getHubUuid(), uuid -> hubRepository.findById(uuid).orElseThrow())))
+				.map(anchor -> {
+					Hub hub = hubs.computeIfAbsent(anchor.getHubUuid(), uuid -> hubRepository.findById(uuid).orElseThrow());
+					return HubAnchorResponse.from(anchor, hub, hubKinds.view(hub));
+				})
 				.toList();
 	}
 

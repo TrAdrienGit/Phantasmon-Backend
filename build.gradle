@@ -2,6 +2,7 @@ plugins {
 	id 'java'
 	id 'org.springframework.boot' version '4.1.1'
 	id 'io.spring.dependency-management' version '1.1.7'
+	id 'maven-publish'
 }
 
 group = 'com.mystaria'
@@ -49,4 +50,23 @@ dependencies {
 
 tasks.named('test') {
 	useJUnitPlatform()
+}
+
+// Add-ons (D-41): the backend loads every jar of its addons/ folder (Phantasmon Events' module) through Spring Boot's
+// PropertiesLauncher; no folder or an empty one: Phantasmon alone. The path is relative to the working directory.
+tasks.named('bootJar') {
+	manifest {
+		attributes 'Main-Class': 'org.springframework.boot.loader.launch.PropertiesLauncher',
+				'Loader-Path': 'addons/'
+	}
+}
+
+// Add-ons compile against the core's plain jar: `./gradlew publishToMavenLocal`.
+publishing {
+	publications {
+		maven(MavenPublication) {
+			artifactId = 'phantasmon-backend'
+			from components.java
+		}
+	}
 }

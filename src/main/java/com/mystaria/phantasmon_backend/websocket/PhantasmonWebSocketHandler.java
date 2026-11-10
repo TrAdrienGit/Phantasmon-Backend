@@ -4,6 +4,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.BinaryMessage;
 import org.springframework.web.socket.CloseStatus;
@@ -11,6 +12,7 @@ import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketSession;
 import org.springframework.web.socket.handler.TextWebSocketHandler;
 
+import com.mystaria.phantasmon_backend.addon.WsMessageHandler;
 import com.mystaria.phantasmon_backend.hub.HubService;
 import com.mystaria.phantasmon_backend.hub.HubVoice;
 import com.mystaria.phantasmon_backend.pokemon.Pokemon;
@@ -59,12 +61,13 @@ public class PhantasmonWebSocketHandler extends TextWebSocketHandler {
 	private final LiveBattleService liveBattleService;
 	private final GhostRecall ghostRecall;
 	private final HubService hubService;
-	private final com.mystaria.phantasmon_backend.events.MirrorService mirrorService;
+	/** Add-ons' message types (TODO-35): what the core does not know is offered to them. */
+	private final ObjectProvider<WsMessageHandler> addonHandlers;
 	private final ObjectMapper objectMapper;
 
 	public PhantasmonWebSocketHandler(PresenceService presenceService, SessionRegistry sessionRegistry,
 			PokemonRepository pokemonRepository, LiveTradeService liveTradeService, LiveBattleService liveBattleService,
-			GhostRecall ghostRecall, HubService hubService, com.mystaria.phantasmon_backend.events.MirrorService mirrorService,
+			GhostRecall ghostRecall, HubService hubService, ObjectProvider<WsMessageHandler> addonHandlers,
 			ObjectMapper objectMapper) {
 		this.presenceService = presenceService;
 		this.sessionRegistry = sessionRegistry;
@@ -73,7 +76,7 @@ public class PhantasmonWebSocketHandler extends TextWebSocketHandler {
 		this.liveBattleService = liveBattleService;
 		this.ghostRecall = ghostRecall;
 		this.hubService = hubService;
-		this.mirrorService = mirrorService;
+		this.addonHandlers = addonHandlers;
 		this.objectMapper = objectMapper;
 	}
 
@@ -104,7 +107,7 @@ public class PhantasmonWebSocketHandler extends TextWebSocketHandler {
 		leaveAndDespawnGhost(playerUuid);
 		liveTradeService.onDisconnect(playerUuid);
 		liveBattleService.onDisconnect(playerUuid);
-		mirrorService.onDisconnect(playerUuid);
+		addonHandlers.orderedStream().forEach(handler -> handler.onDisconnect(playerUuid));
 	}
 
 	/**
@@ -249,20 +252,24 @@ public class PhantasmonWebSocketHandler extends TextWebSocketHandler {
 			case "HubMove" -> hubService.move(playerUuid, incoming.data());
 			case "HubChat" -> hubService.chat(playerUuid, incoming.data().get("message"));
 			case "HubVoiceState" -> hubService.setVoice(playerUuid, Boolean.TRUE.equals(incoming.data().get("enabled")));
-			// Phantasmon Events, mirror hubs (D-38).
-			case "EventsMirrorBlocks" -> mirrorService.receiveBlocks(playerUuid, incoming.data());
-			case "EventsMirrorTile" -> mirrorService.receiveTile(playerUuid, incoming.data());
-			case "EventsMirrorSubscribe" -> mirrorService.subscribe(playerUuid, incoming.data().get("hub"), true);
-			case "EventsMirrorUnsubscribe" -> mirrorService.subscribe(playerUuid, incoming.data().get("hub"), false);
-			case "EventsMirrorGhosts" -> mirrorService.receiveGhosts(playerUuid, incoming.data());
-			case "EventsMirrorWatch" -> mirrorService.watch(playerUuid, incoming.data().get("hub"), true);
-			case "EventsMirrorUnwatch" -> mirrorService.watch(playerUuid, incoming.data().get("hub"), false);
 			case "Heartbeat" -> {
 				presenceService.heartbeat(playerUuid);
 				send(session, WsMessage.of("HeartbeatAck", Map.of()));
 			}
-			default -> send(session, WsMessage.error("ERROR_WS_UNKNOWN_MESSAGE_TYPE", Map.of("type", incoming.type())));
+			default -> {
+				WsMessageHandler handler = addonHandler(incoming.type());
+				if (handler == null) {
+					send(session, WsMessage.error("ERROR_WS_UNKNOWN_MESSAGE_TYPE", Map.of("type", incoming.type())));
+				} else {
+					handler.handle(playerUuid, incoming.type(), incoming.data());
+				}
+			}
 		}
+	}
+
+	/** The first add-on handler taking that message type (TODO-35); null if none. */
+	private WsMessageHandler addonHandler(String type) {
+		return addonHandlers.orderedStream().filter(handler -> handler.handles(type)).findFirst().orElse(null);
 	}
 
 	private void handleSendOutGhost(WebSocketSession session, UUID playerUuid, UUID pokemonUuid) throws Exception {

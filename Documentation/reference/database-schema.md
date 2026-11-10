@@ -277,14 +277,21 @@ Les hubs créés par les admins (D-35) : chacun est un espace séparé, avec sa 
 |---|---|---|---|
 | `uuid` | UUID | PK | `6c0b5d2e-3b1a-4f0e-9a51-000000000001` pour `global` (créé par V14) |
 | `name` | VARCHAR(32) | NOT NULL, unique casse ignorée (`uq_hub_name` sur `lower(name)`) | Minuscules, chiffres, `_` (contrôle applicatif) : c'est aussi un nom de dossier |
-| `size_x`, `size_y`, `size_z` | SMALLINT | NOT NULL, de 3 à 64 | Largeur (en travers de l'Anchor), hauteur, longueur (vers l'avant de l'Anchor) |
+| `size_x`, `size_y`, `size_z` | SMALLINT | NOT NULL ; de 3 à 64 pour un hub `NORMAL`, au moins 1 sinon (`hubs_size_check`, V25) | Largeur (en travers de l'Anchor), hauteur, longueur (vers l'avant de l'Anchor) |
+| `kind` | VARCHAR(16) | NOT NULL, défaut `NORMAL` (V25) | `NORMAL`, ou le type d'un add-on (D-41) : `MIRROR` pour les hubs miroirs de Phantasmon Events |
 | `created_by` | UUID | FK `players` `ON DELETE SET NULL` | L'admin créateur ; `NULL` pour `global` |
 | `created_at` | TIMESTAMPTZ | NOT NULL, défaut `now()` | |
 
 Supprimer un hub supprime ses Anchors (`ON DELETE CASCADE`, et le service les retire d'abord pour sortir leurs
 membres du hub).
 
-## 7 quater. Hubs miroirs (Phantasmon Events, V15 à V17)
+## 7 quater. Hubs miroirs (Phantasmon Events, V15 à V17, puis V25)
+
+> **Depuis V25 (D-41)**, le cœur ne connaît plus les hubs miroirs : `hubs.mirror` et `hubs.radius` sont remplacés
+> par `hubs.kind = 'MIRROR'` (le rayon se déduit de la taille : `(size_x - 1) / 2`), `hub_anchors.role` devient un
+> rôle libre (VARCHAR(16), sans liste de valeurs) et le cœur ne garde que `uq_hub_anchor_owner_hub` sur les Anchors
+> `NORMAL`. Les règles des Anchors miroirs (une `SOURCE` par hub, une `COPY` par admin) sont recréées par les
+> migrations du module Events (§7 nonies). Ce qui suit décrit V15 à V17, l'historique.
 
 - `hubs.mirror` (BOOLEAN, défaut `false`) : hub miroir (D-38), son terrain est le vrai sol d'une zone d'un serveur
   multijoueur, copié dans les mondes solo des admins.
@@ -355,6 +362,19 @@ membres du hub).
 | `created_by` | UUID | NOT NULL | L'admin (pas de FK) |
 | `updated_at` | TIMESTAMPTZ | NOT NULL | |
 
+## 7 nonies. Migrations du module Phantasmon Events (D-41)
+
+Le module backend de Phantasmon Events (`Phantasmon-Events/backend`, chargé depuis le dossier `addons/`) a ses
+propres migrations : `db/events/`, historique dans `flyway_schema_history_events`, jouées juste après celles du cœur
+et avant JPA. Sans le module, une base n'a aucune de ces tables. Sur une base qui les avait déjà (créées par le cœur
+en V18-V19 et V22-V24), la ligne de base `0` puis les `IF NOT EXISTS` ne changent rien.
+
+| Version | Fichier | Contenu |
+|---|---|---|
+| 1 | `V1__tournaments.sql` | Ancien V18 + V19 : `tournaments`, `tournament_players`, `tournament_matches` (§7 quinquies) |
+| 2 | `V2__event_npcs.sql` | Ancien V22 à V24 : `event_groups`, `event_npcs` (§7 octies) |
+| 3 | `V3__mirror_anchor_roles.sql` | Règles des Anchors miroirs : `uq_events_mirror_source` (une `SOURCE` par hub), `uq_events_mirror_copy` (une `COPY` par admin et par hub) |
+
 ## 8. État hors base
 
 | Structure | Service | Contenu |
@@ -387,13 +407,14 @@ Tout est perdu au redémarrage du backend (comportement voulu) et n'est pas part
 | V15 | `V15__mirror_hubs.sql` | 2026-10-29 | Hubs miroirs (D-38) : `hubs.mirror`, `hub_anchors.role` (`NORMAL`, `SOURCE`, `COPY`), une source par hub (`uq_hub_anchor_source`), `uq_hub_anchor_owner_hub` limité aux Anchors non sources |
 | V16 | `V16__mirror_hubs_radius.sql` | 2026-10-29 | Hubs miroirs par rayon : `hubs.radius`, toute la hauteur (384), contrainte `hubs_size_check` (rayon 1 à 64) |
 | V17 | `V17__mirror_hubs_no_radius_cap.sql` | 2026-10-29 | Plus de plafond de rayon pour les hubs miroirs (admins seulement) |
-| V18 | `V18__tournaments.sql` | 2026-10-29 | Tournois : tables `tournaments`, `tournament_players`, `tournament_matches` |
-| V19 | `V19__tournament_match_wave.sql` | 2026-10-30 | `tournament_matches.wave` (double élimination) |
+| V18 | `V18__tournaments.sql` | 2026-10-29 | Tournois : tables `tournaments`, `tournament_players`, `tournament_matches` (fichier passé dans le module Events le 2026-11-10, §7 nonies) |
+| V19 | `V19__tournament_match_wave.sql` | 2026-10-30 | `tournament_matches.wave` (double élimination) (passé dans le module Events) |
 | V20 | `V20__trainer_profiles.sql` | 2026-10-30 | Profils d'animation des dresseurs (Cobblemon Battle Showtime E3) : table `trainer_profiles` |
 | V21 | `V21__hub_chat_mutes.sql` | 2026-11-01 | Modération du chat des hubs (TODO-31) : table `hub_chat_mutes` |
-| V22 | `V22__event_npcs.sql` | 2026-11-02 | Phantasmon Events : tables `event_groups` et `event_npcs` (dresseurs PNJ) |
-| V23 | `V23__event_npcs_in_hubs.sql` | 2026-11-03 | `event_npcs.hub_uuid` : un dresseur PNJ peut appartenir à un hub |
-| V24 | `V24__event_npcs_ai_debug.sql` | 2026-11-03 | `event_npcs.ai_debug` : le débogage de l'IA d'un PNJ |
+| V22 | `V22__event_npcs.sql` | 2026-11-02 | Phantasmon Events : tables `event_groups` et `event_npcs` (dresseurs PNJ) (passé dans le module Events) |
+| V23 | `V23__event_npcs_in_hubs.sql` | 2026-11-03 | `event_npcs.hub_uuid` : un dresseur PNJ peut appartenir à un hub (passé dans le module Events) |
+| V24 | `V24__event_npcs_ai_debug.sql` | 2026-11-03 | `event_npcs.ai_debug` : le débogage de l'IA d'un PNJ (passé dans le module Events) |
+| V25 | `V25__hub_kinds.sql` | 2026-11-10 | D-41 : `hubs.kind` (`MIRROR` pour les anciens miroirs), `hubs.mirror` et `hubs.radius` supprimés, `hubs_size_check` générique, `hub_anchors.role` libre (VARCHAR(16)), `uq_hub_anchor_source` supprimé, `uq_hub_anchor_owner_hub` limité aux Anchors `NORMAL`. Les fichiers V18-V19 et V22-V24 sont passés dans le module Events : le cœur ignore leur trace dans son historique (`spring.flyway.ignore-migration-patterns=*:missing`) |
 
 ## 10. Décisions de schéma
 

@@ -23,9 +23,8 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class HubAnchor {
 
+	/** An anchor of an ordinary hub; other roles belong to the hub's kind (an add-on's, D-41). */
 	public static final String ROLE_NORMAL = "NORMAL";
-	public static final String ROLE_SOURCE = "SOURCE";
-	public static final String ROLE_COPY = "COPY";
 
 	@Id
 	private UUID uuid;
@@ -59,8 +58,8 @@ public class HubAnchor {
 	@Column(nullable = false)
 	private short yaw;
 
-	/** {@code NORMAL}; in a mirror hub (D-38), {@code SOURCE} (the server zone copied) or {@code COPY}. */
-	@Column(nullable = false, length = 8)
+	/** {@code NORMAL}; in a hub of an add-on's kind, one of its roles (mirror hubs, D-38: {@code SOURCE} or {@code COPY}). */
+	@Column(nullable = false, length = 16)
 	private String role = ROLE_NORMAL;
 
 	@Column(name = "created_at", nullable = false, updatable = false)

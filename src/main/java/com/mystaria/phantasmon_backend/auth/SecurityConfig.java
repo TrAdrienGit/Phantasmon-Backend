@@ -1,5 +1,6 @@
 package com.mystaria.phantasmon_backend.auth;
 
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -8,6 +9,8 @@ import org.springframework.security.config.annotation.web.configuration.EnableWe
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+
+import com.mystaria.phantasmon_backend.addon.PublicRoutesProvider;
 
 /**
  * Baseline security chain: only the routes the OpenAPI contract marks as
@@ -29,20 +32,21 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 public class SecurityConfig {
 
 	@Bean
-	SecurityFilterChain filterChain(HttpSecurity http, JwtAuthenticationFilter jwtAuthenticationFilter) throws Exception {
+	SecurityFilterChain filterChain(HttpSecurity http, JwtAuthenticationFilter jwtAuthenticationFilter,
+			ObjectProvider<PublicRoutesProvider> addonPublicRoutes) throws Exception {
 		http
 				.csrf(csrf -> csrf.disable())
 				.sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-				.authorizeHttpRequests(auth -> auth
-						.requestMatchers(HttpMethod.GET, "/health", "/version").permitAll()
-						// Tournaments' public page (read only, no player UUIDs).
-						.requestMatchers(HttpMethod.GET, "/t", "/t/", "/t/*", "/public/tournaments", "/public/tournaments/*").permitAll()
-						.requestMatchers(HttpMethod.POST, "/auth/challenge", "/auth/session", "/auth/refresh").permitAll()
-						.requestMatchers("/ws").permitAll()
-						// Our dedicated server's mirror copy: checked by its own token (ServerMirrorController).
-						.requestMatchers(HttpMethod.GET, "/server/mirror/**").permitAll()
-						.requestMatchers(HttpMethod.POST, "/server/mirror/*/ghosts").permitAll()
-						.anyRequest().authenticated())
+				.authorizeHttpRequests(auth -> {
+					auth
+							.requestMatchers(HttpMethod.GET, "/health", "/version").permitAll()
+							.requestMatchers(HttpMethod.POST, "/auth/challenge", "/auth/session", "/auth/refresh").permitAll()
+							.requestMatchers("/ws").permitAll();
+					// Add-ons' public routes (TODO-35): Phantasmon Events' tournament page and server mirror copy.
+					addonPublicRoutes.orderedStream().flatMap(provider -> provider.publicRoutes().stream())
+							.forEach(route -> auth.requestMatchers(route.method(), route.patterns()).permitAll());
+					auth.anyRequest().authenticated();
+				})
 				.addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 		return http.build();
 	}

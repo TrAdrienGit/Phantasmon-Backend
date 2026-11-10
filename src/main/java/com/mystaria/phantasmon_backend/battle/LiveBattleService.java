@@ -11,6 +11,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.ContextClosedEvent;
@@ -18,6 +19,9 @@ import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
+import com.mystaria.phantasmon_backend.addon.NpcOpponentProvider;
+import com.mystaria.phantasmon_backend.addon.NpcOpponentProvider.NpcOpponent;
+import com.mystaria.phantasmon_backend.addon.TournamentHook;
 import com.mystaria.phantasmon_backend.admin.AdminService;
 import com.mystaria.phantasmon_backend.battle.format.BattleFormats;
 import com.mystaria.phantasmon_backend.battle.format.TeamValidator;
@@ -83,14 +87,15 @@ public class LiveBattleService {
 	private final Duration lobbyTimer;
 	private final com.mystaria.phantasmon_backend.battle.format.ShowdownDataSource showdown;
 	private final AdminService adminService;
-	private final com.mystaria.phantasmon_backend.events.npc.EventNpcService npcService;
+	/** Trainer NPCs from an add-on (TODO-35; Phantasmon Events); none: no NPC battle. */
+	private final ObjectProvider<NpcOpponentProvider> npcOpponents;
 	private final PresenceService presenceService;
 	private final HubService hubService;
 
 	public LiveBattleService(BattleRepository battleRepository, PokemonService pokemonService, PlayerService playerService,
 			SessionRegistry sessionRegistry, GhostRecall ghostRecall, CobblemonPartyParser partyParser, AdminService adminService,
 			PresenceService presenceService, HubService hubService, Clock clock,
-			com.mystaria.phantasmon_backend.events.npc.EventNpcService npcService,
+			ObjectProvider<NpcOpponentProvider> npcOpponents,
 			com.mystaria.phantasmon_backend.battle.format.ShowdownDataSource showdown,
 			@Value("${phantasmon.battle.invite-ttl:PT60S}") Duration inviteTtl,
 			@Value("${phantasmon.battle.lobby-timer:PT150S}") Duration lobbyTimer) {
@@ -107,7 +112,7 @@ public class LiveBattleService {
 		this.adminService = adminService;
 		this.presenceService = presenceService;
 		this.hubService = hubService;
-		this.npcService = npcService;
+		this.npcOpponents = npcOpponents;
 	}
 
 	private record Invite(UUID uuid, UUID inviterUuid, UUID inviteeUuid, Instant createdAt, BattleTeam inviterTeam) {
@@ -177,7 +182,7 @@ public class LiveBattleService {
 		 * An event NPC's lobby (Adrien 2026-11-03): the NPC is the invitee side — always ready, its team and format
 		 * fixed by the admin; only the player sees the lobby.
 		 */
-		com.mystaria.phantasmon_backend.events.npc.EventNpc npc;
+		NpcOpponent npc;
 
 		Lobby(UUID uuid, UUID inviterUuid, UUID inviteeUuid) {
 			this.uuid = uuid;
@@ -202,23 +207,7 @@ public class LiveBattleService {
 
 	// ---- Tournaments (Phantasmon Events) ----
 
-	/** What a tournament learns of its matches' games. Called under this service's lock. */
-	public interface TournamentHook {
-		/** A game ended; {@code winnerUuid} null for a draw (disconnection, backend stopping, admin stop). */
-		void onGameEnded(UUID matchUuid, UUID winnerUuid, String reason);
-
-		/** The match's lobby closed before its battle started (a player left, the timer ran out...). */
-		void onLobbyCancelled(UUID matchUuid, String reason);
-
-		/** The opponent a player is paired with in a running tournament's round, not played yet; null if none. */
-		UUID pairedOpponent(UUID playerUuid);
-
-		/** A lobby of two paired players opened: their match (now being played) and its format; null if not paired. */
-		Binding bindLobby(UUID playerA, UUID playerB);
-	}
-
-	public record Binding(UUID matchUuid, String formatId) {
-	}
+	// The hook itself is an add-on extension point: com.mystaria.phantasmon_backend.addon.TournamentHook.
 
 	/**
 	 * Paired players (Adrien 2026-10-30): one paired in a tournament round battles only their opponent until their
@@ -402,7 +391,7 @@ public class LiveBattleService {
 			return;
 		}
 		Lobby lobby = new Lobby(UUID.randomUUID(), inviterUuid, inviteeUuid);
-		Binding binding = tournamentHook == null ? null : tournamentHook.bindLobby(inviterUuid, inviteeUuid);
+		TournamentHook.Binding binding = tournamentHook == null ? null : tournamentHook.bindLobby(inviterUuid, inviteeUuid);
 		if (binding != null) {
 			// Their tournament match: its format, not changeable.
 			lobby.tournamentMatch = binding.matchUuid();
@@ -653,10 +642,10 @@ public class LiveBattleService {
 		Map<String, Object> data = new HashMap<>();
 		data.put("lobby_uuid", lobby.uuid);
 		data.put("opponent_uuid", opponentUuid);
-		data.put("opponent_name", lobby.npc != null ? lobby.npc.getName() : nameOf(opponentUuid));
+		data.put("opponent_name", lobby.npc != null ? lobby.npc.name() : nameOf(opponentUuid));
 		if (lobby.npc != null) {
 			data.put("npc", true);
-			data.put("npc_ai", lobby.npc.getAi());
+			data.put("npc_ai", lobby.npc.ai());
 		}
 		data.put("own_team_source", own.choice.source().name());
 		data.put("own_team", own.team);
@@ -840,24 +829,25 @@ public class LiveBattleService {
 			sendError(playerUuid, "ERROR_BATTLE_ALREADY_IN_BATTLE");
 			return;
 		}
-		com.mystaria.phantasmon_backend.events.npc.EventNpc npc = npcUuid == null ? null : npcService.forBattle(playerUuid, npcUuid);
+		NpcOpponentProvider provider = npcOpponents.getIfAvailable();
+		NpcOpponent npc = npcUuid == null || provider == null ? null : provider.npcOpponent(playerUuid, npcUuid);
 		if (npc == null) {
 			sendError(playerUuid, "ERROR_NPC_NOT_FOUND");
 			return;
 		}
-		if (npc.getTeam().isEmpty()) {
+		if (npc.team().isEmpty()) {
 			sendError(playerUuid, "ERROR_NPC_EMPTY_TEAM");
 			return;
 		}
 		// One at a time (Adrien 2026-11-03): the NPC is already battling someone, or in someone's lobby.
 		for (LiveBattle other : battlesByPlayer.values()) {
-			if (npc.getUuid().equals(other.aiOpponent)) {
+			if (npc.uuid().equals(other.aiOpponent)) {
 				sendError(playerUuid, "ERROR_NPC_BUSY");
 				return;
 			}
 		}
 		for (Lobby other : lobbiesByPlayer.values()) {
-			if (other.npc != null && other.npc.getUuid().equals(npc.getUuid())) {
+			if (other.npc != null && other.npc.uuid().equals(npc.uuid())) {
 				sendError(playerUuid, "ERROR_NPC_BUSY");
 				return;
 			}
@@ -869,16 +859,16 @@ public class LiveBattleService {
 			sendError(playerUuid, "ERROR_BATTLE_INVALID_PARTY");
 			return;
 		}
-		Lobby lobby = new Lobby(UUID.randomUUID(), playerUuid, npc.getUuid());
+		Lobby lobby = new Lobby(UUID.randomUUID(), playerUuid, npc.uuid());
 		lobby.npc = npc;
-		lobby.formatId = showdown.formats().get(npc.getFormatId()) != null ? npc.getFormatId() : BattleFormats.FREE;
+		lobby.formatId = showdown.formats().get(npc.formatId()) != null ? npc.formatId() : BattleFormats.FREE;
 		choose(lobby.inviterSide, playerUuid, choice);
 		lobby.inviteeSide.choice = BattleTeam.GHOST;
-		lobby.inviteeSide.team = new ArrayList<>(npc.getTeam());
+		lobby.inviteeSide.team = new ArrayList<>(npc.team());
 		lobby.inviteeSide.lead = 0;
 		lobby.inviteeSide.ready = true;
 		lobbiesByPlayer.put(playerUuid, lobby);
-		log.info("Event NPC lobby {} opened: {} against NPC {} '{}' (AI {})", lobby.uuid, playerUuid, npc.getUuid(), npc.getName(), npc.getAi());
+		log.info("Event NPC lobby {} opened: {} against NPC {} '{}' (AI {})", lobby.uuid, playerUuid, npc.uuid(), npc.name(), npc.ai());
 		sendLobby(lobby, playerUuid);
 		if (choice.isGhost()) {
 			ghostRecall.recall(playerUuid, "battle lobby");
@@ -892,7 +882,7 @@ public class LiveBattleService {
 	 */
 	private void startNpcBattle(Lobby lobby) {
 		UUID playerUuid = lobby.inviterUuid;
-		com.mystaria.phantasmon_backend.events.npc.EventNpc npc = lobby.npc;
+		NpcOpponent npc = lobby.npc;
 		List<PokemonResponse> team = battleTeam(playerUuid, lobby.inviterSide);
 		lobbiesByPlayer.remove(playerUuid);
 		if (team.isEmpty()) {
@@ -900,29 +890,29 @@ public class LiveBattleService {
 			return;
 		}
 		BattleFormats.Format format = format(lobby);
-		List<PokemonResponse> npcTeam = npc.getTeam();
+		List<PokemonResponse> npcTeam = npc.team();
 		if (format.pickedTeamSize() > 0) {
 			team = team.subList(0, Math.min(format.pickedTeamSize(), team.size()));
 		}
 		LiveBattle battle = new LiveBattle(UUID.randomUUID(), playerUuid, playerUuid, true);
-		battle.aiOpponent = npc.getUuid();
+		battle.aiOpponent = npc.uuid();
 		battle.ambiance = lobby.ambiance;
 		battlesByPlayer.put(playerUuid, battle);
-		log.info("Event NPC battle {}: {} against NPC {} '{}' (AI {})", battle.uuid, playerUuid, npc.getUuid(), npc.getName(), npc.getAi());
+		log.info("Event NPC battle {}: {} against NPC {} '{}' (AI {})", battle.uuid, playerUuid, npc.uuid(), npc.name(), npc.ai());
 		Map<String, Object> view = new HashMap<>(Map.of(
 				"battle_uuid", battle.uuid, "role", "HOST", "solo", true,
-				"opponent_uuid", npc.getUuid(), "opponent_name", npc.getName(),
+				"opponent_uuid", npc.uuid(), "opponent_name", npc.name(),
 				"own_team", team, "opponent_team", npcTeam,
 				"own_team_source", lobby.inviterSide.choice.source().name(), "opponent_team_source", BattleTeam.GHOST.source().name(),
 				"format", Map.of("id", format.id(), "name", format.name(), "battle_rules", format.battleRules(),
 						"adjust_level", format.adjustLevel())));
 		view.put("intro", java.util.concurrent.ThreadLocalRandom.current().nextInt(INTRO_COUNT));
-		view.put("ai", npc.getAi());
-		view.put("ai_debug", npc.isAiDebug());
-		view.put("npc_uuid", npc.getUuid());
+		view.put("ai", npc.ai());
+		view.put("ai_debug", npc.aiDebug());
+		view.put("npc_uuid", npc.uuid());
 		view.put("ambiance", lobby.ambiance);
-		if (npc.getSkin() != null) {
-			view.put("npc_skin", npc.getSkin());
+		if (npc.skin() != null) {
+			view.put("npc_skin", npc.skin());
 		}
 		sessionRegistry.send(playerUuid, WsMessage.of("BattleSessionStarted", view));
 		ghostRecall.recall(playerUuid, "battle started");

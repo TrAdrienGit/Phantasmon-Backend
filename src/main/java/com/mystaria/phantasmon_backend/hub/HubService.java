@@ -229,9 +229,9 @@ public class HubService {
 			}
 			state.put("skin_parts", parts);
 		}
-		// Optional, mirror hubs only (D-38): the exact height, the same on both sides of the copy.
+		// Optional (mirror hubs, D-38): the exact height, the same on both sides of the copy; within the world.
 		if (data.get("y") instanceof Number y && Double.isFinite(y.doubleValue())
-				&& y.doubleValue() >= Hub.MIRROR_MIN_Y && y.doubleValue() <= Hub.MIRROR_MIN_Y + Hub.MIRROR_HEIGHT) {
+				&& y.doubleValue() >= Hub.WORLD_MIN_Y && y.doubleValue() <= Hub.WORLD_MIN_Y + Hub.WORLD_HEIGHT) {
 			state.put("y", y.doubleValue());
 		}
 		double x = (double) state.get("x");

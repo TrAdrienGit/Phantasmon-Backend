@@ -4,6 +4,8 @@
 #   scripts/deploy-ubuntu.sh --migrate-db  same, and first replace the server's database with a fresh dump of the
 #                                          local one (scripts/backup-database.ps1) — asks for confirmation
 #   --yes                                  no confirmation (with --migrate-db)
+#   --no-events                            without the Phantasmon Events module (D-41): the server's addons/ is emptied
+# By default, when ../Phantasmon-Events/backend exists, its module is built and installed in the server's addons/.
 # Target: PHANTASMON_DEPLOY_HOST (default root@100.101.1.79, the "server-linux" Tailscale node).
 # What it installs and how to run it: Documentation/guides/deploying-ubuntu.md.
 set -euo pipefail
@@ -12,10 +14,12 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 HOST="${PHANTASMON_DEPLOY_HOST:-root@100.101.1.79}"
 MIGRATE=0
 ASSUME_YES=0
+EVENTS=1
 for arg in "$@"; do
 	case "$arg" in
 		--migrate-db) MIGRATE=1 ;;
 		--yes) ASSUME_YES=1 ;;
+		--no-events) EVENTS=0 ;;
 		*) echo "Unknown option: $arg"; exit 1 ;;
 	esac
 done
@@ -33,12 +37,18 @@ if ((MIGRATE && !ASSUME_YES)); then
 fi
 
 log "Building the backend jar..."
-./gradlew -q bootJar
+./gradlew -q bootJar publishToMavenLocal
 JAR="$(ls -t build/libs/phantasmon-backend-*.jar | grep -v plain | head -1)"
 
 STAGE="$(mktemp -d)"
 trap 'rm -rf "$STAGE"' EXIT
 cp "$JAR" "$STAGE/phantasmon-backend.jar"
+EVENTS_DIR="$ROOT/../Phantasmon-Events/backend"
+if ((EVENTS)) && [[ -d "$EVENTS_DIR" ]]; then
+	log "Building the Phantasmon Events module..."
+	(cd "$EVENTS_DIR" && ./gradlew -q jar)
+	cp "$(ls -t "$EVENTS_DIR"/build/libs/phantasmon-events-backend-*.jar | head -1)" "$STAGE/addon-phantasmon-events-backend.jar"
+fi
 cp .env "$STAGE/env"
 # Only what the server's setup needs to create the role; never printed.
 grep -E '^(BDD_USER|BDD_PASSWORD|BDD_NAME)=' .env > "$STAGE/db.env"

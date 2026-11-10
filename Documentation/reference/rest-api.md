@@ -87,11 +87,12 @@ Appelé par le client **avant** l'authentification (CAD Partie 3 §E). Valeurs :
 
 ```json
 200 OK
-{ "current_version": "0.1.0", "min_supported_version": "0.1.0" }
+{ "current_version": "0.1.0", "min_supported_version": "0.1.0", "addons": { "phantasmon_events": "0.1.0" } }
 ```
 
 Côté client : version < `min_supported_version` → refus avec lien de mise à jour ; version <
-`current_version` → avertissement non bloquant.
+`current_version` → avertissement non bloquant. `addons` (D-41) : les modules chargés depuis le dossier `addons/` du
+backend, identifiant → version ; `{}` pour Phantasmon seul.
 
 ---
 
@@ -500,14 +501,16 @@ clients connectés (`HubCatalogChanged`, [`websocket-protocol.md`](websocket-pro
 
 ```json
 [
-  { "name": "global", "size": { "x": 21, "y": 21, "z": 21 },
+  { "name": "global", "size": { "x": 21, "y": 21, "z": 21 }, "kind": "NORMAL",
     "schematic": { "name": "phantasmon_default_hub.schem", "format": "SCHEM", "sha256": "9f2c…", "bytes": 540 } },
-  { "name": "arene", "size": { "x": 31, "y": 12, "z": 41 }, "schematic": null }
+  { "name": "arene", "size": { "x": 31, "y": 12, "z": 41 }, "kind": "NORMAL", "schematic": null }
 ]
 ```
 
 `size` : `x` largeur, `y` hauteur, `z` longueur. `schematic` : `null` sans construction ; `format` `SCHEM` ou
-`LITEMATIC` ; le client garde le fichier en cache sous son `sha256`.
+`LITEMATIC` ; le client garde le fichier en cache sous son `sha256`. `kind` (D-41) : `NORMAL`, ou le type d'un add-on,
+qui ajoute ses propres champs au même niveau (hub miroir de Phantasmon Events : `"kind": "MIRROR", "mirror": true,
+"radius": 50`). Les Anchors (`/hub/anchors`) portent le même `kind` et les mêmes champs ajoutés.
 
 ### `GET /hubs/{name}/schematic/file`
 
@@ -521,7 +524,9 @@ clients connectés (`HubCatalogChanged`, [`websocket-protocol.md`](websocket-pro
 ```
 
 `201` + le hub (comme dans `GET /hubs`) ; crée aussi le dossier `hub_schematics/hub_arene/`. Le nom est mis en
-minuscules.
+minuscules. Un corps qu'un type de hub d'add-on reconnaît (D-41) crée un hub de ce type, taillé par lui : avec
+Phantasmon Events, `{ "name": "village", "mirror": true, "radius": 50 }` crée un hub miroir (sans le module :
+hub ordinaire, donc `ERROR_HUB_INVALID_SIZE`).
 
 | Statut | `error_code` | Cas |
 |---|---|---|

@@ -51,6 +51,9 @@ Pour ajouter une décision : prendre le numéro suivant, dater, et mettre à jou
 | D-36 | Vocal dans les hubs par Simple Voice Chat, dépendance facultative | Acceptée | 2026-10-09 |
 | D-37 | Mise en scène des combats sortie dans le mod Cobblemon Battle Showtime | Acceptée | 2026-10-29 |
 | D-38 | Hubs miroirs : terrain d'un serveur copié dans un monde solo (Phantasmon Events) | Acceptée | 2026-10-29 |
+| D-39 | Le moins de commandes possible, toutes sous `/phantasmon` | Acceptée | 2026-10-30 |
+| D-40 | Cobblemon Spectacle devient Cobblemon Battle Showtime | Acceptée | 2026-11-05 |
+| D-41 | Phantasmon Events, add-on facultatif : module chargé par le backend Phantasmon | Acceptée | 2026-11-10 |
 
 ---
 
@@ -574,3 +577,20 @@ Pour ajouter une décision : prendre le numéro suivant, dater, et mettre à jou
   vers le nouveau nom ; le namespace `cobblemon_spectacle` reste lu pour les packs de musique déjà créés ; le script
   de déploiement retire l'ancien jar. Le mot « spectacle » reste un nom commun dans les docs en français, et la
   migration Flyway V20, déjà appliquée, garde l'ancien nom dans son commentaire.
+
+## D-41 — Phantasmon Events, add-on facultatif : module chargé par le backend Phantasmon
+
+- **Date** : 2026-11-10 (Adrien).
+- **Contexte** : du code d'Events (hubs miroirs, tournois, PNJ d'événements et leurs IA) vit dans les dépôts
+  Phantasmon. Un admin qui ne veut que Phantasmon l'embarque quand même : tables, routes, IA.
+- **Décision** : Events est **facultatif**. Le backend Phantasmon reste un seul processus ; la partie serveur
+  d'Events devient un **module** (`Phantasmon-Events/backend/`, pas de nouveau dépôt) que le backend charge s'il est
+  posé dans son dossier `addons/`. Les IA des PNJ passent dans le mod Events. Le cœur ne connaît Events que par des
+  points d'extension génériques (package `addon`) ; il n'importe jamais une classe d'Events.
+- **Conséquences** : plan en étapes E0-E5 dans `Phantasmon-Events/Documentation/plan-separation.md`, suivi en
+  TODO-35. E1 (2026-11-10) : package `addon` (`WsMessageHandler`, `NpcOpponentProvider`, `TournamentHook`,
+  `HubListener`, `PublicRoutesProvider`), le cœur ne référence plus `events` (garde-fou `CoreIndependenceTest`).
+  E4 (2026-11-10) : IA expert / Reborn dans le mod Events (`PhantasmonApi.registerBattleAi`). E2 (2026-11-10, choix
+  d'Adrien : « type de hub » dans le cœur) : `hubs.kind` (V25), point d'extension `HubKind`, module
+  `Phantasmon-Events/backend` (même package `events`, Flyway propre `db/events`), jar du cœur en `PropertiesLauncher`
+  (`Loader-Path: addons/`), `GET /version` liste les add-ons, `deploy-ubuntu.sh` installe le module (`--no-events`).
