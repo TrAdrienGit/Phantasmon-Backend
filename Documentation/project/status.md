@@ -41,6 +41,9 @@ validés en jeu le 2026-10-07.**
 (`>=0.1.0 <0.2.0`). **Séparé le 2026-11-10 (D-41, TODO-35)** : le backend Phantasmon ne connaît Events que par
 ses points d'extension (`addon`) et charge le module `Phantasmon-Events/backend` depuis son dossier `addons/` ;
 sans lui, Phantasmon tourne seul. Les IA des PNJ sont dans le mod Events.
+**Depuis le 2026-11-10, les tests se font sans Events** (Adrien) : backend déployé avec `--no-events`, clients
+Cobblemon Academy (MystAria_, TheMashen) sur notre serveur Minecraft ; les hubs miroirs restent en base, masqués par
+le cœur tant que le module n'est pas chargé.
 
 **Novembre 2026.** Modération du chat du hub (TODO-31), sol du hub (TODO-33), import d'équipe complète (Méga et
 Primo importés sous leur forme de base), vrais objets tenus, talents importés et amitié dans les combats Ghost,
@@ -104,7 +107,7 @@ Suivis dans [`known-issues.md`](known-issues.md) (identifiants `BUG-n`, `TODO-n`
 
 | | Backend | Client |
 |---|---|---|
-| Tests automatisés | 221 tests (JUnit 5 + Testcontainers, 2026-11-10) ; module Events : 11 | 77 tests (logique pure, 2026-11-10) |
+| Tests automatisés | 222 tests (JUnit 5 + Testcontainers, 2026-11-10) ; module Events : 11 | 77 tests (logique pure, 2026-11-10) |
 | Migrations Flyway | V1 à V25 (V18-V19 et V22-V24 passés dans le module Events, qui a ses propres V1 à V3, D-41) | — |
 | Mixins | — | 20 (dont 1 accesseur et 3 pour Battle Extras) ; ceux de la mise en scène sont dans Cobblemon Battle Showtime (D-37) |
 | Langues | — | `fr_fr`, `en_us` (399 clés) |

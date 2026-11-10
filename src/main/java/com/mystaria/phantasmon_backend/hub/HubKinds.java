@@ -31,6 +31,14 @@ public class HubKinds {
 				Map.of("hub", hub.getName(), "kind", hub.getKind())));
 	}
 
+	/**
+	 * Whether {@code hub} is usable: an ordinary hub, or one whose kind's add-on is loaded. Without its add-on (Phantasmon
+	 * Events uninstalled: its mirror hubs), a hub and its anchors are hidden and cannot be joined (D-41).
+	 */
+	public boolean available(Hub hub) {
+		return hub.isNormal() || find(hub.getKind()).isPresent();
+	}
+
 	/** The add-on kind an admin's {@code POST /admin/hubs} body asks for; empty for an ordinary hub. */
 	public Optional<HubKind> requested(Map<String, Object> body) {
 		return kinds.orderedStream().filter(candidate -> candidate.requested(body)).findFirst();

@@ -127,7 +127,8 @@ public class HubCatalogService {
 
 	@Transactional(readOnly = true)
 	public List<HubView> list() {
-		return hubRepository.findAllByOrderByNameAsc().stream().map(this::view).toList();
+		// A hub whose kind's add-on is not loaded (D-41) is hidden; an admin can still delete it by name.
+		return hubRepository.findAllByOrderByNameAsc().stream().filter(hubKinds::available).map(this::view).toList();
 	}
 
 	@Transactional(readOnly = true)

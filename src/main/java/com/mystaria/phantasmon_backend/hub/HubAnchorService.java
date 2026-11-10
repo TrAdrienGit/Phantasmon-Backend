@@ -94,13 +94,15 @@ public class HubAnchorService {
 		return withHubs(repository.findByOwnerUuidOrderByNameAsc(ownerUuid));
 	}
 
+	/** With their hubs; the anchors of a hub whose add-on is not loaded are left out (D-41). */
 	private List<HubAnchorResponse> withHubs(List<HubAnchor> anchors) {
 		Map<UUID, Hub> hubs = new HashMap<>();
 		return anchors.stream()
 				.map(anchor -> {
 					Hub hub = hubs.computeIfAbsent(anchor.getHubUuid(), uuid -> hubRepository.findById(uuid).orElseThrow());
-					return HubAnchorResponse.from(anchor, hub, hubKinds.view(hub));
+					return hubKinds.available(hub) ? HubAnchorResponse.from(anchor, hub, hubKinds.view(hub)) : null;
 				})
+				.filter(java.util.Objects::nonNull)
 				.toList();
 	}
 

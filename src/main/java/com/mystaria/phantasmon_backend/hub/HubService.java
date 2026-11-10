@@ -97,10 +97,14 @@ public class HubService {
 	private final Clock clock;
 	private final int capacity;
 
+	/** Hub kinds of add-ons (D-41): a hub whose add-on is missing cannot be joined. */
+	private final HubKinds hubKinds;
+
 	public HubService(HubAnchorRepository anchorRepository, HubRepository hubRepository, PresenceService presenceService,
 			PlayerService playerService, PokemonRepository pokemonRepository, SessionRegistry sessionRegistry, Clock clock,
-			AdminService adminService, HubChatMuteRepository muteRepository,
+			AdminService adminService, HubChatMuteRepository muteRepository, HubKinds hubKinds,
 			@Value("${phantasmon.hub.capacity:50}") int capacity) {
+		this.hubKinds = hubKinds;
 		this.adminService = adminService;
 		this.muteRepository = muteRepository;
 		this.anchorRepository = anchorRepository;
@@ -132,6 +136,10 @@ public class HubService {
 		Hub hub = hubRepository.findById(anchor.getHubUuid()).orElse(null);
 		if (hub == null) {
 			error(playerUuid, "ERROR_HUB_ANCHOR_NOT_FOUND", Map.of("anchor_uuid", anchorUuid));
+			return;
+		}
+		if (!hubKinds.available(hub)) {
+			error(playerUuid, "ERROR_HUB_KIND_UNAVAILABLE", Map.of("hub", hub.getName(), "kind", hub.getKind()));
 			return;
 		}
 		if (members.containsKey(playerUuid)) {
