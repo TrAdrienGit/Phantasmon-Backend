@@ -282,16 +282,25 @@ class LiveBattleWebSocketIntegrationTest {
 	}
 
 	@Test
-	void bothPlayersGetTheSameRandomIntro() throws Exception {
+	void noIntroIsImposedUnlessTheLobbyPicksOne() throws Exception {
 		teamMember(aliceUuid, "pikachu", 1);
 		teamMember(bobUuid, "charmander", 1);
 		readyBoth(openLobby(aliceSession, alice, bobUuid, bobSession, bob).get("lobby_uuid").asString());
 
-		JsonNode aliceView = await(alice, "BattleSessionStarted");
-		JsonNode bobView = await(bob, "BattleSessionStarted");
-		int intro = aliceView.get("intro").asInt();
-		assertThat(intro).isBetween(0, LiveBattleService.INTRO_COUNT - 1);
-		assertThat(bobView.get("intro").asInt()).as("TODO-26: both clients play the same intro").isEqualTo(intro);
+		assertThat(await(alice, "BattleSessionStarted").get("intro").asString()).as("each player's own choice").isEmpty();
+		assertThat(await(bob, "BattleSessionStarted").get("intro").asString()).isEmpty();
+	}
+
+	@Test
+	void theLobbysIntroIsPlayedByBothPlayers() throws Exception {
+		teamMember(aliceUuid, "pikachu", 1);
+		teamMember(bobUuid, "charmander", 1);
+		String lobby = openLobby(aliceSession, alice, bobUuid, bobSession, bob).get("lobby_uuid").asString();
+		send(bobSession, "BattleLobbySetIntro", "{\"lobby_uuid\":\"" + lobby + "\",\"intro\":\"PBR_ENTRANCE\"}");
+		readyBoth(lobby);
+
+		assertThat(await(alice, "BattleSessionStarted").get("intro").asString()).isEqualTo("PBR_ENTRANCE");
+		assertThat(await(bob, "BattleSessionStarted").get("intro").asString()).isEqualTo("PBR_ENTRANCE");
 	}
 
 	@Test

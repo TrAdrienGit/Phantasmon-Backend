@@ -65,8 +65,6 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class LiveBattleService {
 
-	/** Number of battle intro cinematics the client knows (TODO-26); {@code BattleSessionStarted.intro} is in [0, INTRO_COUNT). */
-	public static final int INTRO_COUNT = 5;
 
 	static final int TIMER_SECONDS = 90;
 
@@ -178,6 +176,12 @@ public class LiveBattleService {
 		 * ({@code namespace:name}), or "" for each player's own choice.
 		 */
 		String ambiance = "";
+		/**
+		 * The intro both players see, picked by either like the ambiance: a Showtime intro name ({@code PBR_ENTRANCE}),
+		 * or "" for none imposed: each player's client then plays one of their own choices (2026-11-11). Phantasmon
+		 * Events may impose one for its events.
+		 */
+		String intro = "";
 		/**
 		 * An event NPC's lobby (Adrien 2026-11-03): the NPC is the invitee side — always ready, its team and format
 		 * fixed by the admin; only the player sees the lobby.
@@ -500,6 +504,24 @@ public class LiveBattleService {
 		sendLobby(lobby, lobby.other(playerUuid));
 	}
 
+	private static final java.util.regex.Pattern INTRO_NAME = java.util.regex.Pattern.compile("[A-Z0-9_]{1,40}");
+
+	/** Battle intro: either player picks it, for both; "" = each player's own. Nobody is unreadied. */
+	public synchronized void setLobbyIntro(UUID playerUuid, UUID lobbyUuid, String intro) {
+		Lobby lobby = lobbyOf(playerUuid, lobbyUuid);
+		if (lobby == null) {
+			return;
+		}
+		String name = intro == null ? "" : intro;
+		if (!name.isEmpty() && !INTRO_NAME.matcher(name).matches() || name.equals(lobby.intro)) {
+			return;
+		}
+		lobby.intro = name;
+		log.info("Live battle lobby {}: intro {} picked by {}", lobby.uuid, name.isEmpty() ? "(each their own)" : name, playerUuid);
+		sendLobby(lobby, playerUuid);
+		sendLobby(lobby, lobby.other(playerUuid));
+	}
+
 	private BattleFormats.Format format(Lobby lobby) {
 		BattleFormats.Format format = showdown.formats().get(lobby.formatId);
 		return format != null ? format : showdown.formats().get(BattleFormats.FREE);
@@ -662,6 +684,7 @@ public class LiveBattleService {
 		// red circle for the opponent's (its items and moves stay hidden).
 		data.put("format_id", lobby.formatId);
 		data.put("ambiance", lobby.ambiance);
+		data.put("intro", lobby.intro);
 		data.put("formats", showdown.formats().offered().stream()
 				.map(format -> Map.of("id", format.id(), "name", format.name())).toList());
 		data.put("own_team_issues", issues(lobby, own.team).stream()
@@ -754,8 +777,8 @@ public class LiveBattleService {
 		battlesByPlayer.put(guestUuid, battle);
 		log.info("Live battle {} started from lobby {}: host {} vs guest {}", battle.uuid, lobby.uuid, hostUuid, guestUuid);
 
-		// TODO-26: the intro cinematic is drawn here, so that both players watch the same one.
-		int intro = java.util.concurrent.ThreadLocalRandom.current().nextInt(INTRO_COUNT);
+		// The lobby's intro, the same for both; "" = each player's client plays one of their own choices.
+		String intro = lobby.intro;
 		Map<String, Object> hostView = new HashMap<>(Map.of(
 				"battle_uuid", battle.uuid, "role", "HOST",
 				"opponent_uuid", guestUuid, "opponent_name", nameOf(guestUuid),
@@ -812,7 +835,7 @@ public class LiveBattleService {
 				"own_team_source", BattleTeam.GHOST.source().name(), "opponent_team_source", BattleTeam.GHOST.source().name(),
 				"format", Map.of("id", free.id(), "name", free.name(), "battle_rules", free.battleRules(),
 						"adjust_level", free.adjustLevel())));
-		view.put("intro", java.util.concurrent.ThreadLocalRandom.current().nextInt(INTRO_COUNT));
+		view.put("intro", "");
 		sessionRegistry.send(adminUuid, WsMessage.of("BattleSessionStarted", view));
 		ghostRecall.recall(adminUuid, "battle started");
 		refreshViewers(battle);
@@ -906,7 +929,7 @@ public class LiveBattleService {
 				"own_team_source", lobby.inviterSide.choice.source().name(), "opponent_team_source", BattleTeam.GHOST.source().name(),
 				"format", Map.of("id", format.id(), "name", format.name(), "battle_rules", format.battleRules(),
 						"adjust_level", format.adjustLevel())));
-		view.put("intro", java.util.concurrent.ThreadLocalRandom.current().nextInt(INTRO_COUNT));
+		view.put("intro", lobby.intro);
 		view.put("ai", npc.ai());
 		view.put("ai_debug", npc.aiDebug());
 		view.put("npc_uuid", npc.uuid());
