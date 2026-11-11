@@ -55,7 +55,8 @@ public class PokemonController {
 		UUID finalOwner = ownerUuid;
 		PokemonResponse response = idempotencyService.executeIdempotent(
 				request.requestUuid(), finalOwner, "POST /pokemon",
-				() -> pokemonService.create(finalOwner, request), PokemonResponse.class);
+				() -> pokemonService.create(finalOwner, request, adminService.isAdmin(playerUuid(authentication))),
+				PokemonResponse.class);
 		return ResponseEntity.status(HttpStatus.CREATED).body(response);
 	}
 
@@ -73,7 +74,8 @@ public class PokemonController {
 
 	@PatchMapping("/pokemon/{uuid}")
 	public PokemonResponse update(@PathVariable UUID uuid, @Valid @RequestBody PokemonUpdateRequest request, Authentication authentication) {
-		return pokemonService.update(actingOwner(uuid, authentication), uuid, request);
+		return pokemonService.update(actingOwner(uuid, authentication), uuid, request,
+				adminService.isAdmin(playerUuid(authentication)));
 	}
 
 	@DeleteMapping("/pokemon/{uuid}")

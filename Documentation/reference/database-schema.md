@@ -323,6 +323,23 @@ dans [`Phantasmon-Events/Documentation/backend-reference.md`](../../../Phantasmo
 | `muted_by` | UUID | NOT NULL | L'admin (pas de FK) |
 | `muted_at` | TIMESTAMPTZ | NOT NULL, défaut `now()` | |
 
+## 7 octies. `player_rewards` (récompenses, TODO-37, V26)
+
+Les apparences qu'un admin a données à un joueur ; l'apparence d'un Pokémon reste dans `pokemon.data.look`
+(`filter`, `aura`, `scale` de 50 à 200, `sealed`), contrôlée par `RewardService.checkLook`.
+
+| Colonne | Type | Contrainte | Description |
+|---|---|---|---|
+| `uuid` | UUID | PK | |
+| `player_uuid` | UUID | NOT NULL, FK `players` ON DELETE CASCADE, index | Le joueur récompensé |
+| `kind` | VARCHAR(16) | NOT NULL | `FILTER`, `AURA` ou `SCALE` (droit de changer la taille) |
+| `value` | VARCHAR(32) | NOT NULL | Identifiant du filtre ou de l'aura (`size` pour `SCALE`) |
+| `species` | VARCHAR(64) | | Espèce couverte (formes comprises) ; NULL = toutes |
+| `note` | VARCHAR(100) | | Pourquoi : l'event, le tournoi… |
+| `granted_by`, `granted_at` | UUID, TIMESTAMPTZ | `granted_at` NOT NULL, défaut `now()` | L'admin, la date |
+
+Unicité : `(player_uuid, kind, value, COALESCE(species, ''))`.
+
 ## 8. État hors base
 
 | Structure | Service | Contenu |
@@ -363,6 +380,7 @@ Tout est perdu au redémarrage du backend (comportement voulu) et n'est pas part
 | V23 | `V23__event_npcs_in_hubs.sql` | 2026-11-03 | `event_npcs.hub_uuid` : un dresseur PNJ peut appartenir à un hub (passé dans le module Events) |
 | V24 | `V24__event_npcs_ai_debug.sql` | 2026-11-03 | `event_npcs.ai_debug` : le débogage de l'IA d'un PNJ (passé dans le module Events) |
 | V25 | `V25__hub_kinds.sql` | 2026-11-10 | D-41 : `hubs.kind` (`MIRROR` pour les anciens miroirs), `hubs.mirror` et `hubs.radius` supprimés, `hubs_size_check` générique, `hub_anchors.role` libre (VARCHAR(16)), `uq_hub_anchor_source` supprimé, `uq_hub_anchor_owner_hub` limité aux Anchors `NORMAL`. Les fichiers V18-V19 et V22-V24 sont passés dans le module Events : le cœur ignore leur trace dans son historique (`spring.flyway.ignore-migration-patterns=*:missing`) |
+| V26 | `V26__player_rewards.sql` | 2026-11-11 | Récompenses (TODO-37) : table `player_rewards` |
 
 ## 10. Décisions de schéma
 

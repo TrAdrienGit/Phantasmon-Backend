@@ -25,15 +25,25 @@ public class PokemonService {
 
 	private final PokemonRepository pokemonRepository;
 	private final PokemonLegalityService legalityService;
+	private final com.mystaria.phantasmon_backend.reward.RewardService rewardService;
 
-	public PokemonService(PokemonRepository pokemonRepository, PokemonLegalityService legalityService) {
+	public PokemonService(PokemonRepository pokemonRepository, PokemonLegalityService legalityService,
+			com.mystaria.phantasmon_backend.reward.RewardService rewardService) {
 		this.pokemonRepository = pokemonRepository;
 		this.legalityService = legalityService;
+		this.rewardService = rewardService;
 	}
 
 	@Transactional
 	public PokemonResponse create(UUID ownerUuid, PokemonCreateRequest request) {
+		return create(ownerUuid, request, false);
+	}
+
+	/** {@code privileged}: an admin calls — any look (TODO-37) may be given; otherwise only the owner's rewards. */
+	@Transactional
+	public PokemonResponse create(UUID ownerUuid, PokemonCreateRequest request, boolean privileged) {
 		legalityService.validate(request.data());
+		rewardService.checkLook(ownerUuid, privileged, request.species(), null, request.data());
 
 		Short boxId = toShort(request.boxId());
 		Short boxSlot = toShort(request.boxSlot());
@@ -73,10 +83,17 @@ public class PokemonService {
 
 	@Transactional
 	public PokemonResponse update(UUID ownerUuid, UUID pokemonUuid, PokemonUpdateRequest request) {
+		return update(ownerUuid, pokemonUuid, request, false);
+	}
+
+	/** {@code privileged}: an admin calls — the look (TODO-37) may be anything, sealed or not. */
+	@Transactional
+	public PokemonResponse update(UUID ownerUuid, UUID pokemonUuid, PokemonUpdateRequest request, boolean privileged) {
 		Pokemon pokemon = findOwned(ownerUuid, pokemonUuid);
 
 		if (request.data() != null) {
 			legalityService.validate(request.data());
+			rewardService.checkLook(ownerUuid, privileged, pokemon.getSpecies(), pokemon.getData(), request.data());
 			pokemon.setData(request.data());
 		}
 		if (request.level() != null) {

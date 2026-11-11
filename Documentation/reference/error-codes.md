@@ -134,6 +134,12 @@ Les codes marqués « — » côté client concernent des routes REST que le cli
 | `ERROR_HUB_INVALID_SIZE` | 400 | REST | Admin : dimension absente ou hors de 3 à 64 | `phantasmon.hub.error.invalid_size` |
 | `ERROR_HUB_SCHEMATIC_INVALID` | 422 | REST | Admin, rechargement : dossier refusé (plusieurs fichiers, illisible, mauvaise taille ; `details.reason`), l'ancienne construction reste | `phantasmon.hub.error.schematic_invalid` (le client affiche `details.reason`) |
 | `ERROR_HUB_SCHEMATIC_NONE` | 404 | REST | Fichier demandé pour un hub sans construction | `phantasmon.hub.error.schematic_none` |
+| `ERROR_LOOK_NOT_OWNED` | 403 | REST | Apparence (`data.look`) que le joueur n'a pas gagnée pour cette espèce, ou `sealed` posé par un non-admin (TODO-37) | `phantasmon.look.error.not_owned` |
+| `ERROR_LOOK_SEALED` | 403 | REST | Apparence scellée par un admin : un joueur ne peut plus la changer | `phantasmon.look.error.sealed` |
+| `ERROR_LOOK_INVALID` | 400 | REST | `data.look` mal formé (clé inconnue, identifiant invalide, taille hors de 50-200) | `phantasmon.look.error.invalid` |
+| `ERROR_REWARD_INVALID` | 400 | REST | Récompense mal formée (`details.field` : `kind`, `value`, `species`) | `phantasmon.rewards.error.invalid` |
+| `ERROR_REWARD_DUPLICATE` | 409 | REST | Le joueur a déjà cette récompense (même type, même valeur, même espèce) | `phantasmon.rewards.error.duplicate` |
+| `ERROR_REWARD_NOT_FOUND` | 404 | REST | Récompense inconnue (déjà retirée) | `phantasmon.rewards.error.not_found` |
 | `ERROR_HUB_SCHEMATIC_KIND` | 400 | REST | Schematic envoyé à un hub d'add-on (seuls les hubs classiques en reçoivent) | `phantasmon.hub.error.schematic_kind` |
 | `ERROR_HUB_SCHEMATIC_NAME` | 400 | REST | Nom de fichier refusé (caractères, extension `.schem` / `.litematic`) | `phantasmon.hub.error.schematic_name` |
 | `ERROR_HUB_SCHEMATIC_TOO_LARGE` | 413 | REST | Schematic vide ou de plus de 16 Mio | `phantasmon.hub.error.schematic_too_large` |

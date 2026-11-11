@@ -573,6 +573,22 @@ routes ci-dessous : `403 ERROR_ADMIN_REQUIRED` hors admin.
   place, le hub est relu et `HubCatalogChanged` diffusé.
 - `DELETE /admin/hubs/{name}/schematic` → le hub, sans construction (fichier rangé dans `replaced/` de la même façon).
 
+## Récompenses (apparences, TODO-37)
+
+Les apparences des Pokémon se gagnent : un admin les donne, un joueur choisit parmi les siennes.
+
+- `GET /rewards/mine` → `[{ "uuid", "kind", "value", "species", "note", "granted_at" }]` (le joueur appelant).
+- `GET /admin/players/{name}/rewards` → `{ "player_uuid", "player_name", "rewards": [...] }` ; admin, `404 ERROR_PLAYER_NOT_FOUND`.
+- `POST /admin/players/{name}/rewards` `{ "kind": "FILTER"|"AURA"|"SCALE", "value", "species"?, "note"? }` → `201` + la
+  récompense ; `species` absent = toutes les espèces ; `400 ERROR_REWARD_INVALID`, `409 ERROR_REWARD_DUPLICATE`.
+- `DELETE /admin/rewards/{uuid}` → `204` ; `404 ERROR_REWARD_NOT_FOUND`. Les Pokémon qui la portent la gardent.
+
+L'apparence d'un Pokémon est dans son `data.look` (`filter`, `aura`, `scale` 50-200, `sealed`). `POST /pokemon` et
+`PATCH /pokemon/{uuid}` la contrôlent : un admin peut tout mettre et sceller ; un joueur ne peut que retirer une partie
+ou mettre ce que ses récompenses couvrent pour cette espèce (`403 ERROR_LOOK_NOT_OWNED`), jamais toucher une apparence
+scellée (`403 ERROR_LOOK_SEALED`) ; format invalide : `400 ERROR_LOOK_INVALID`. Purement esthétique : les combats ne
+la lisent pas.
+
 ## Profils d'animation des dresseurs (Cobblemon Battle Showtime E3)
 
 Chaque joueur choisit dans Showtime une animation par moment du combat ; Phantasmon l'envoie ici et lit celles des
