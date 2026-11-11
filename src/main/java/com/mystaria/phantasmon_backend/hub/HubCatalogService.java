@@ -256,10 +256,10 @@ public class HubCatalogService {
 
 	/**
 	 * A hub as the admins' hub manager shows it: its view, when and by whom it was created, how many anchors lead to it,
-	 * and whether its kind's add-on is loaded ({@code available}; false: hidden from players, D-41).
+	 * how many players are in it now ({@code online}, 2026-11-11), and whether its kind's add-on is loaded ({@code available}; false: hidden from players, D-41).
 	 */
 	public record HubAdminView(String name, String kind, HubView.Size size, HubView.SchematicView schematic, boolean available,
-			java.time.Instant createdAt, UUID createdBy, String createdByName, int anchors,
+			java.time.Instant createdAt, UUID createdBy, String createdByName, int anchors, int online,
 			@com.fasterxml.jackson.annotation.JsonIgnore Map<String, Object> extras) {
 
 		@com.fasterxml.jackson.annotation.JsonAnyGetter
@@ -280,11 +280,12 @@ public class HubCatalogService {
 		Map<UUID, Integer> anchorCounts = new HashMap<>();
 		anchorRepository.findAll().forEach(anchor -> anchorCounts.merge(anchor.getHubUuid(), 1, Integer::sum));
 		Map<UUID, String> names = playerNames(hubs.stream().map(Hub::getCreatedBy).toList());
+		Map<UUID, Integer> online = hubService.memberCounts();
 		return hubs.stream().map(hub -> {
 			HubView view = view(hub);
 			return new HubAdminView(hub.getName(), hub.getKind(), view.size(), view.schematic(), hubKinds.available(hub),
 					hub.getCreatedAt(), hub.getCreatedBy(), hub.getCreatedBy() == null ? null : names.get(hub.getCreatedBy()),
-					anchorCounts.getOrDefault(hub.getUuid(), 0), view.extras());
+					anchorCounts.getOrDefault(hub.getUuid(), 0), online.getOrDefault(hub.getUuid(), 0), view.extras());
 		}).toList();
 	}
 
@@ -297,7 +298,7 @@ public class HubCatalogService {
 	public List<HubAdminView> playerList() {
 		return adminList().stream().filter(hub -> Hub.KIND_NORMAL.equals(hub.kind()))
 				.map(hub -> new HubAdminView(hub.name(), hub.kind(), hub.size(), hub.schematic(), true, hub.createdAt(), null,
-						null, hub.anchors(), hub.extras()))
+						null, hub.anchors(), hub.online(), hub.extras()))
 				.toList();
 	}
 

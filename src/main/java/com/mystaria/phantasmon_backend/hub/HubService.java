@@ -481,6 +481,13 @@ public class HubService {
 		}
 	}
 
+	/** How many players are in each hub now (hub uuid → count), for the hub manager. */
+	public Map<UUID, Integer> memberCounts() {
+		Map<UUID, Integer> counts = new java.util.HashMap<>();
+		members.values().forEach(member -> counts.merge(member.hubUuid(), 1, Integer::sum));
+		return counts;
+	}
+
 	/** Everyone in the same hub as {@code playerUuid} (them included); empty if they are in none. */
 	public Set<UUID> sameHubMembers(UUID playerUuid) {
 		Member member = members.get(playerUuid);

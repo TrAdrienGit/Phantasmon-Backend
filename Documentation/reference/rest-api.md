@@ -556,7 +556,7 @@ routes ci-dessous : `403 ERROR_ADMIN_REQUIRED` hors admin.
 
 - `GET /admin/hubs` → tous les hubs, de tous les types, même ceux dont l'add-on n'est pas chargé :
   `[{ "name", "kind", "size": { "x", "y", "z" }, "schematic", "available", "created_at", "created_by",
-  "created_by_name", "anchors", ...champs du type }]`. `available` : `false` pour un hub caché aux joueurs (D-41) ;
+  "created_by_name", "anchors", "online", ...champs du type }]` (`online` : joueurs dans le hub en ce moment). `available` : `false` pour un hub caché aux joueurs (D-41) ;
   `anchors` : nombre d'ancres qui y mènent, tous serveurs confondus ; `created_by_name` : `null` pour `global`.
 - `GET /admin/hubs/{name}/anchors` → `[{ "uuid", "name", "owner_uuid", "owner_name", "server_fingerprint",
   "dimension", "x", "y", "z", "yaw", "role", "created_at" }]`, de la plus ancienne à la plus récente. Une ancre se

@@ -104,6 +104,7 @@ class HubManagerAdminTest {
 				.andExpect(jsonPath("$[?(@.name == '%s')].created_by_name".formatted(hub)).value(adminName))
 				.andExpect(jsonPath("$[?(@.name == '%s')].available".formatted(hub)).value(true))
 				.andExpect(jsonPath("$[?(@.name == '%s')].kind".formatted(hub)).value("NORMAL"))
+				.andExpect(jsonPath("$[?(@.name == '%s')].online".formatted(hub)).value(0))
 				.andExpect(jsonPath("$[?(@.name == '%s')].created_at".formatted(hub)).isNotEmpty());
 		mockMvc.perform(get("/hubs/overview").header("Authorization", playerToken))
 				.andExpect(status().isOk())
