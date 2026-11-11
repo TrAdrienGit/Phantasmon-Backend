@@ -3,7 +3,7 @@
 > **Document miroir** : identique dans `Phantasmon-Backend/Documentation/project/` et
 > `Phantasmon-Client/Documentation/project/`. Toute modification doit être reportée dans les deux.
 >
-> Mis à jour le 2026-11-10. Une entrée résolue n'est pas supprimée : elle passe dans §5 avec la date de résolution.
+> Mis à jour le 2026-11-11. Une entrée résolue n'est pas supprimée : elle passe dans §5 avec la date de résolution.
 
 Identifiants : `BUG-n` (comportement incorrect), `SEC-n` (sécurité, voir [`security-audit.md`](security-audit.md)), `TODO-n` (action à faire), `DEBT-n` (dette technique),
 `LIM-n` (limite connue, assumée pour l'instant). Priorité : **haute** (bloque une publication), **moyenne**,
@@ -27,6 +27,7 @@ Identifiants : `BUG-n` (comportement incorrect), `SEC-n` (sécurité, voir [`sec
 | TODO-30 | basse | Backend | Network : instances multiples du Hub au-delà de 50 joueurs (aujourd'hui : refus `ERROR_HUB_FULL`). |
 | TODO-34 | basse | Client + Backend | Network, vocal du hub (D-36) : la voix passe par le WebSocket (TCP) ; sur un réseau qui perd des paquets elle prend du retard au lieu de sauter. Si besoin : canal UDP / WebRTC dédié. |
 | TODO-39 | basse | Client + Backend | Combats contre des joueurs de Pokémon Showdown en ligne : plan dans `research/Phantasmon_Showdown_Integration_Plan.md` (backend adaptateur, Showdown arbitre, POC à deux comptes sur un serveur local d'abord). |
+| TODO-40 | basse | Client + Events | Augmenter le nombre de cosmétiques (Adrien 2026-11-11) : nouveaux filtres, auras, intros et ambiances réservées, à donner en récompense (TODO-37). |
 
 ## 3. Dette technique
 
