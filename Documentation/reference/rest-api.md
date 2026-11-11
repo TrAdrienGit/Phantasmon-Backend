@@ -579,8 +579,11 @@ Les apparences des Pokémon se gagnent : un admin les donne, un joueur choisit p
 
 - `GET /rewards/mine` → `[{ "uuid", "kind", "value", "species", "note", "granted_at" }]` (le joueur appelant).
 - `GET /admin/players/{name}/rewards` → `{ "player_uuid", "player_name", "rewards": [...] }` ; admin, `404 ERROR_PLAYER_NOT_FOUND`.
-- `POST /admin/players/{name}/rewards` `{ "kind": "FILTER"|"AURA"|"SCALE", "value", "species"?, "note"? }` → `201` + la
-  récompense ; `species` absent = toutes les espèces ; `400 ERROR_REWARD_INVALID`, `409 ERROR_REWARD_DUPLICATE`.
+- `POST /admin/players/{name}/rewards` `{ "kind": "FILTER"|"AURA"|"SCALE"|"INTRO"|"AMBIANCE", "value", "species"?, "note"? }`
+  → `201` + la récompense ; `species` absent = toutes les espèces ; `400 ERROR_REWARD_INVALID`, `409 ERROR_REWARD_DUPLICATE`.
+  `INTRO` et `AMBIANCE` (2026-11-11) : une intro ou une ambiance de combat réservée, `value` = son identifiant Showtime
+  avec espace de noms (`phantasmon_events:gym_leader`), jamais pour une espèce (`species` refusé). Le client du joueur
+  la montre alors dans le menu de Showtime et dans le lobby ; le backend ne contrôle pas ce choix.
 - `DELETE /admin/rewards/{uuid}` → `204` ; `404 ERROR_REWARD_NOT_FOUND`. Les Pokémon qui la portent la gardent.
 
 L'apparence d'un Pokémon est dans son `data.look` (`filter`, `aura`, `scale` 50-200, `sealed`). `POST /pokemon` et

@@ -124,4 +124,27 @@ class RewardControllerTest {
 		mockMvc.perform(delete("/admin/rewards/" + first).header("Authorization", adminToken)).andExpect(status().isNoContent());
 		mockMvc.perform(get("/rewards/mine").header("Authorization", playerToken)).andExpect(jsonPath("$.length()").value(1));
 	}
+
+	@Test
+	void reservedIntrosAndAmbiancesAreGivenByTheirShowtimeId() throws Exception {
+		mockMvc.perform(post("/admin/players/" + playerName + "/rewards").header("Authorization", adminToken)
+						.contentType(MediaType.APPLICATION_JSON)
+						.content("{\"kind\":\"intro\",\"value\":\"phantasmon_events:gym_leader\",\"note\":\"Champion\"}"))
+				.andExpect(status().isCreated()).andExpect(jsonPath("$.kind").value("INTRO"))
+				.andExpect(jsonPath("$.value").value("phantasmon_events:gym_leader"));
+		mockMvc.perform(post("/admin/players/" + playerName + "/rewards").header("Authorization", adminToken)
+						.contentType(MediaType.APPLICATION_JSON)
+						.content("{\"kind\":\"AMBIANCE\",\"value\":\"phantasmon_events:gym_leader_arena\"}"))
+				.andExpect(status().isCreated());
+		// An id without a namespace, or an intro for one species only: refused.
+		mockMvc.perform(post("/admin/players/" + playerName + "/rewards").header("Authorization", adminToken)
+						.contentType(MediaType.APPLICATION_JSON).content("{\"kind\":\"INTRO\",\"value\":\"gym_leader\"}"))
+				.andExpect(status().isBadRequest()).andExpect(jsonPath("$.error_code").value("ERROR_REWARD_INVALID"));
+		mockMvc.perform(post("/admin/players/" + playerName + "/rewards").header("Authorization", adminToken)
+						.contentType(MediaType.APPLICATION_JSON)
+						.content("{\"kind\":\"INTRO\",\"value\":\"phantasmon_events:other\",\"species\":\"gardevoir\"}"))
+				.andExpect(status().isBadRequest());
+		mockMvc.perform(get("/rewards/mine").header("Authorization", playerToken))
+				.andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(2));
+	}
 }

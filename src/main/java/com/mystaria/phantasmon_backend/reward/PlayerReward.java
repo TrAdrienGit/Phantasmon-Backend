@@ -25,6 +25,10 @@ public class PlayerReward {
 	public static final String FILTER = "FILTER";
 	public static final String AURA = "AURA";
 	public static final String SCALE = "SCALE";
+	/** A reserved battle intro (Showtime), {@code value} its namespaced id; for all species (no {@code species}). */
+	public static final String INTRO = "INTRO";
+	/** A reserved battle ambiance (Showtime), {@code value} its namespaced id; for all species. */
+	public static final String AMBIANCE = "AMBIANCE";
 
 	@Id
 	private UUID uuid;
@@ -35,7 +39,7 @@ public class PlayerReward {
 	@Column(nullable = false, length = 16)
 	private String kind;
 
-	@Column(nullable = false, length = 32)
+	@Column(nullable = false, length = 130)
 	private String value;
 
 	@Column(length = 64)

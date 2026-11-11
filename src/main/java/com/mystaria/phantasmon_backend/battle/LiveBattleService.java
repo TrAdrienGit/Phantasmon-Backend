@@ -182,6 +182,8 @@ public class LiveBattleService {
 		 * Events may impose one for its events.
 		 */
 		String intro = "";
+		/** Who picked {@link #intro} (null: none picked, or imposed): a reserved intro features its owner (TODO-37). */
+		UUID introBy;
 		/**
 		 * An event NPC's lobby (Adrien 2026-11-03): the NPC is the invitee side — always ready, its team and format
 		 * fixed by the admin; only the player sees the lobby.
@@ -504,9 +506,9 @@ public class LiveBattleService {
 		sendLobby(lobby, lobby.other(playerUuid));
 	}
 
-	private static final java.util.regex.Pattern INTRO_NAME = java.util.regex.Pattern.compile("[A-Z0-9_]{1,40}");
+	private static final java.util.regex.Pattern INTRO_NAME = java.util.regex.Pattern.compile("[A-Z0-9_]{1,40}|[a-z0-9_.-]{1,64}:[a-z0-9_./-]{1,64}");
 
-	/** Battle intro: either player picks it, for both; "" = each player's own. Nobody is unreadied. */
+	/** Battle intro: either player picks it, for both; "" = each player's own. A Showtime name or another mod's namespaced id (1.2.0). Nobody is unreadied. */
 	public synchronized void setLobbyIntro(UUID playerUuid, UUID lobbyUuid, String intro) {
 		Lobby lobby = lobbyOf(playerUuid, lobbyUuid);
 		if (lobby == null) {
@@ -517,6 +519,7 @@ public class LiveBattleService {
 			return;
 		}
 		lobby.intro = name;
+		lobby.introBy = name.isEmpty() ? null : playerUuid;
 		log.info("Live battle lobby {}: intro {} picked by {}", lobby.uuid, name.isEmpty() ? "(each their own)" : name, playerUuid);
 		sendLobby(lobby, playerUuid);
 		sendLobby(lobby, lobby.other(playerUuid));
@@ -784,14 +787,20 @@ public class LiveBattleService {
 				"opponent_uuid", guestUuid, "opponent_name", nameOf(guestUuid),
 				"own_team", hostTeam, "opponent_team", guestTeam,
 				"own_team_source", hostSource, "opponent_team_source", guestSource, "format", formatData));
+		// Who picked it: a reserved intro (TODO-37) features its owner on both screens; "" when nobody did.
+		String introBy = lobby.introBy == null ? "" : lobby.introBy.toString();
 		hostView.put("intro", intro);
+		hostView.put("intro_by", introBy);
 		hostView.put("ambiance", lobby.ambiance);
 		sessionRegistry.send(hostUuid, WsMessage.of("BattleSessionStarted", hostView));
-		sessionRegistry.send(guestUuid, WsMessage.of("BattleSessionStarted", Map.of(
+		Map<String, Object> guestView = new HashMap<>(Map.of(
 				"battle_uuid", battle.uuid, "role", "GUEST",
 				"opponent_uuid", hostUuid, "opponent_name", nameOf(hostUuid),
 				"own_team", guestTeam, "own_team_source", guestSource, "opponent_team_source", hostSource,
-				"format", formatData, "intro", intro, "ambiance", lobby.ambiance)));
+				"format", formatData, "intro", intro));
+		guestView.put("intro_by", introBy);
+		guestView.put("ambiance", lobby.ambiance);
+		sessionRegistry.send(guestUuid, WsMessage.of("BattleSessionStarted", guestView));
 		ghostRecall.recall(hostUuid, "battle started");
 		ghostRecall.recall(guestUuid, "battle started");
 		if (lobby.timerBy != null) {

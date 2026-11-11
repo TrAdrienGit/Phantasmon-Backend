@@ -25,13 +25,18 @@ import lombok.extern.slf4j.Slf4j;
  * may resize them — on all their Pokémon or one species. A Pokémon's look lives in its data, {@code look}:
  * {@code {filter, aura, scale (50-200, 100 = none), sealed}}; {@link #checkLook} keeps a player within their
  * collection, and an admin's seal on a Pokémon out of their reach. Purely cosmetic: battles never read it.
+ * A reward may also be a reserved battle intro or ambiance ({@code INTRO}, {@code AMBIANCE}, by Showtime id): the
+ * client shows it among the player's choices; Showtime plays it.
  */
 @Service
 @Slf4j
 public class RewardService {
 
 	public static final String LOOK = "look";
-	static final Set<String> KINDS = Set.of(PlayerReward.FILTER, PlayerReward.AURA, PlayerReward.SCALE);
+	static final Set<String> KINDS = Set.of(PlayerReward.FILTER, PlayerReward.AURA, PlayerReward.SCALE, PlayerReward.INTRO,
+			PlayerReward.AMBIANCE);
+	/** A reserved intro's or ambiance's id: {@code <namespace>:<name>}. */
+	private static final Pattern CONTENT_ID = Pattern.compile("[a-z0-9_.-]{1,64}:[a-z0-9_./-]{1,64}");
 	private static final Pattern ID = Pattern.compile("[a-z0-9_]{1,32}");
 	private static final Pattern SPECIES = Pattern.compile("[a-z0-9_]{1,64}");
 	public static final int SCALE_MIN = 50;
@@ -39,10 +44,18 @@ public class RewardService {
 
 	private final PlayerRewardRepository repository;
 	private final PlayerService playerService;
+	private final com.mystaria.phantasmon_backend.websocket.SessionRegistry sessionRegistry;
 
-	public RewardService(PlayerRewardRepository repository, PlayerService playerService) {
+	public RewardService(PlayerRewardRepository repository, PlayerService playerService,
+			com.mystaria.phantasmon_backend.websocket.SessionRegistry sessionRegistry) {
 		this.repository = repository;
 		this.playerService = playerService;
+		this.sessionRegistry = sessionRegistry;
+	}
+
+	/** {@code RewardsChanged} to the player, if connected: their client reads their rewards again at once. */
+	private void notifyChanged(UUID playerUuid) {
+		sessionRegistry.send(playerUuid, com.mystaria.phantasmon_backend.websocket.WsMessage.of("RewardsChanged", Map.of()));
 	}
 
 	public record RewardView(UUID uuid, String kind, String value, String species, String note, Instant grantedAt) {
@@ -77,8 +90,12 @@ public class RewardService {
 			throw new ApiException(HttpStatus.BAD_REQUEST, "ERROR_REWARD_INVALID", Map.of("field", "kind"));
 		}
 		String value = PlayerReward.SCALE.equals(kind) ? "size" : rawValue == null ? "" : rawValue.strip().toLowerCase(Locale.ROOT);
-		if (!ID.matcher(value).matches()) {
+		boolean content = PlayerReward.INTRO.equals(kind) || PlayerReward.AMBIANCE.equals(kind);
+		if (!(content ? CONTENT_ID : ID).matcher(value).matches()) {
 			throw new ApiException(HttpStatus.BAD_REQUEST, "ERROR_REWARD_INVALID", Map.of("field", "value"));
+		}
+		if (content && rawSpecies != null && !rawSpecies.isBlank()) {
+			throw new ApiException(HttpStatus.BAD_REQUEST, "ERROR_REWARD_INVALID", Map.of("field", "species"));
 		}
 		String species = rawSpecies == null || rawSpecies.isBlank() ? null
 				: rawSpecies.strip().toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9_]", "");
@@ -97,6 +114,7 @@ public class RewardService {
 		}
 		log.info("Admin {} gave {} the reward {} {} ({})", adminUuid, player.getLastUsername(), kind, value,
 				species == null ? "all species" : species);
+		notifyChanged(player.getUuid());
 		return RewardView.of(reward);
 	}
 
@@ -105,6 +123,7 @@ public class RewardService {
 		PlayerReward reward = repository.findById(rewardUuid).orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND,
 				"ERROR_REWARD_NOT_FOUND", Map.of("uuid", rewardUuid)));
 		repository.delete(reward);
+		notifyChanged(reward.getPlayerUuid());
 		log.info("Admin {} took the reward {} {} back from {}", adminUuid, reward.getKind(), reward.getValue(), reward.getPlayerUuid());
 	}
 
