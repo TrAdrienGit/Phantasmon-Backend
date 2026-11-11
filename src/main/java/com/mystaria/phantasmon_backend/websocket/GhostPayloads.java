@@ -43,6 +43,8 @@ public final class GhostPayloads {
 		data.put("gender", pokemon.getData() == null ? null : pokemon.getData().get("gender"));
 		// Shown as "[Ghost] <nickname>" above the Ghost (CAD Partie 1 §5); null when the Pokémon has none.
 		data.put("nickname", pokemon.getData() == null ? null : pokemon.getData().get("nickname"));
+		// Its look (TODO-37): filter, aura and size, drawn by every client that sees this Ghost.
+		data.put("look", pokemon.getData() == null ? null : pokemon.getData().get("look"));
 		return data;
 	}
 }
