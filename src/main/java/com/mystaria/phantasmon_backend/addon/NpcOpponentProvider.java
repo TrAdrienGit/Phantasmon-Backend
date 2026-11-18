@@ -16,9 +16,16 @@ public interface NpcOpponentProvider {
 
 	/**
 	 * An NPC as a battle needs it: its team (already loaded), its AI level as the client knows it ({@code random},
-	 * {@code expert}…), the AI's chat debug, its format and its skin (null: the default one).
+	 * {@code expert}…), the AI's chat debug, its format and its skin (null: the default one). {@code intro} and
+	 * {@code ambiance}: the Showtime intro and ambiance its battles impose (2026-11-18), the NPC starring in the intro;
+	 * null: the player picks them in the lobby as against a player.
 	 */
 	record NpcOpponent(UUID uuid, String name, String skin, String ai, boolean aiDebug, String formatId,
-			List<PokemonResponse> team) {
+			List<PokemonResponse> team, String intro, String ambiance) {
+
+		public NpcOpponent(UUID uuid, String name, String skin, String ai, boolean aiDebug, String formatId,
+				List<PokemonResponse> team) {
+			this(uuid, name, skin, ai, aiDebug, formatId, team, null, null);
+		}
 	}
 }

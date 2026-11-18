@@ -189,6 +189,9 @@ public class LiveBattleService {
 		 * fixed by the admin; only the player sees the lobby.
 		 */
 		NpcOpponent npc;
+		/** The NPC imposes the ambiance / the intro (2026-11-18): the player's picks are refused. */
+		boolean ambianceFixed;
+		boolean introFixed;
 
 		Lobby(UUID uuid, UUID inviterUuid, UUID inviteeUuid) {
 			this.uuid = uuid;
@@ -494,7 +497,7 @@ public class LiveBattleService {
 			return;
 		}
 		String id = ambiance == null ? "" : ambiance;
-		if (!id.isEmpty() && !AMBIANCE_ID.matcher(id).matches()) {
+		if (lobby.ambianceFixed || !id.isEmpty() && !AMBIANCE_ID.matcher(id).matches()) {
 			return;
 		}
 		if (id.equals(lobby.ambiance)) {
@@ -515,7 +518,7 @@ public class LiveBattleService {
 			return;
 		}
 		String name = intro == null ? "" : intro;
-		if (!name.isEmpty() && !INTRO_NAME.matcher(name).matches() || name.equals(lobby.intro)) {
+		if (lobby.introFixed || !name.isEmpty() && !INTRO_NAME.matcher(name).matches() || name.equals(lobby.intro)) {
 			return;
 		}
 		lobby.intro = name;
@@ -688,6 +691,8 @@ public class LiveBattleService {
 		data.put("format_id", lobby.formatId);
 		data.put("ambiance", lobby.ambiance);
 		data.put("intro", lobby.intro);
+		data.put("ambiance_fixed", lobby.ambianceFixed);
+		data.put("intro_fixed", lobby.introFixed);
 		data.put("formats", showdown.formats().offered().stream()
 				.map(format -> Map.of("id", format.id(), "name", format.name())).toList());
 		data.put("own_team_issues", issues(lobby, own.team).stream()
@@ -899,6 +904,16 @@ public class LiveBattleService {
 		lobby.inviteeSide.team = new ArrayList<>(npc.team());
 		lobby.inviteeSide.lead = 0;
 		lobby.inviteeSide.ready = true;
+		// What the NPC's admin imposes: its ambiance, its intro with the NPC as the star (a gym leader's on the right).
+		if (npc.ambiance() != null && AMBIANCE_ID.matcher(npc.ambiance()).matches()) {
+			lobby.ambiance = npc.ambiance();
+			lobby.ambianceFixed = true;
+		}
+		if (npc.intro() != null && INTRO_NAME.matcher(npc.intro()).matches()) {
+			lobby.intro = npc.intro();
+			lobby.introBy = npc.uuid();
+			lobby.introFixed = true;
+		}
 		lobbiesByPlayer.put(playerUuid, lobby);
 		log.info("Event NPC lobby {} opened: {} against NPC {} '{}' (AI {})", lobby.uuid, playerUuid, npc.uuid(), npc.name(), npc.ai());
 		sendLobby(lobby, playerUuid);
@@ -939,6 +954,9 @@ public class LiveBattleService {
 				"format", Map.of("id", format.id(), "name", format.name(), "battle_rules", format.battleRules(),
 						"adjust_level", format.adjustLevel())));
 		view.put("intro", lobby.intro);
+		if (lobby.introBy != null) {
+			view.put("intro_by", lobby.introBy);
+		}
 		view.put("ai", npc.ai());
 		view.put("ai_debug", npc.aiDebug());
 		view.put("npc_uuid", npc.uuid());
