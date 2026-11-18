@@ -332,8 +332,8 @@ Les apparences qu'un admin a données à un joueur ; l'apparence d'un Pokémon r
 |---|---|---|---|
 | `uuid` | UUID | PK | |
 | `player_uuid` | UUID | NOT NULL, FK `players` ON DELETE CASCADE, index | Le joueur récompensé |
-| `kind` | VARCHAR(16) | NOT NULL | `FILTER`, `AURA`, `SCALE` (droit de changer la taille), `INTRO` ou `AMBIANCE` (contenu de combat réservé) |
-| `value` | VARCHAR(130) | NOT NULL | Identifiant du filtre ou de l'aura (`size` pour `SCALE`) ; pour `INTRO` / `AMBIANCE`, l'identifiant Showtime avec espace de noms (V27) |
+| `kind` | VARCHAR(16) | NOT NULL | `FILTER`, `AURA`, `SCALE` (droit de changer la taille), `INTRO` ou `AMBIANCE` (contenu de combat réservé), `FIELD` (terrain League Reborn qu'il peut poser, 2026-11-18) |
+| `value` | VARCHAR(130) | NOT NULL | Identifiant du filtre ou de l'aura (`size` pour `SCALE`) ; pour `INTRO` / `AMBIANCE`, l'identifiant Showtime avec espace de noms (V27) ; pour `FIELD`, l'id du terrain |
 | `species` | VARCHAR(64) | | Espèce couverte (formes comprises) ; NULL = toutes |
 | `note` | VARCHAR(100) | | Pourquoi : l'event, le tournoi… |
 | `granted_by`, `granted_at` | UUID, TIMESTAMPTZ | `granted_at` NOT NULL, défaut `now()` | L'admin, la date |

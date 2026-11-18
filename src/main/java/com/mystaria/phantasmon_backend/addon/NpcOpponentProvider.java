@@ -18,14 +18,20 @@ public interface NpcOpponentProvider {
 	 * An NPC as a battle needs it: its team (already loaded), its AI level as the client knows it ({@code random},
 	 * {@code expert}…), the AI's chat debug, its format and its skin (null: the default one). {@code intro} and
 	 * {@code ambiance}: the Showtime intro and ambiance its battles impose (2026-11-18), the NPC starring in the intro;
-	 * null: the player picks them in the lobby as against a player.
+	 * null: the player picks them in the lobby as against a player. {@code field}: the battle field it imposes
+	 * ({@link BattleFieldProvider}, League Reborn), null for none.
 	 */
 	record NpcOpponent(UUID uuid, String name, String skin, String ai, boolean aiDebug, String formatId,
-			List<PokemonResponse> team, String intro, String ambiance) {
+			List<PokemonResponse> team, String intro, String ambiance, String field) {
+
+		public NpcOpponent(UUID uuid, String name, String skin, String ai, boolean aiDebug, String formatId,
+				List<PokemonResponse> team, String intro, String ambiance) {
+			this(uuid, name, skin, ai, aiDebug, formatId, team, intro, ambiance, null);
+		}
 
 		public NpcOpponent(UUID uuid, String name, String skin, String ai, boolean aiDebug, String formatId,
 				List<PokemonResponse> team) {
-			this(uuid, name, skin, ai, aiDebug, formatId, team, null, null);
+			this(uuid, name, skin, ai, aiDebug, formatId, team, null, null, null);
 		}
 	}
 }

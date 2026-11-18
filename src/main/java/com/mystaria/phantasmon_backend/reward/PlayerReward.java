@@ -29,6 +29,11 @@ public class PlayerReward {
 	public static final String INTRO = "INTRO";
 	/** A reserved battle ambiance (Showtime), {@code value} its namespaced id; for all species. */
 	public static final String AMBIANCE = "AMBIANCE";
+	/**
+	 * A battle field the player may lay down in their lobbies (2026-11-18, a gym leader's field), {@code value} its id
+	 * ({@code BattleFieldProvider}); for all species.
+	 */
+	public static final String FIELD = "FIELD";
 
 	@Id
 	private UUID uuid;

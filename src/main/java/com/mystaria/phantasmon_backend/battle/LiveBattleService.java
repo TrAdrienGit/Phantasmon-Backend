@@ -19,6 +19,7 @@ import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
+import com.mystaria.phantasmon_backend.addon.BattleFieldProvider;
 import com.mystaria.phantasmon_backend.addon.NpcOpponentProvider;
 import com.mystaria.phantasmon_backend.addon.NpcOpponentProvider.NpcOpponent;
 import com.mystaria.phantasmon_backend.addon.TournamentHook;
@@ -31,6 +32,8 @@ import com.mystaria.phantasmon_backend.player.PlayerService;
 import com.mystaria.phantasmon_backend.pokemon.PokemonResponse;
 import com.mystaria.phantasmon_backend.pokemon.PokemonService;
 import com.mystaria.phantasmon_backend.presence.PresenceService;
+import com.mystaria.phantasmon_backend.reward.PlayerReward;
+import com.mystaria.phantasmon_backend.reward.RewardService;
 import com.mystaria.phantasmon_backend.websocket.GhostRecall;
 import com.mystaria.phantasmon_backend.websocket.SessionRegistry;
 import com.mystaria.phantasmon_backend.websocket.WsMessage;
@@ -89,11 +92,15 @@ public class LiveBattleService {
 	private final ObjectProvider<NpcOpponentProvider> npcOpponents;
 	private final PresenceService presenceService;
 	private final HubService hubService;
+	/** Battle fields from an add-on (League Reborn, Phantasmon Events); none: no field in the lobby. */
+	private final ObjectProvider<BattleFieldProvider> battleFields;
+	private final RewardService rewardService;
 
 	public LiveBattleService(BattleRepository battleRepository, PokemonService pokemonService, PlayerService playerService,
 			SessionRegistry sessionRegistry, GhostRecall ghostRecall, CobblemonPartyParser partyParser, AdminService adminService,
 			PresenceService presenceService, HubService hubService, Clock clock,
 			ObjectProvider<NpcOpponentProvider> npcOpponents,
+			ObjectProvider<BattleFieldProvider> battleFields, RewardService rewardService,
 			com.mystaria.phantasmon_backend.battle.format.ShowdownDataSource showdown,
 			@Value("${phantasmon.battle.invite-ttl:PT60S}") Duration inviteTtl,
 			@Value("${phantasmon.battle.lobby-timer:PT150S}") Duration lobbyTimer) {
@@ -111,6 +118,8 @@ public class LiveBattleService {
 		this.presenceService = presenceService;
 		this.hubService = hubService;
 		this.npcOpponents = npcOpponents;
+		this.battleFields = battleFields;
+		this.rewardService = rewardService;
 	}
 
 	private record Invite(UUID uuid, UUID inviterUuid, UUID inviteeUuid, Instant createdAt, BattleTeam inviterTeam) {
@@ -192,6 +201,14 @@ public class LiveBattleService {
 		/** The NPC imposes the ambiance / the intro (2026-11-18): the player's picks are refused. */
 		boolean ambianceFixed;
 		boolean introFixed;
+		/**
+		 * The battle field added to the format (League Reborn, 2026-11-18): a field id, or "" for none. Laid down by a
+		 * player holding its {@code FIELD} reward (a gym leader) or an admin, who then hosts the battle (their client
+		 * has the add-on that runs it); or imposed by an event NPC.
+		 */
+		String field = "";
+		UUID fieldBy;
+		boolean fieldFixed;
 
 		Lobby(UUID uuid, UUID inviterUuid, UUID inviteeUuid) {
 			this.uuid = uuid;
@@ -528,6 +545,67 @@ public class LiveBattleService {
 		sendLobby(lobby, lobby.other(playerUuid));
 	}
 
+	/** The fields {@code playerUuid} may lay down: all of them for an admin, their {@code FIELD} rewards otherwise. */
+	private List<String> fieldsFor(UUID playerUuid) {
+		BattleFieldProvider provider = battleFields.getIfAvailable();
+		if (provider == null) {
+			return List.of();
+		}
+		if (adminService.isAdmin(playerUuid)) {
+			return provider.fieldIds();
+		}
+		List<String> owned = rewardService.values(playerUuid, PlayerReward.FIELD);
+		return provider.fieldIds().stream().filter(owned::contains).toList();
+	}
+
+	/**
+	 * Battle field (League Reborn): "" removes it. Only a field the player may lay down ({@link #fieldsFor}); not in a
+	 * tournament match nor against an NPC that imposes one. Everyone is unreadied: the battle changes.
+	 */
+	public synchronized void setLobbyField(UUID playerUuid, UUID lobbyUuid, String field) {
+		Lobby lobby = lobbyOf(playerUuid, lobbyUuid);
+		if (lobby == null) {
+			return;
+		}
+		String id = field == null ? "" : field;
+		if (lobby.fieldFixed || lobby.tournamentMatch != null) {
+			sendError(playerUuid, "ERROR_BATTLE_FIELD_LOCKED");
+			return;
+		}
+		if (!id.isEmpty() && !fieldsFor(playerUuid).contains(id)) {
+			sendError(playerUuid, "ERROR_BATTLE_FIELD_NOT_ALLOWED");
+			return;
+		}
+		if (id.equals(lobby.field)) {
+			return;
+		}
+		// Only who laid the field down may take it away or change it.
+		if (!lobby.field.isEmpty() && lobby.fieldBy != null && !lobby.fieldBy.equals(playerUuid)) {
+			sendError(playerUuid, "ERROR_BATTLE_FIELD_LOCKED");
+			return;
+		}
+		lobby.field = id;
+		lobby.fieldBy = id.isEmpty() ? null : playerUuid;
+		lobby.inviterSide.ready = false;
+		if (lobby.npc == null) {
+			lobby.inviteeSide.ready = false;
+		}
+		log.info("Live battle lobby {}: field {} laid down by {}", lobby.uuid, id.isEmpty() ? "(none)" : id, playerUuid);
+		sendLobby(lobby, playerUuid);
+		sendLobby(lobby, lobby.other(playerUuid));
+	}
+
+	/** The format's battle rules, plus the field's rule when the lobby has one. */
+	private List<String> battleRules(Lobby lobby, BattleFormats.Format format) {
+		BattleFieldProvider provider = battleFields.getIfAvailable();
+		if (lobby.field.isEmpty() || provider == null) {
+			return format.battleRules();
+		}
+		List<String> rules = new ArrayList<>(format.battleRules());
+		rules.add(provider.rule(lobby.field));
+		return rules;
+	}
+
 	private BattleFormats.Format format(Lobby lobby) {
 		BattleFormats.Format format = showdown.formats().get(lobby.formatId);
 		return format != null ? format : showdown.formats().get(BattleFormats.FREE);
@@ -693,6 +771,11 @@ public class LiveBattleService {
 		data.put("intro", lobby.intro);
 		data.put("ambiance_fixed", lobby.ambianceFixed);
 		data.put("intro_fixed", lobby.introFixed);
+		// Battle field (League Reborn): the lobby's, whether it is locked for this viewer, the ones they may lay down.
+		data.put("field", lobby.field);
+		data.put("field_fixed", lobby.fieldFixed || lobby.tournamentMatch != null
+				|| (!lobby.field.isEmpty() && lobby.fieldBy != null && !lobby.fieldBy.equals(viewerUuid)));
+		data.put("fields", fieldsFor(viewerUuid));
 		// A tournament match's or an event NPC's format is fixed (setLobbyFormat refuses it): the drop-down is locked.
 		data.put("format_fixed", lobby.tournamentMatch != null || lobby.npc != null);
 		data.put("formats", showdown.formats().offered().stream()
@@ -766,11 +849,14 @@ public class LiveBattleService {
 			inviteeTeam = inviteeTeam.subList(0, Math.min(format.pickedTeamSize(), inviteeTeam.size()));
 		}
 		Map<String, Object> formatData = Map.of("id", format.id(), "name", format.name(),
-				"battle_rules", format.battleRules(), "adjust_level", format.adjustLevel());
+				"battle_rules", battleRules(lobby, format), "adjust_level", format.adjustLevel());
 		lobbiesByPlayer.remove(inviterUuid);
 		lobbiesByPlayer.remove(inviteeUuid);
 
-		UUID hostUuid = nextHost(inviterUuid, inviteeUuid);
+		// A field is run by the add-on's engine: whoever laid it down hosts (they have the add-on), else alternation.
+		UUID hostUuid = !lobby.field.isEmpty() && lobby.fieldBy != null
+				&& (lobby.fieldBy.equals(inviterUuid) || lobby.fieldBy.equals(inviteeUuid))
+				? lobby.fieldBy : nextHost(inviterUuid, inviteeUuid);
 		UUID guestUuid = hostUuid.equals(inviterUuid) ? inviteeUuid : inviterUuid;
 		List<PokemonResponse> hostTeam = hostUuid.equals(inviterUuid) ? inviterTeam : inviteeTeam;
 		List<PokemonResponse> guestTeam = hostUuid.equals(inviterUuid) ? inviteeTeam : inviterTeam;
@@ -799,6 +885,7 @@ public class LiveBattleService {
 		hostView.put("intro", intro);
 		hostView.put("intro_by", introBy);
 		hostView.put("ambiance", lobby.ambiance);
+		hostView.put("field", lobby.field);
 		sessionRegistry.send(hostUuid, WsMessage.of("BattleSessionStarted", hostView));
 		Map<String, Object> guestView = new HashMap<>(Map.of(
 				"battle_uuid", battle.uuid, "role", "GUEST",
@@ -807,6 +894,7 @@ public class LiveBattleService {
 				"format", formatData, "intro", intro));
 		guestView.put("intro_by", introBy);
 		guestView.put("ambiance", lobby.ambiance);
+		guestView.put("field", lobby.field);
 		sessionRegistry.send(guestUuid, WsMessage.of("BattleSessionStarted", guestView));
 		ghostRecall.recall(hostUuid, "battle started");
 		ghostRecall.recall(guestUuid, "battle started");
@@ -916,6 +1004,12 @@ public class LiveBattleService {
 			lobby.introBy = npc.uuid();
 			lobby.introFixed = true;
 		}
+		BattleFieldProvider fields = battleFields.getIfAvailable();
+		if (fields != null && fields.exists(npc.field())) {
+			lobby.field = npc.field();
+			lobby.fieldBy = npc.uuid();
+			lobby.fieldFixed = true;
+		}
 		lobbiesByPlayer.put(playerUuid, lobby);
 		log.info("Event NPC lobby {} opened: {} against NPC {} '{}' (AI {})", lobby.uuid, playerUuid, npc.uuid(), npc.name(), npc.ai());
 		sendLobby(lobby, playerUuid);
@@ -953,8 +1047,9 @@ public class LiveBattleService {
 				"opponent_uuid", npc.uuid(), "opponent_name", npc.name(),
 				"own_team", team, "opponent_team", npcTeam,
 				"own_team_source", lobby.inviterSide.choice.source().name(), "opponent_team_source", BattleTeam.GHOST.source().name(),
-				"format", Map.of("id", format.id(), "name", format.name(), "battle_rules", format.battleRules(),
+				"format", Map.of("id", format.id(), "name", format.name(), "battle_rules", battleRules(lobby, format),
 						"adjust_level", format.adjustLevel())));
+		view.put("field", lobby.field);
 		view.put("intro", lobby.intro);
 		if (lobby.introBy != null) {
 			view.put("intro_by", lobby.introBy);

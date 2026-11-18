@@ -233,6 +233,8 @@ public class PhantasmonWebSocketHandler extends TextWebSocketHandler {
 					incoming.data().get("ambiance") == null ? null : incoming.data().get("ambiance").toString());
 			case "BattleLobbySetIntro" -> liveBattleService.setLobbyIntro(playerUuid, uuidField(incoming, "lobby_uuid"),
 					incoming.data().get("intro") == null ? null : incoming.data().get("intro").toString());
+			case "BattleLobbySetField" -> liveBattleService.setLobbyField(playerUuid, uuidField(incoming, "lobby_uuid"),
+					incoming.data().get("field") == null ? null : incoming.data().get("field").toString());
 			case "BattleLobbyTimerEnable" -> liveBattleService.enableLobbyTimer(playerUuid, uuidField(incoming, "lobby_uuid"));
 			case "BattleLobbyLeave" -> liveBattleService.leaveLobby(playerUuid, uuidField(incoming, "lobby_uuid"));
 			case "BattlePacket" -> liveBattleService.relayPacket(playerUuid, uuidField(incoming, "battle_uuid"), incoming.data());

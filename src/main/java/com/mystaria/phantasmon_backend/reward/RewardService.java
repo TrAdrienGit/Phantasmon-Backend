@@ -9,11 +9,13 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.regex.Pattern;
 
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.mystaria.phantasmon_backend.addon.BattleFieldProvider;
 import com.mystaria.phantasmon_backend.common.ApiException;
 import com.mystaria.phantasmon_backend.player.PlayerService;
 
@@ -34,7 +36,7 @@ public class RewardService {
 
 	public static final String LOOK = "look";
 	static final Set<String> KINDS = Set.of(PlayerReward.FILTER, PlayerReward.AURA, PlayerReward.SCALE, PlayerReward.INTRO,
-			PlayerReward.AMBIANCE);
+			PlayerReward.AMBIANCE, PlayerReward.FIELD);
 	/** A reserved intro's or ambiance's id: {@code <namespace>:<name>}. */
 	private static final Pattern CONTENT_ID = Pattern.compile("[a-z0-9_.-]{1,64}:[a-z0-9_./-]{1,64}");
 	private static final Pattern ID = Pattern.compile("[a-z0-9_]{1,32}");
@@ -46,11 +48,21 @@ public class RewardService {
 	private final PlayerService playerService;
 	private final com.mystaria.phantasmon_backend.websocket.SessionRegistry sessionRegistry;
 
+	private final ObjectProvider<BattleFieldProvider> battleFields;
+
 	public RewardService(PlayerRewardRepository repository, PlayerService playerService,
-			com.mystaria.phantasmon_backend.websocket.SessionRegistry sessionRegistry) {
+			com.mystaria.phantasmon_backend.websocket.SessionRegistry sessionRegistry,
+			ObjectProvider<BattleFieldProvider> battleFields) {
 		this.repository = repository;
 		this.playerService = playerService;
 		this.sessionRegistry = sessionRegistry;
+		this.battleFields = battleFields;
+	}
+
+	/** The values of the player's rewards of {@code kind} (e.g. the fields a gym leader may lay down). */
+	public List<String> values(UUID playerUuid, String kind) {
+		return repository.findByPlayerUuidOrderByGrantedAtAsc(playerUuid).stream()
+				.filter(reward -> reward.getKind().equals(kind)).map(PlayerReward::getValue).toList();
 	}
 
 	/** {@code RewardsChanged} to the player, if connected: their client reads their rewards again at once. */
@@ -93,6 +105,13 @@ public class RewardService {
 		boolean content = PlayerReward.INTRO.equals(kind) || PlayerReward.AMBIANCE.equals(kind);
 		if (!(content ? CONTENT_ID : ID).matcher(value).matches()) {
 			throw new ApiException(HttpStatus.BAD_REQUEST, "ERROR_REWARD_INVALID", Map.of("field", "value"));
+		}
+		if (PlayerReward.FIELD.equals(kind)) {
+			BattleFieldProvider fields = battleFields.getIfAvailable();
+			if (fields == null || !fields.exists(value)) {
+				throw new ApiException(HttpStatus.BAD_REQUEST, "ERROR_REWARD_INVALID", Map.of("field", "value"));
+			}
+			content = true; // for all species, like an intro
 		}
 		if (content && rawSpecies != null && !rawSpecies.isBlank()) {
 			throw new ApiException(HttpStatus.BAD_REQUEST, "ERROR_REWARD_INVALID", Map.of("field", "species"));
