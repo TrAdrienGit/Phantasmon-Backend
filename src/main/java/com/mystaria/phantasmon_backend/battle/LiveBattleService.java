@@ -693,6 +693,8 @@ public class LiveBattleService {
 		data.put("intro", lobby.intro);
 		data.put("ambiance_fixed", lobby.ambianceFixed);
 		data.put("intro_fixed", lobby.introFixed);
+		// A tournament match's or an event NPC's format is fixed (setLobbyFormat refuses it): the drop-down is locked.
+		data.put("format_fixed", lobby.tournamentMatch != null || lobby.npc != null);
 		data.put("formats", showdown.formats().offered().stream()
 				.map(format -> Map.of("id", format.id(), "name", format.name())).toList());
 		data.put("own_team_issues", issues(lobby, own.team).stream()
