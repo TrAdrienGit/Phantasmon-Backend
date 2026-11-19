@@ -505,7 +505,12 @@ public class LiveBattleService {
 		sendLobby(lobby, lobby.other(playerUuid));
 	}
 
-	private static final java.util.regex.Pattern AMBIANCE_ID = java.util.regex.Pattern.compile("[a-z0-9_.-]{1,64}:[a-z0-9_./-]{1,64}");
+	/**
+	 * A Showtime scene (2026-11-19): an ambiance id, optionally followed by "|" and a stadium id (or "none", or "field": the League Reborn field's own); the
+	 * ambiance may be left out ("|stadium": each player's own ambiance in that stadium).
+	 */
+	private static final java.util.regex.Pattern AMBIANCE_ID = java.util.regex.Pattern.compile(
+			"(?=.)(?:[a-z0-9_.-]{1,64}:[a-z0-9_./-]{1,64})?(?:\\|(?:[a-z0-9_.-]{1,64}:[a-z0-9_./-]{1,64}|none|field))?");
 
 	/** Battle ambiance (Showtime A3): either player picks it, for both; "" = each player's own. Nobody is unreadied. */
 	public synchronized void setLobbyAmbiance(UUID playerUuid, UUID lobbyUuid, String ambiance) {
