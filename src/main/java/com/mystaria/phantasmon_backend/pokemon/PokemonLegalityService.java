@@ -58,6 +58,11 @@ public class PokemonLegalityService {
 			}
 		}
 
+		Object preTera = data.get("pre_tera");
+		if (preTera != null && !(preTera instanceof Boolean)) {
+			throw invalid("pre_tera");
+		}
+
 		for (Map.Entry<?, ?> entry : statMap(data, "ivs").entrySet()) {
 			int value = toInt(entry.getValue(), "ivs");
 			if (value < IV_MIN || value > IV_MAX) {

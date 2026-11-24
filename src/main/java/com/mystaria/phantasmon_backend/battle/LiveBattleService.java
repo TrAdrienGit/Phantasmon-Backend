@@ -632,7 +632,8 @@ public class LiveBattleService {
 		Object item = data.get("held_item");
 		Object nickname = data.get("nickname");
 		return new TeamValidator.Member(pokemon.species(), pokemon.form(), pokemon.ability(),
-				item == null ? null : item.toString(), moves, nickname == null ? null : nickname.toString());
+				item == null ? null : item.toString(), moves, nickname == null ? null : nickname.toString(),
+				Boolean.TRUE.equals(data.get("pre_tera")));
 	}
 
 	/** Picks the lead. Only the player is told: the opponent must not learn it, nor even that it changed. */

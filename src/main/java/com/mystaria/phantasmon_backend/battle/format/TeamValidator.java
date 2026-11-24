@@ -19,8 +19,16 @@ import static com.mystaria.phantasmon_backend.battle.format.ShowdownData.toId;
  */
 public final class TeamValidator {
 
-	/** What a team member is, in Showdown ids' terms. */
-	public record Member(String species, String form, String ability, String item, List<String> moves, String nickname) {
+	/**
+	 * What a team member is, in Showdown ids' terms. {@code preTera}: terastallized from the start of the battle
+	 * (2026-11-24), which takes Terastallization from the rest of its team.
+	 */
+	public record Member(String species, String form, String ability, String item, List<String> moves, String nickname,
+			boolean preTera) {
+
+		public Member(String species, String form, String ability, String item, List<String> moves, String nickname) {
+			this(species, form, ability, item, moves, nickname, false);
+		}
 	}
 
 	/** One broken rule: {@code code} (BANNED, NONSTANDARD, CLAUSE, TEAM_SIZE, LITTLE_CUP, SAME_TYPE) and what it's about. */
@@ -40,6 +48,7 @@ public final class TeamValidator {
 	public List<List<Issue>> validate(BattleFormats.Format format, List<Member> team) {
 		List<List<Issue>> issues = new ArrayList<>();
 		team.forEach(member -> issues.add(new ArrayList<>()));
+		checkPreTera(format, team, issues); // whatever the format: the engine allows one Terastallization a battle
 		if (format == null || format.free()) {
 			return issues;
 		}
@@ -93,6 +102,33 @@ public final class TeamValidator {
 		}
 		issues.replaceAll(list -> new ArrayList<>(new java.util.LinkedHashSet<>(list)));
 		return issues;
+	}
+
+	/**
+	 * Terastallized from the start: one per team, none holding what stops a Terastallization in Showdown (a Z-Crystal,
+	 * or a Mega Stone the Pokémon can use). Allowed under the Terastal Clause, which it bypasses (2026-11-24).
+	 */
+	private void checkPreTera(BattleFormats.Format format, List<Member> team, List<List<Issue>> issues) {
+		boolean seen = false;
+		for (int i = 0; i < team.size(); i++) {
+			Member member = team.get(i);
+			if (!member.preTera()) {
+				continue;
+			}
+			List<Issue> own = issues.get(i);
+			if (seen) {
+				own.add(new Issue("PRE_TERA_TWICE", ""));
+			}
+			seen = true;
+			String itemId = toId(member.item());
+			ShowdownData.EntryDef item = itemId.isEmpty() ? null : data.item(itemId);
+			ShowdownData.SpeciesDef species = species(member);
+			boolean zCrystal = itemId.endsWith("iumz");
+			boolean megaStone = item != null && species != null && item.megaFormeFor(species.name()) != null;
+			if (zCrystal || megaStone) {
+				own.add(new Issue("PRE_TERA_ITEM", item != null ? item.name() : member.item()));
+			}
+		}
 	}
 
 	private ShowdownData.SpeciesDef species(Member member) {

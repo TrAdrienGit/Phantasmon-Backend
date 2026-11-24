@@ -28,6 +28,25 @@ class TeamValidatorTest {
 		return validator.validate(formats.get(format), List.of(team));
 	}
 
+	private static TeamValidator.Member preTera(String species, String item) {
+		return new TeamValidator.Member(species, null, "pressure", item, List.of("tackle"), null, true);
+	}
+
+	@Test
+	void onePokemonTerastallizedFromTheStartPerTeamWhateverTheFormat() {
+		var issues = check(BattleFormats.FREE, preTera("garchomp", null), preTera("dragonite", null));
+		assertThat(issues.get(0)).isEmpty();
+		assertThat(issues.get(1)).contains(new TeamValidator.Issue("PRE_TERA_TWICE", ""));
+	}
+
+	@Test
+	void terastallizedFromTheStartBypassesTheTerastalClauseButNotItsItems() {
+		assertThat(check("gen9nationaldex", preTera("garchomp", null)).get(0)).isEmpty();
+		var items = check(BattleFormats.FREE, preTera("garchomp", "garchompite"), mon("pikachu", null));
+		assertThat(items.get(0)).contains(new TeamValidator.Issue("PRE_TERA_ITEM", "Garchompite"));
+		assertThat(check("gen9ou", preTera("garchomp", "choicescarf")).get(0)).isEmpty();
+	}
+
 	@Test
 	void everyOfferedFormatResolves() {
 		for (String id : BattleFormats.OFFERED) {
