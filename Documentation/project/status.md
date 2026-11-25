@@ -67,8 +67,8 @@ compatibilité avec Battle Extras (3 mixins), musique du lobby jouée par Showti
   sortis, le bouton Retour de Cobblemon termine bien le spectacle ; les combats vus de loin gardent l'ambiance de
   leur terrain.
 - Pokémon téracristallisés d'office (2026-11-24) : case dans l'éditeur, téracristallisation à la première entrée,
-  plus d'autre téracristallisation pour l'équipe, contrôle dans le lobby. **Backend pas encore redéployé** avec ce
-  contrôle.
+  plus d'autre téracristallisation pour l'équipe, contrôle dans le lobby. Backend redéployé avec ce contrôle le
+  2026-11-25.
 
 | Étape Network | Périmètre | Statut |
 |---|---|---|
