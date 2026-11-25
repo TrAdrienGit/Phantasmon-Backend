@@ -40,6 +40,9 @@
 | `GET` | [`/players/{uuid}/trades`](#get-playersuuidtrades) | Bearer | Échanges du joueur |
 | `GET` | [`/battles/{uuid}`](#get-battlesuuid) | Bearer | Détail |
 | `GET` | [`/admin/me`](#administration) | Bearer | L'appelant est-il admin ? |
+| `GET` | [`/admin/admins`](#administration) | Admin | Liste des admins |
+| `POST` | [`/admin/admins`](#administration) | Admin | Ajouter un admin |
+| `DELETE` | [`/admin/admins/{name}`](#administration) | Admin | Retirer un admin |
 | `GET` | [`/admin/players/{name}`](#administration) | Admin | Joueur par pseudo |
 | `POST` | [`/admin/battles/stop`](#administration) | Admin | Arrêter le combat / le lobby d'un joueur |
 | `POST` | [`/admin/reboot`](#administration) | Admin | Redémarrer le backend |
@@ -406,6 +409,14 @@ TODO-25. Admin = joueur dont le pseudo de dernière connexion figure dans `admin
 change ; créé vide au premier démarrage). Sinon `403 ERROR_ADMIN_REQUIRED`.
 
 - `GET /admin/me` → `{ "admin": bool }`.
+- Admins (2026-11-25, page Admins du menu) : la liste reste le fichier `admins.txt`, réécrit avec ses commentaires.
+  - `GET /admin/admins` → `{ "admins": ["<pseudo>", ...] }` (dans l'ordre du fichier) ;
+  - `POST /admin/admins` `{ "player": "<pseudo>" }` → la liste : un pseudo Minecraft (3 à 16 lettres, chiffres, `_`),
+    même jamais connecté ; `400 ERROR_ADMIN_NAME_INVALID`, `409 ERROR_ADMIN_ALREADY` ;
+  - `DELETE /admin/admins/{name}` → la liste ; `404 ERROR_ADMIN_NOT_FOUND`, `409 ERROR_ADMIN_SELF` (on ne se retire
+    pas soi-même : la liste ne peut pas perdre son dernier admin) ; `500 ERROR_ADMIN_FILE` si le fichier est illisible ;
+  - après un ajout ou un retrait, le joueur concerné, s'il est connecté, reçoit `AdminChanged` (WebSocket, sans
+    données) : son client redemande `/admin/me`, le menu et les commandes d'admin suivent sans reconnexion.
 - `GET /admin/players/{name}` → `{ "uuid", "name" }` ; `404 ERROR_PLAYER_NOT_FOUND`.
 - `POST /admin/battles/stop` `{ "player": "<pseudo>" }` → `{ "stopped": "BATTLE" | "LOBBY", "player" }` : combat
   terminé en match nul (`reason` `ADMIN_STOPPED`) ou lobby annulé ; `404 ERROR_ADMIN_NOTHING_TO_STOP`.

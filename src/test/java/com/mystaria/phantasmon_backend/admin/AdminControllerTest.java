@@ -97,6 +97,35 @@ class AdminControllerTest {
 	}
 
 	@Test
+	void adminsListAddAndRemoveAdminsFromTheGameKeepingTheFileComments() throws Exception {
+		mockMvc.perform(get("/admin/admins").header("Authorization", adminToken))
+				.andExpect(status().isOk()).andExpect(jsonPath("$.admins[0]").value(adminName.toUpperCase()));
+		mockMvc.perform(get("/admin/admins").header("Authorization", playerToken))
+				.andExpect(status().isForbidden()).andExpect(jsonPath("$.error_code").value("ERROR_ADMIN_REQUIRED"));
+
+		mockMvc.perform(post("/admin/admins").header("Authorization", adminToken).contentType(MediaType.APPLICATION_JSON)
+				.content("{\"player\":\"" + playerName + "\"}"))
+				.andExpect(status().isOk()).andExpect(jsonPath("$.admins[1]").value(playerName));
+		mockMvc.perform(get("/admin/me").header("Authorization", playerToken)).andExpect(jsonPath("$.admin").value(true));
+		assertThat(Files.readString(ADMIN_FILE)).startsWith("# Phantasmon admins");
+
+		mockMvc.perform(post("/admin/admins").header("Authorization", adminToken).contentType(MediaType.APPLICATION_JSON)
+				.content("{\"player\":\"" + playerName.toLowerCase() + "\"}"))
+				.andExpect(status().isConflict()).andExpect(jsonPath("$.error_code").value("ERROR_ADMIN_ALREADY"));
+		mockMvc.perform(post("/admin/admins").header("Authorization", adminToken).contentType(MediaType.APPLICATION_JSON)
+				.content("{\"player\":\"no spaces!\"}"))
+				.andExpect(status().isBadRequest()).andExpect(jsonPath("$.error_code").value("ERROR_ADMIN_NAME_INVALID"));
+		mockMvc.perform(delete("/admin/admins/" + adminName).header("Authorization", adminToken))
+				.andExpect(status().isConflict()).andExpect(jsonPath("$.error_code").value("ERROR_ADMIN_SELF"));
+
+		mockMvc.perform(delete("/admin/admins/" + playerName.toLowerCase()).header("Authorization", adminToken))
+				.andExpect(status().isOk()).andExpect(jsonPath("$.admins.length()").value(1));
+		mockMvc.perform(get("/admin/me").header("Authorization", playerToken)).andExpect(jsonPath("$.admin").value(false));
+		mockMvc.perform(delete("/admin/admins/" + playerName).header("Authorization", adminToken))
+				.andExpect(status().isNotFound()).andExpect(jsonPath("$.error_code").value("ERROR_ADMIN_NOT_FOUND"));
+	}
+
+	@Test
 	void onlyAnAdminLooksPlayersUpByName() throws Exception {
 		mockMvc.perform(get("/admin/players/" + playerName.toLowerCase()).header("Authorization", adminToken))
 				.andExpect(status().isOk())

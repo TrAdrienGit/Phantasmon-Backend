@@ -8,6 +8,7 @@ import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -36,10 +37,12 @@ public class AdminController {
 	private final LiveBattleService liveBattleService;
 	private final BackendRestarter restarter;
 	private final HubService hubService;
+	private final com.mystaria.phantasmon_backend.websocket.SessionRegistry sessions;
 
 	public AdminController(AdminService adminService, PlayerService playerService, LiveBattleService liveBattleService,
-			BackendRestarter restarter, HubService hubService) {
+			BackendRestarter restarter, HubService hubService, com.mystaria.phantasmon_backend.websocket.SessionRegistry sessions) {
 		this.hubService = hubService;
+		this.sessions = sessions;
 		this.adminService = adminService;
 		this.playerService = playerService;
 		this.liveBattleService = liveBattleService;
@@ -56,6 +59,41 @@ public class AdminController {
 	@GetMapping("/admin/me")
 	public Map<String, Object> me(Authentication authentication) {
 		return Map.of("admin", adminService.isAdmin(caller(authentication)));
+	}
+
+	/** The admins (the admin file's names), for the Admins page of the menu. */
+	@GetMapping("/admin/admins")
+	public Map<String, Object> admins(Authentication authentication) {
+		adminService.requireAdmin(caller(authentication));
+		return Map.of("admins", adminService.list());
+	}
+
+	@PostMapping("/admin/admins")
+	public Map<String, Object> addAdmin(@RequestBody StopBattleRequest request, Authentication authentication) {
+		UUID admin = caller(authentication);
+		adminService.requireAdmin(admin);
+		String name = request == null ? null : request.player();
+		Map<String, Object> out = Map.of("admins", adminService.add(admin, name));
+		adminChanged(name);
+		return out;
+	}
+
+	@DeleteMapping("/admin/admins/{name}")
+	public Map<String, Object> removeAdmin(@PathVariable String name, Authentication authentication) {
+		UUID admin = caller(authentication);
+		adminService.requireAdmin(admin);
+		Map<String, Object> out = Map.of("admins", adminService.remove(admin, name));
+		adminChanged(name);
+		return out;
+	}
+
+	/**
+	 * {@code AdminChanged} to the player added or removed, if connected (2026-11-25): their client asks
+	 * {@code /admin/me} again, so the admin menu and commands come or go at once, no reconnection.
+	 */
+	private void adminChanged(String name) {
+		playerService.findByName(name).ifPresent(player -> sessions.send(player.getUuid(),
+				com.mystaria.phantasmon_backend.websocket.WsMessage.of("AdminChanged", Map.of())));
 	}
 
 	@GetMapping("/admin/players/{name}")

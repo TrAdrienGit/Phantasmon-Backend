@@ -65,7 +65,7 @@ Make a folder for the backend, e.g. `/opt/phantasmon/`, and put in it:
 |---|---|
 | `phantasmon-backend.jar` | The jar you built. |
 | `.env` | The settings below (copy `.env.template` from the repository). Keep it private: it holds your database password and your signing key. |
-| `admins.txt` | The Minecraft usernames of your admins, one per line. Read again while running: no restart needed. |
+| `admins.txt` | The Minecraft usernames of your admins, one per line. Read again while running: no restart needed. Once you are an admin, you can also add and remove admins in game (menu **H**, Admins page). |
 | `hub_schematics/` | Your hubs' builds, one `hub_<name>/` folder each (see the documentation). Can stay empty. |
 | `addons/` | Optional backend modules (§7). Empty: Phantasmon alone. |
 
