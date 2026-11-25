@@ -16,9 +16,13 @@ Full documentation (architecture, API and WebSocket references, database schema,
 | **Pokémon** | Create (idempotent, auto PC slot), list, PC box view, edit, clone, delete. Legality (IVs 0-31, EVs 0-252, total ≤ 510). Team (6 slots) and PC (16 × 30) with uniform move-or-swap semantics. |
 | **Presence & Ghosts** | WebSocket `/ws?token=…`: players grouped by server fingerprint + dimension, heartbeat with TTL cleanup, Ghost spawn/move/despawn relayed to the group (owner included). In memory only. |
 | **Live trades** | Invitation → both players see each other's team → offers → both ready → one transaction swaps owners and team slots, recorded in `trades`. In-memory negotiation over the WebSocket. |
-| **Async trades** | `POST /trades`, accept/cancel, history — offer now, accept later. |
+| **Async trades** | `POST /trades`, accept/cancel, history: offer now, accept later (REST only; the client no longer uses it). |
 | **Live battles** | Invitation → the backend picks the **host** (alternating between the same two players) → the host client runs Cobblemon's own battle engine → the backend relays its encoded packets to the guest and the guest's choices back, handles the optional 90 s turn timer and records the result in `battle_sessions`. |
-| **Battle sessions (REST)** | `POST /battles`, result submission with guardrails — kept, not used by the live flow. |
+| **Battle lobby** | Smogon formats (Pokémon Showdown's rules refreshed at each start), team validation with the issues shown in red in the lobby (format, Pokémon terastallized from the start), intro, scene and field picked together; tournament matches and event NPCs lock what they impose. `GET /battles/{uuid}` only (`POST /battles` removed, SEC-3). |
+| **Hubs** (Phantasmon Network) | Hubs and their anchors (V11), players of several servers in one hub (50 at most), chat with moderation, voice relay, emotes, hub manager routes for players and admins. |
+| **Rewards** | Looks and reserved intros / ambiances won per player (`player_rewards`), given by an admin. |
+| **Admin** | `admins.txt`: a player's PC, stopping a battle, reboot, solo battle, hub chat moderation. |
+| **Add-ons** | Extension points (`addon/`: hub kinds, WebSocket handlers, public routes, NPC opponents, battle fields, tournaments); Phantasmon Events is loaded from `addons/` (D-41). |
 | **Version** | `GET /version` handshake (current / minimum supported client version). |
 | **Ops** | `GET /health` (DB check), one log file per run under `log/` with 5 GiB retention. |
 
@@ -67,6 +71,8 @@ The service listens on port 8080. Full launch guide, PostgreSQL in Docker and tr
 
 ## Backups
 
+On the Ubuntu server a daily `phantasmon-backup` timer keeps 14 daily and 3 months of weekly dumps
+(`Documentation/guides/deploying-ubuntu.md`); copying them off the server is still to do (TODO-16). On Windows,
 `scripts/backup-database.ps1` dumps the database (native PostgreSQL or the `phantasmon-postgres` container, detected
 automatically) into `backups/` with 14-day daily / 3-month weekly rotation; `scripts/test-restore.ps1` proves a dump
 restores, in a throwaway container. Details and scheduling: `Documentation/guides/deployment.md` §3. Dumps hold real
@@ -80,7 +86,12 @@ src/main/java/com/mystaria/phantasmon_backend/
 ├── player/      # player identity (Mojang UUID, last username)
 ├── pokemon/     # CRUD, legality, team/PC slots
 ├── trade/       # async trades + live trade sessions
-├── battle/      # live battles (invite, host, relay, timer) + REST sessions
+├── battle/      # live battles (invite, lobby, formats, host, relay, timer)
+├── hub/         # hubs, anchors, hub chat, voice and emotes relay
+├── reward/      # looks and reserved battle content won by players
+├── admin/       # admins.txt and admin actions
+├── addon/       # extension points for add-ons (Phantasmon Events)
+├── trainer/     # trainer animation profiles (Cobblemon Battle Showtime)
 ├── presence/    # in-memory presence, grouping, TTL
 ├── websocket/   # handshake auth, message dispatch, session registry
 ├── version/     # client version handshake
@@ -88,7 +99,7 @@ src/main/java/com/mystaria/phantasmon_backend/
 ├── logging/     # per-run log files, retention, request logging
 ├── common/      # structured errors, idempotency, clock
 └── config/      # .env loading
-src/main/resources/db/migration/   # Flyway V1…V8
+src/main/resources/db/migration/   # Flyway V1…V27
 ```
 
 Database schema, ER diagram and migration history: [`Documentation/reference/database-schema.md`](./Documentation/reference/database-schema.md).
