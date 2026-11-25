@@ -12,12 +12,20 @@ Group=phantasmon
 # The .env, hub_schematics/, log/, admins.txt and showdown-data/ are resolved from here.
 WorkingDirectory=/opt/phantasmon
 # Real environment variables win over the .env (DotenvEnvironmentPostProcessor adds it last): the database is the local
-# PostgreSQL of this server, and the backend only listens locally — Tailscale Funnel publishes it in HTTPS.
+# PostgreSQL of this server, and the backend only listens locally — Tailscale Funnel (server-linux) or Caddy (Oracle,
+# scripts/oracle/) publishes it in HTTPS.
 Environment=BDD_HOST=localhost
 Environment=BDD_PORT=5432
 Environment=SERVER_ADDRESS=127.0.0.1
 Environment=SERVER_PORT=8080
-ExecStart=/usr/bin/java -Xms256m -Xmx2g -jar /opt/phantasmon/phantasmon-backend.jar
+# Behind a reverse proxy (Tailscale Funnel or Caddy): trust its X-Forwarded-* headers, it is the only one reaching 127.0.0.1.
+Environment=SERVER_FORWARD_HEADERS_STRATEGY=native
+# JVM (2026-11-26 audit): the heap was allowed 2 GB and the RSS sat at 640 MB. 1 GB at most (a loaded mirror hub of the
+# Onyx league's size holds about 50 MB), small start, unused heap given back to the system after a minute idle,
+# duplicate strings merged, smaller thread stacks; an OutOfMemoryError exits so that systemd restarts it.
+# To change on one server only: systemctl edit phantasmon-backend, then Environment=JAVA_OPTS=...
+Environment="JAVA_OPTS=-Xms128m -Xmx1g -XX:+UseG1GC -XX:G1PeriodicGCInterval=60000 -XX:+UseStringDeduplication -Xss512k -XX:MaxMetaspaceSize=256m -XX:+ExitOnOutOfMemoryError"
+ExecStart=/usr/bin/java $JAVA_OPTS -jar /opt/phantasmon/phantasmon-backend.jar
 # Spring stops on SIGTERM with exit code 143: a normal stop, not a failure.
 SuccessExitStatus=143
 Restart=on-failure

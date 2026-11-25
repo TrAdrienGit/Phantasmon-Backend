@@ -13,6 +13,7 @@ exclusivement par le mod client [Phantasmon-Client](https://github.com/TrAdrienG
 | Comprendre le projet en 5 minutes | [`architecture/system-overview.md`](architecture/system-overview.md) |
 | Lancer le backend sur ma machine | [`guides/running.md`](guides/running.md) |
 | Déployer le backend sur le serveur Ubuntu | [`guides/deploying-ubuntu.md`](guides/deploying-ubuntu.md) |
+| Héberger le backend sur Oracle Cloud (gratuit) | [`guides/deploying-oracle.md`](guides/deploying-oracle.md) |
 | Appeler l'API | [`reference/rest-api.md`](reference/rest-api.md), [`reference/websocket-protocol.md`](reference/websocket-protocol.md) |
 | Savoir où en est le projet | [`project/status.md`](project/status.md), [`project/known-issues.md`](project/known-issues.md) |
 | Coder sur ce dépôt (humain ou agent IA) | [`agents/backend-agent-context.md`](agents/backend-agent-context.md) |
@@ -37,12 +38,14 @@ Documentation/
 ├── guides/
 │   ├── running.md                  lancer en développement, jar, PostgreSQL Docker, dépannage
 │   ├── deploying-ubuntu.md         déploiement sur le serveur Ubuntu (systemd, Tailscale Funnel)
+│   ├── deploying-oracle.md         migration vers Oracle Cloud Always Free (Caddy, HTTPS)
 │   ├── testing.md                  stratégie de test, Testcontainers, CI
 │   └── deployment.md               déploiement, infrastructure actuelle, sauvegardes
 ├── specifications/                 cahier des charges, Parties 1 à 4, annotées (miroir)
 ├── project/
 │   ├── status.md                   avancement, non implémenté (miroir)
-│   └── known-issues.md             bugs connus, TODO, dette technique, limites (miroir)
+│   ├── known-issues.md             bugs connus, TODO, dette technique, limites (miroir)
+│   └── audit-performance.md        audit RAM et latence du 2026-11-26, fait et proposé
 ├── agents/
 │   ├── backend-agent-context.md    règles pour les agents IA qui codent ici
 │   └── server-machine-briefing.md  briefing d'un agent IA sur la machine serveur

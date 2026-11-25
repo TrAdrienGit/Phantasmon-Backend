@@ -163,10 +163,10 @@ public class HubService {
 		sessionRegistry.send(playerUuid, WsMessage.of("HubJoined",
 				Map.of("members", others.stream().map(this::viewWithGhost).toList())));
 		WsMessage enter = WsMessage.of("HubPlayerEnter", member.view());
-		others.forEach(other -> sessionRegistry.send(other.playerUuid(), enter));
+		sessionRegistry.sendAll(uuids(others), enter);
 		ghostOf(playerUuid).ifPresent(ghost -> {
 			WsMessage spawn = WsMessage.of("HubGhostSpawn", ghost);
-			others.forEach(other -> sessionRegistry.send(other.playerUuid(), spawn));
+			sessionRegistry.sendAll(uuids(others), spawn);
 		});
 		// The voice icons of those already there (their own client told the backend).
 		others.forEach(other -> {
@@ -190,7 +190,7 @@ public class HubService {
 		}
 		log.info("Player {} left the Hub ({})", member.username(), reason == null ? "disconnected" : reason);
 		WsMessage leave = WsMessage.of("HubPlayerLeave", Map.of("player_uuid", playerUuid));
-		visibleTo(member).forEach(other -> sessionRegistry.send(other.playerUuid(), leave));
+		sessionRegistry.sendAll(uuids(visibleTo(member)), leave);
 		if (reason != null) {
 			sessionRegistry.send(playerUuid, WsMessage.of("HubLeft", Map.of("reason", reason)));
 		}
@@ -276,7 +276,7 @@ public class HubService {
 			return;
 		}
 		WsMessage relay = WsMessage.of("HubPlayerMove", Map.of("player_uuid", playerUuid, "state", state));
-		visibleTo(moved).forEach(other -> sessionRegistry.send(other.playerUuid(), relay));
+		sessionRegistry.sendAll(uuids(visibleTo(moved)), relay);
 	}
 
 	/**
@@ -330,7 +330,7 @@ public class HubService {
 		WsMessage chat = WsMessage.of("HubChatMessage", Map.of("player_uuid", playerUuid, "username", member.username(),
 				"message", message, "sent_at", now.toString(), "announcement", announcement));
 		sessionRegistry.send(playerUuid, chat);
-		visibleTo(member).forEach(other -> sessionRegistry.send(other.playerUuid(), chat));
+		sessionRegistry.sendAll(uuids(visibleTo(member)), chat);
 	}
 
 	// ---- Chat moderation (TODO-31) ----
@@ -374,7 +374,7 @@ public class HubService {
 		chatLocked = !chatLocked;
 		log.info("Hub chat: admin {} {} the chat", adminUuid, chatLocked ? "locked" : "unlocked");
 		WsMessage lock = WsMessage.of("HubChatLock", Map.of("locked", chatLocked));
-		members.keySet().forEach(uuid -> sessionRegistry.send(uuid, lock));
+		sessionRegistry.sendAll(members.keySet(), lock);
 		return chatLocked;
 	}
 
@@ -383,7 +383,7 @@ public class HubService {
 		Member member = members.get(playerUuid);
 		if (member != null) {
 			WsMessage spawn = WsMessage.of("HubGhostSpawn", GhostPayloads.withoutPosition(playerUuid, pokemon));
-			visibleTo(member).forEach(other -> sessionRegistry.send(other.playerUuid(), spawn));
+			sessionRegistry.sendAll(uuids(visibleTo(member)), spawn);
 		}
 	}
 
@@ -392,7 +392,7 @@ public class HubService {
 		Member member = members.get(playerUuid);
 		if (member != null) {
 			WsMessage despawn = WsMessage.of("HubGhostDespawn", Map.of("player_uuid", playerUuid, "pokemon_uuid", pokemonUuid));
-			visibleTo(member).forEach(other -> sessionRegistry.send(other.playerUuid(), despawn));
+			sessionRegistry.sendAll(uuids(visibleTo(member)), despawn);
 		}
 	}
 
@@ -425,7 +425,7 @@ public class HubService {
 		data.put("player_uuid", playerUuid.toString());
 		data.put("emote_uuid", emote);
 		WsMessage relay = WsMessage.of("HubPlayerEmote", data);
-		visibleTo(member).forEach(other -> sessionRegistry.send(other.playerUuid(), relay));
+		sessionRegistry.sendAll(uuids(visibleTo(member)), relay);
 	}
 
 	/** An emote's full animation ({@link HubEmoteFrame}): relayed as is to those who see the member. */
@@ -460,7 +460,7 @@ public class HubService {
 				"muted", enabled && muted, "deafened", enabled && deafened);
 		if (!status.equals(voiceStatus.put(playerUuid, status))) {
 			WsMessage message = WsMessage.of("HubVoiceStatus", status);
-			visibleTo(member).forEach(other -> sessionRegistry.send(other.playerUuid(), message));
+			sessionRegistry.sendAll(uuids(visibleTo(member)), message);
 		}
 	}
 
@@ -527,6 +527,12 @@ public class HubService {
 			}
 		}
 		return visible;
+	}
+
+	private static List<UUID> uuids(List<Member> members) {
+		List<UUID> uuids = new ArrayList<>(members.size());
+		members.forEach(member -> uuids.add(member.playerUuid()));
+		return uuids;
 	}
 
 	private void error(UUID playerUuid, String errorCode, Map<String, Object> details) {

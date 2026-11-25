@@ -29,6 +29,13 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class RequestLoggingFilter extends OncePerRequestFilter {
 
+	/** A poll slower than this is logged even when it succeeds. */
+	static final long SLOW_POLL_MILLIS = 500;
+
+	static boolean isPoll(String uri) {
+		return "/health".equals(uri) || (uri.startsWith("/server/mirror/") && uri.endsWith("/feed"));
+	}
+
 	@Override
 	protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
 			throws ServletException, IOException {
@@ -37,7 +44,14 @@ public class RequestLoggingFilter extends OncePerRequestFilter {
 			filterChain.doFilter(request, response);
 		} finally {
 			long durationMillis = System.currentTimeMillis() - start;
-			log.info("{} {} -> {} ({} ms)", request.getMethod(), request.getRequestURI(), response.getStatus(), durationMillis);
+			String uri = request.getRequestURI();
+			// Polls (our Minecraft server reads each mirror hub's feed every second, clients ping /health) made up nearly
+			// every line of the log: logged only when they fail or are slow.
+			if (isPoll(uri) && response.getStatus() < 400 && durationMillis < SLOW_POLL_MILLIS) {
+				log.debug("{} {} -> {} ({} ms)", request.getMethod(), uri, response.getStatus(), durationMillis);
+			} else {
+				log.info("{} {} -> {} ({} ms)", request.getMethod(), uri, response.getStatus(), durationMillis);
+			}
 		}
 	}
 }

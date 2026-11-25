@@ -7,6 +7,7 @@ import org.mockito.Mockito;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
 
+import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
@@ -36,7 +37,7 @@ class RequestLoggingFilterTest {
 
 	@Test
 	void logsMethodPathStatusAndAlwaysContinuesTheChain() throws Exception {
-		MockHttpServletRequest request = new MockHttpServletRequest("GET", "/health");
+		MockHttpServletRequest request = new MockHttpServletRequest("GET", "/players/me/pokemon");
 		MockHttpServletResponse response = new MockHttpServletResponse();
 		response.setStatus(200);
 		FilterChain chain = Mockito.mock(FilterChain.class);
@@ -46,7 +47,24 @@ class RequestLoggingFilterTest {
 		verify(chain).doFilter(request, response);
 		assertThat(logAppender.list).hasSize(1);
 		String message = logAppender.list.get(0).getFormattedMessage();
-		assertThat(message).contains("GET").contains("/health").contains("200");
+		assertThat(message).contains("GET").contains("/players/me/pokemon").contains("200");
+	}
+
+	@Test
+	void aSuccessfulPollStaysOutOfTheInfoLogButAFailedOneIsLogged() throws Exception {
+		FilterChain chain = Mockito.mock(FilterChain.class);
+		for (String uri : new String[] { "/health", "/server/mirror/ligue_onyx/feed" }) {
+			MockHttpServletResponse ok = new MockHttpServletResponse();
+			ok.setStatus(200);
+			filter.doFilter(new MockHttpServletRequest("GET", uri), ok, chain);
+		}
+		assertThat(logAppender.list).noneMatch(event -> event.getLevel() == Level.INFO);
+
+		MockHttpServletResponse notFound = new MockHttpServletResponse();
+		notFound.setStatus(404);
+		filter.doFilter(new MockHttpServletRequest("GET", "/server/mirror/nowhere/feed"), notFound, chain);
+		assertThat(logAppender.list).filteredOn(event -> event.getLevel() == Level.INFO).singleElement()
+				.satisfies(event -> assertThat(event.getFormattedMessage()).contains("/server/mirror/nowhere/feed").contains("404"));
 	}
 
 	@Test

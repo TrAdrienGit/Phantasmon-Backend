@@ -1178,8 +1178,8 @@ public class LiveBattleService {
 		WsMessage field = WsMessage.of("BattleFieldPacket", packet);
 		if (target == null) {
 			refreshViewers(battle);
-			battle.spectators.forEach(spectator -> sessionRegistry.send(spectator, message));
-			battle.viewers.forEach(viewer -> sessionRegistry.send(viewer, field));
+			sessionRegistry.sendAll(battle.spectators, message);
+			sessionRegistry.sendAll(battle.viewers, field);
 			return;
 		}
 		battle.spectators.stream().filter(spectator -> spectator.toString().equals(target.toString())).findFirst()
@@ -1433,7 +1433,7 @@ public class LiveBattleService {
 		}
 		battle.spectators.clear();
 		WsMessage fieldEnded = WsMessage.of("BattleFieldEnded", Map.of("battle_uuid", battle.uuid, "reason", reason));
-		battle.viewers.forEach(viewer -> sessionRegistry.send(viewer, fieldEnded));
+		sessionRegistry.sendAll(battle.viewers, fieldEnded);
 		battle.viewers.clear();
 		if (battle.tournamentMatch != null && tournamentHook != null) {
 			tournamentHook.onGameEnded(battle.tournamentMatch, winnerUuid, reason);

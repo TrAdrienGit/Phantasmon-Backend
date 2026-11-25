@@ -24,7 +24,6 @@ import com.mystaria.phantasmon_backend.battle.LiveBattleService;
 import com.mystaria.phantasmon_backend.trade.LiveTradeService;
 
 import lombok.extern.slf4j.Slf4j;
-import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
 /**
@@ -171,8 +170,8 @@ public class PhantasmonWebSocketHandler extends TextWebSocketHandler {
 		}
 		WsMessage incoming;
 		try {
-			JsonNode node = objectMapper.readTree(message.getPayload());
-			incoming = objectMapper.treeToValue(node, WsMessage.class);
+			// One pass straight to the record (it was readTree + treeToValue: the payload parsed twice).
+			incoming = objectMapper.readValue(message.getPayload(), WsMessage.class);
 		} catch (Exception ex) {
 			send(session, WsMessage.error("ERROR_WS_MALFORMED_MESSAGE", Map.of()));
 			return;
@@ -342,7 +341,7 @@ public class PhantasmonWebSocketHandler extends TextWebSocketHandler {
 	}
 
 	private void broadcast(List<UUID> recipients, WsMessage message) {
-		recipients.forEach(recipient -> sessionRegistry.send(recipient, message));
+		sessionRegistry.sendAll(recipients, message);
 	}
 
 	/**
@@ -353,12 +352,13 @@ public class PhantasmonWebSocketHandler extends TextWebSocketHandler {
 	 * from the feature being broken (found via Adrien's manual QA, 2026-09-26).
 	 */
 	private void broadcastToGroupAndSelf(UUID playerUuid, WsMessage message) {
-		broadcast(presenceService.groupMembers(playerUuid), message);
-		sessionRegistry.send(playerUuid, message);
+		List<UUID> recipients = new java.util.ArrayList<>(presenceService.groupMembers(playerUuid));
+		recipients.add(playerUuid);
+		sessionRegistry.sendAll(recipients, message);
 	}
 
 	private void send(WebSocketSession session, WsMessage message) throws Exception {
-		SessionRegistry.sendTo(session, objectMapper.writeValueAsString(message));
+		sessionRegistry.reply(session, objectMapper.writeValueAsString(message));
 	}
 
 	private static UUID playerUuid(WebSocketSession session) {

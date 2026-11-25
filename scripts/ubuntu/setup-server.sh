@@ -131,7 +131,11 @@ if ! curl -fsS http://127.0.0.1:8080/health >/dev/null 2>&1; then
 fi
 
 # ---------------------------------------------------------------- Tailscale Funnel (public HTTPS)
-if command -v tailscale >/dev/null 2>&1; then
+# Not on a server that publishes the backend itself (Oracle VM: Caddy, set up by scripts/oracle/prepare-vm.sh, which
+# writes this marker): Tailscale there is only for administration.
+if [[ -f /etc/phantasmon/public-proxy ]]; then
+	log "Public HTTPS by $(cat /etc/phantasmon/public-proxy): Tailscale Funnel left off."
+elif command -v tailscale >/dev/null 2>&1; then
 	# Not yet allowed on the tailnet, it waits for the approval link it prints: 3 minutes at most.
 	if timeout 180 tailscale funnel --bg 8080 >/tmp/phantasmon-funnel.log 2>&1; then
 		log "Tailscale Funnel on: $(tailscale funnel status 2>/dev/null | grep -o 'https://[^ ]*' | head -1)"
