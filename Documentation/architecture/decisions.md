@@ -54,6 +54,7 @@ Pour ajouter une décision : prendre le numéro suivant, dater, et mettre à jou
 | D-39 | Le moins de commandes possible, toutes sous `/phantasmon` | Acceptée | 2026-10-30 |
 | D-40 | Cobblemon Spectacle devient Cobblemon Battle Showtime | Acceptée | 2026-11-05 |
 | D-41 | Phantasmon Events, add-on facultatif : module chargé par le backend Phantasmon | Acceptée | 2026-11-10 |
+| D-42 | Nouvelles Méga-Évolutions (Légendes Z-A / Champions) par le moteur Phantasmon seul | Acceptée | 2026-11-26 |
 
 ---
 
@@ -594,3 +595,22 @@ Pour ajouter une décision : prendre le numéro suivant, dater, et mettre à jou
   d'Adrien : « type de hub » dans le cœur) : `hubs.kind` (V25), point d'extension `HubKind`, module
   `Phantasmon-Events/backend` (même package `events`, Flyway propre `db/events`), jar du cœur en `PropertiesLauncher`
   (`Loader-Path: addons/`), `GET /version` liste les add-ons, `deploy-ubuntu.sh` installe le module (`--no-events`).
+
+## D-42 — Nouvelles Méga-Évolutions (Légendes Z-A / Champions) par le moteur Phantasmon seul
+
+- **Date** : 2026-11-26.
+- **Contexte** : Légendes Pokémon Z-A et Pokémon Champions ajoutent 49 formes Méga, 45 Méga-Gemmes et 7 talents.
+  Le moteur Showdown embarqué par Cobblemon 1.8.1 n'en connaît aucune ; aucun pack (CCC compris) n'a leurs modèles.
+- **Décision** : les combats Phantasmon les ont, sans rien installer côté serveur Minecraft. Le client hôte les
+  ajoute à son moteur par une extension (`NewMegas`, données Showdown MIT à un commit figé, générées par
+  `tools/new_megas.py`, testées dans le moteur de Cobblemon par `tools/new_megas_test.js`) ; les gemmes sont
+  virtuelles (`VirtualItems`). L'extension n'ajoute que ce que le moteur ignore : si Cobblemon, Academy ou un mod les
+  apporte, les leurs jouent. Modèles : pack privé « Phantasmon Megas » construit par `tools/mega_pack.py` depuis
+  Mega Showdown (CC BY-NC-SA 4.0), jamais publié sur Modrinth / CurseForge. Backend : permises dans les formats
+  Champions de Showdown (mod `champions`) et en « Libre », refusées dans les formats Smogon ; une Méga-Gemme tenue
+  par une autre espèce que la sienne est refusée (`itemUser`), anciennes gemmes comprises.
+- **Conséquences** : 40 formes ont un modèle ; Heatran, Darkrai, Zeraora, Tatsugiri (×3), Magearna (×2) et Zygarde
+  gardent leur modèle normal (la mise en scène Showtime joue). Aspect `mega_z` (Absol, Carchacrok, Lucario Z). Les
+  formats Champions ne sont pas encore proposés dans le lobby : aujourd'hui, seul « Libre » permet les nouvelles Méga.
+  Les noms français des 7 talents restent à trouver (anglais en attendant). Plan :
+  `Phantasmon-Client/Documentation/research/nouvelles-megas-plan.md`.

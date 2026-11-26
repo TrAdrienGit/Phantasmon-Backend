@@ -129,5 +129,34 @@ class TeamValidatorTest {
 		assertThat(issues.get(2)).as("Garchomp-Mega is ND OU").isEmpty();
 		assertThat(check("gen9nationaldexubers", mon("lucario", "lucarionite", "aurasphere")).get(0)).isEmpty();
 	}
+
+	private static TeamValidator.Member form(String species, String form, String item) {
+		return new TeamValidator.Member(species, form, "pressure", item, List.of("tackle"), null);
+	}
+
+	@Test
+	void newMegaStonesAreLegalInChampionsFormatsAndFreeButNotInSmogonFormats() {
+		var champions = validator.validate(formats.resolveAny("gen9championsou"),
+				List.of(mon("clefable", "clefablite"), form("meowstic", "f", "meowsticite")));
+		assertThat(champions).allMatch(List::isEmpty);
+		assertThat(check(BattleFormats.FREE, mon("clefable", "clefablite"), form("meowstic", "f", "meowsticite")))
+				.allMatch(List::isEmpty);
+		for (String format : List.of("gen9ou", "gen9nationaldex", "gen9anythinggoes")) {
+			var issues = check(format, mon("clefable", "clefablite"), form("meowstic", "f", "meowsticite"));
+			assertThat(issues.get(0)).as(format).contains(new TeamValidator.Issue("NONSTANDARD", "Clefablite"));
+			assertThat(issues.get(1)).as(format).contains(new TeamValidator.Issue("NONSTANDARD", "Meowsticite"));
+		}
+	}
+
+	@Test
+	void aMegaStoneOnlyGoesToItsOwnSpecies() {
+		var champions = formats.resolveAny("gen9championsou");
+		assertThat(champions).isNotNull();
+		assertThat(validator.validate(champions, List.of(mon("pikachu", "clefablite"))).get(0))
+				.contains(new TeamValidator.Issue("BANNED", "Clefablite"));
+		assertThat(check("gen9nationaldex", mon("pikachu", "garchompite")).get(0))
+				.contains(new TeamValidator.Issue("BANNED", "Garchompite"));
+		assertThat(check("gen9nationaldex", mon("garchomp", "garchompite")).get(0)).isEmpty();
+	}
 }
 

@@ -81,6 +81,11 @@ public final class BattleFormats {
 		return resolved.computeIfAbsent(id, this::resolve);
 	}
 
+	/** Any format of Showdown's data, offered or not (tests, future lobby entries). */
+	Format resolveAny(String id) {
+		return resolved.computeIfAbsent(id, this::resolve);
+	}
+
 	public List<Format> offered() {
 		List<Format> formats = new ArrayList<>();
 		for (String id : OFFERED) {
@@ -109,6 +114,11 @@ public final class BattleFormats {
 				ShowdownData.RuleDef ruleDef = data.rule(rule);
 				battleRules.add(ruleDef != null ? ruleDef.name() : rule);
 			}
+		}
+		// Showdown's "champions" mods redefine the items / forms of the Champions games, so the Future ones (the new Mega
+		// Evolutions and their stones) are legal there; Smogon formats keep them banned unless they unban Future.
+		if (def.mod() != null && def.mod().startsWith("champions")) {
+			builder.unbans.add("future");
 		}
 		return new Format(id, def.name(), Set.copyOf(builder.rules), Set.copyOf(builder.bans), Set.copyOf(builder.unbans),
 				Map.copyOf(builder.values), List.copyOf(battleRules));

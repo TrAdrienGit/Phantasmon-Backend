@@ -65,6 +65,7 @@ public final class TeamValidator {
 			checkSpecies(format, species, own);
 			ShowdownData.EntryDef item = data.item(toId(member.item()));
 			checkEntry(format, item, own);
+			checkMegaStoneUser(species, item, own);
 			checkMegaStone(format, species, item, own);
 			checkEntry(format, data.ability(toId(member.ability())), own);
 			for (String move : member.moves()) {
@@ -188,6 +189,16 @@ public final class TeamValidator {
 		List<Issue> megaIssues = new ArrayList<>();
 		checkSpecies(format, mega, megaIssues);
 		if (megaIssues.stream().anyMatch(issue -> "BANNED".equals(issue.code()))) {
+			issues.add(new Issue("BANNED", item.name()));
+		}
+	}
+
+	/** A Mega Stone only goes to its own species (Showdown's {@code itemUser}): Clefablite on Clefable, not on Pikachu. */
+	private void checkMegaStoneUser(ShowdownData.SpeciesDef species, ShowdownData.EntryDef item, List<Issue> issues) {
+		if (species == null || item == null || item.megaStone().isEmpty()) {
+			return;
+		}
+		if (!item.usableBy(species.id())) {
 			issues.add(new Issue("BANNED", item.name()));
 		}
 	}

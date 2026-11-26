@@ -42,7 +42,7 @@ public final class ShowdownData {
 
 	/** An item, ability or move: its name, its non-standard status, and (moves) the flags the clauses look at. */
 	public record EntryDef(String id, String name, String isNonstandard, boolean ohko, String status, int evasionBoost,
-			int accuracyBoost, boolean selfTarget, Map<String, String> megaStone) {
+			int accuracyBoost, boolean selfTarget, Map<String, String> megaStone, List<String> itemUser) {
 
 		/** Items: the Mega forme this stone gives {@code speciesName} (Showdown name), or null. */
 		public String megaFormeFor(String speciesName) {
@@ -51,6 +51,14 @@ public final class ShowdownData {
 			}
 			String forme = megaStone.get(speciesName);
 			return forme != null ? forme : megaStone.size() == 1 && megaStone.containsKey("") ? megaStone.get("") : null;
+		}
+
+		/**
+		 * Items: whether {@code speciesId} may hold this item, by Showdown's {@code itemUser} key (the species the item is
+		 * bound to). True when the item has no such key.
+		 */
+		public boolean usableBy(String speciesId) {
+			return itemUser.isEmpty() || itemUser.stream().anyMatch(user -> toId(user).equals(speciesId));
 		}
 	}
 
@@ -125,7 +133,8 @@ public final class ShowdownData {
 			}
 			result.put(entry.getKey(), new EntryDef(entry.getKey(), text(node, "name"), text(node, "isNonstandard"),
 					ohko != null && !(ohko.isBoolean() && !ohko.asBoolean()), text(node, "status"),
-					evasion, accuracy, "self".equals(text(node, "target")), Map.copyOf(megaStone)));
+					evasion, accuracy, "self".equals(text(node, "target")), Map.copyOf(megaStone),
+						strings(node.get("itemUser"))));
 		}
 		return result;
 	}
