@@ -30,6 +30,10 @@ HTTPS à la place de Tailscale Funnel, et l'utilisateur SSH est `ubuntu` (avec `
    - sous-réseau public, *Assign a public IPv4 address* ;
    - clé SSH : ta clé publique (`~/.ssh/id_ed25519.pub`) ;
    - volume de démarrage 50 Go (200 Go gratuits au total).
+
+   « Out of capacity » : Oracle n'a plus de machine A1 libre. `scripts/oracle/launch-instance.py` réessaie toutes les
+   5 minutes (2 OCPU / 12 Go puis 1 / 6) et s'arrête dès que l'instance existe. Il faut le SDK (`pip install oci`) et une
+   clé d'API dans `~/.oci/config` (*My profile → API keys → Add API key*, clé privée enregistrée dans `~/.oci/`).
 4. **IP fixe** : l'IP publique « éphémère » ne change pas tant que l'instance existe, même après un redémarrage. Pour une
    IP qui survit à la suppression de l'instance : *Networking → IP Management → Reserved Public IPs*, puis l'attacher à
    la carte réseau de l'instance (*Attached VNICs → IPv4 Addresses → Edit*). Vérifier dans la console qu'elle est
