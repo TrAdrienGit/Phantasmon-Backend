@@ -17,6 +17,9 @@ from pathlib import Path
 
 import oci
 
+# Seconds between two shapes of one round.
+SHAPE_PAUSE = 90
+
 
 def log(message):
     print(f"[{datetime.now():%Y-%m-%d %H:%M:%S}] {message}", flush=True)
@@ -85,6 +88,8 @@ def main():
                 except oci.exceptions.ServiceError as error:
                     if error.status == 500 and "capacity" in (error.message or "").lower():
                         log(f"Attempt {attempt}: {ocpus:g} OCPU / {memory:g} GB, no capacity yet.")
+                        # Back to back, the next shape's request is refused as "too many requests".
+                        time.sleep(SHAPE_PAUSE)
                         continue
                     if error.status == 429:
                         log(f"Attempt {attempt}: too many requests, waiting longer.")
