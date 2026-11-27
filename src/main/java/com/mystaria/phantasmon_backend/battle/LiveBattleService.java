@@ -507,12 +507,75 @@ public class LiveBattleService {
 			sendError(playerUuid, "ERROR_BATTLE_INVALID_PARTY");
 			return;
 		}
-		choose(side, playerUuid, choice);
+		if (format(lobby).randomTeam()) {
+			side.choice = choice; // a random format plays its generated team: this one waits for the next format
+		} else {
+			choose(side, playerUuid, choice);
+		}
 		if (lobby.npc == null) {
 			lobby.side(lobby.other(playerUuid)).ready = false;
 		}
 		sendLobby(lobby, playerUuid);
 		sendLobby(lobby, lobby.other(playerUuid));
+	}
+
+	/**
+	 * Random formats (2026-11-27): the team Showdown generated on the player's client for the lobby's format
+	 * ({@code formatId}, so a team generated for a format left since is dropped). The player sees it and picks their
+	 * lead(s) as with their own; the opponent never sees it before the battle.
+	 */
+	public synchronized void setLobbyRandomTeam(UUID playerUuid, UUID lobbyUuid, String formatId, Object rawTeam) {
+		Lobby lobby = lobbyOf(playerUuid, lobbyUuid);
+		if (lobby == null) {
+			return;
+		}
+		BattleFormats.Format format = format(lobby);
+		LobbySide side = lobby.side(playerUuid);
+		if (!format.randomTeam() || !format.id().equals(formatId) || side.ready) {
+			return; // stale: the format changed meanwhile
+		}
+		List<PokemonResponse> team = new ArrayList<>();
+		if (rawTeam instanceof List<?> list && !list.isEmpty() && list.size() <= format.maxTeamSize()) {
+			for (Object raw : list) {
+				PokemonResponse pokemon = raw instanceof Map<?, ?> map ? generated(playerUuid, map, team.size() + 1) : null;
+				if (pokemon == null) {
+					team.clear();
+					break;
+				}
+				team.add(pokemon);
+			}
+		}
+		if (team.isEmpty()) {
+			sendError(playerUuid, "ERROR_WS_MALFORMED_MESSAGE");
+			return;
+		}
+		side.team = team;
+		side.resetLeads();
+		log.info("Live battle lobby {}: random team of {} for {}", lobby.uuid, playerUuid,
+				team.stream().map(PokemonResponse::species).toList());
+		sendLobby(lobby, playerUuid);
+		sendLobby(lobby, lobby.other(playerUuid));
+	}
+
+	/** A generated Pokémon as the client sent it, or null if a field is missing. Never stored. */
+	@SuppressWarnings("unchecked")
+	private static PokemonResponse generated(UUID ownerUuid, Map<?, ?> member, int slot) {
+		if (!(member.get("species") instanceof String species) || species.isBlank() || species.length() > 64
+				|| !(member.get("level") instanceof Number level) || level.intValue() < 1 || level.intValue() > 100
+				|| !(member.get("data") instanceof Map<?, ?> data)) {
+			return null;
+		}
+		UUID uuid;
+		try {
+			uuid = UUID.fromString(String.valueOf(member.get("uuid")));
+		} catch (IllegalArgumentException ex) {
+			uuid = UUID.randomUUID();
+		}
+		return new PokemonResponse(uuid, ownerUuid, species, member.get("form") instanceof String form ? form : null,
+				level.intValue(), member.get("nature") instanceof String nature ? nature : "hardy",
+				member.get("ability") instanceof String ability ? ability : "", Boolean.TRUE.equals(member.get("is_shiny")),
+				null, null, slot, member.get("cobblemon_data_version") instanceof String version ? version : "?",
+				(Map<String, Object>) data);
 	}
 
 	/**
@@ -535,9 +598,20 @@ public class LiveBattleService {
 		if (formatId.equals(lobby.formatId)) {
 			return;
 		}
+		boolean wasRandom = format(lobby).randomTeam();
 		lobby.formatId = formatId;
 		lobby.inviterSide.ready = false;
 		lobby.inviteeSide.ready = false;
+		// Into a random format: the teams are generated anew (each client sends its own); out of one: back to theirs.
+		if (format(lobby).randomTeam()) {
+			for (LobbySide side : List.of(lobby.inviterSide, lobby.inviteeSide)) {
+				side.team = List.of();
+				side.resetLeads();
+			}
+		} else if (wasRandom) {
+			choose(lobby.inviterSide, lobby.inviterUuid, lobby.inviterSide.choice);
+			choose(lobby.inviteeSide, lobby.inviteeUuid, lobby.inviteeSide.choice);
+		}
 		log.info("Live battle lobby {}: format {} picked by {}", lobby.uuid, formatId, playerUuid);
 		sendLobby(lobby, playerUuid);
 		sendLobby(lobby, lobby.other(playerUuid));
@@ -719,15 +793,21 @@ public class LiveBattleService {
 
 	/**
 	 * Pokémon picked one by one in order (2026-11-27): doubles (1 and 2 lead), and the singles formats sending only
-	 * some of the team (BSS: 3 of 6, the first leads); else a single lead is picked. Random formats pick nothing.
+	 * some of the team (BSS: 3 of 6, the first leads); else a single lead is picked.
 	 */
 	private static boolean pickMode(BattleFormats.Format format) {
-		return !format.randomTeam() && (format.doubles() || format.pickedTeamSize() > 1);
+		return format.doubles() || format.pickedTeamSize() > 1;
 	}
 
 	/** Pokémon of a team of {@code teamSize} that go into the battle: the format's "pick n", else all of them. */
 	private static int battleSize(BattleFormats.Format format, int teamSize) {
 		return format.pickedTeamSize() > 0 ? Math.min(format.pickedTeamSize(), teamSize) : teamSize;
+	}
+
+	/** False while a random format's opponent (a player) has not sent the team Showdown generated for them. */
+	private boolean opponentTeamGenerated(Lobby lobby, LobbySide side) {
+		LobbySide opponent = side == lobby.inviterSide ? lobby.inviteeSide : lobby.inviterSide;
+		return lobby.npc != null || !format(lobby).randomTeam() || !opponent.team.isEmpty();
 	}
 
 	/** Ready (team and lead locked) or not. Both ready: the battle starts. */
@@ -737,8 +817,13 @@ public class LiveBattleService {
 			return;
 		}
 		LobbySide side = lobby.side(playerUuid);
-		if (ready && side.team.isEmpty() && !format(lobby).randomTeam()) {
+		if (ready && side.team.isEmpty()) {
 			sendError(playerUuid, "ERROR_BATTLE_EMPTY_TEAM");
+			return;
+		}
+		if (ready && !opponentTeamGenerated(lobby, side)) {
+			// Random format: both teams must be generated before anyone locks in.
+			sendLobby(lobby, playerUuid);
 			return;
 		}
 		if (ready && breaksRules(issues(lobby, side.team))) {
@@ -784,7 +869,7 @@ public class LiveBattleService {
 			if (lobby.deadline == null || lobby.deadline.isAfter(now)) {
 				continue;
 			}
-			if ((lobby.inviterSide.team.isEmpty() || lobby.inviteeSide.team.isEmpty()) && !format(lobby).randomTeam()) {
+			if (lobby.inviterSide.team.isEmpty() || (lobby.inviteeSide.team.isEmpty() && lobby.npc == null)) {
 				cancelLobby(lobby, "EMPTY_TEAM", null);
 				continue;
 			}
@@ -845,7 +930,7 @@ public class LiveBattleService {
 		data.put("own_lead", leads.isEmpty() ? 0 : leads.get(0));
 		data.put("own_leads", leads);
 		// Pick mode (doubles, "pick n"): the Pokémon picked in order; how many go into the battle (VGC: 4), the others
-		// are picked in team order. Random formats: Showdown generates both teams at the start.
+		// are picked in team order. Random formats: each client sends the team Showdown generated for it.
 		data.put("pick_mode", picked);
 		data.put("random_team", lobbyFormat.randomTeam());
 		data.put("own_picks", List.copyOf(own.picks));
@@ -853,8 +938,11 @@ public class LiveBattleService {
 		data.put("game_type", doubles ? BattleFormats.DOUBLES : BattleFormats.SINGLES);
 		data.put("own_ready", own.ready);
 		data.put("opponent_team_source", opponent.choice.source().name());
-		data.put("opponent_team", opponent.team.stream().map(LiveBattleService::preview).toList());
+		// A random format's teams stay secret until the battle: the opponent's is not even previewed.
+		data.put("opponent_team", lobbyFormat.randomTeam() ? List.of()
+				: opponent.team.stream().map(LiveBattleService::preview).toList());
 		data.put("opponent_ready", opponent.ready);
+		data.put("opponent_team_generated", opponentTeamGenerated(lobby, own));
 		data.put("timer_total_seconds", lobbyTimer.toSeconds());
 		data.put("timer_seconds_left", lobby.deadline == null ? null
 				: Math.max(0, Duration.between(clock.instant(), lobby.deadline).plusMillis(999).toSeconds()));
@@ -919,10 +1007,12 @@ public class LiveBattleService {
 	 * A side's final team: Ghosts re-read (the team may have changed meanwhile), the leads moved first in slot order
 	 * (two in doubles), slots renumbered.
 	 */
-	private List<PokemonResponse> battleTeam(UUID playerUuid, LobbySide side, boolean picked) {
+	private List<PokemonResponse> battleTeam(UUID playerUuid, LobbySide side, BattleFormats.Format format) {
 		// The lead first; in pick mode the picks in their order (the others follow, in team order).
-		List<UUID> wanted = side.order(picked).stream().map(index -> side.team.get(index).uuid()).toList();
-		List<PokemonResponse> team = side.choice.isGhost() ? resolve(playerUuid, side.choice) : new ArrayList<>(side.team);
+		List<UUID> wanted = side.order(pickMode(format)).stream().map(index -> side.team.get(index).uuid()).toList();
+		// Ghosts are re-read; a random format's generated team is the one in the lobby.
+		List<PokemonResponse> team = side.choice.isGhost() && !format.randomTeam() ? resolve(playerUuid, side.choice)
+				: new ArrayList<>(side.team);
 		team.sort(Comparator.comparingInt(pokemon -> {
 			int rank = wanted.indexOf(pokemon.uuid());
 			return rank < 0 ? Integer.MAX_VALUE : rank;
@@ -957,12 +1047,9 @@ public class LiveBattleService {
 		UUID inviterUuid = lobby.inviterUuid;
 		UUID inviteeUuid = lobby.inviteeUuid;
 		BattleFormats.Format format = format(lobby);
-		// Random formats: no team of their own, the host generates both.
-		List<PokemonResponse> inviterTeam = format.randomTeam() ? List.of()
-				: battleTeam(inviterUuid, lobby.inviterSide, pickMode(format));
-		List<PokemonResponse> inviteeTeam = format.randomTeam() ? List.of()
-				: battleTeam(inviteeUuid, lobby.inviteeSide, pickMode(format));
-		if ((inviterTeam.isEmpty() || inviteeTeam.isEmpty()) && !format.randomTeam()) {
+		List<PokemonResponse> inviterTeam = battleTeam(inviterUuid, lobby.inviterSide, format);
+		List<PokemonResponse> inviteeTeam = battleTeam(inviteeUuid, lobby.inviteeSide, format);
+		if (inviterTeam.isEmpty() || inviteeTeam.isEmpty()) {
 			cancelLobby(lobby, "EMPTY_TEAM", null);
 			return;
 		}
@@ -1120,6 +1207,11 @@ public class LiveBattleService {
 		lobby.inviteeSide.choice = BattleTeam.GHOST;
 		lobby.inviteeSide.team = new ArrayList<>(npc.team());
 		lobby.inviteeSide.resetLeads();
+		if (format(lobby).randomTeam()) {
+			// The player's client sends the player's generated team; the NPC's is generated by the host at the start.
+			lobby.inviterSide.team = List.of();
+			lobby.inviteeSide.team = List.of();
+		}
 		lobby.inviteeSide.ready = true;
 		// What the NPC's admin imposes: its ambiance, its intro with the NPC as the star (a gym leader's on the right).
 		if (npc.ambiance() != null && AMBIANCE_ID.matcher(npc.ambiance()).matches()) {
@@ -1154,9 +1246,9 @@ public class LiveBattleService {
 		UUID playerUuid = lobby.inviterUuid;
 		NpcOpponent npc = lobby.npc;
 		BattleFormats.Format format = format(lobby);
-		List<PokemonResponse> team = format.randomTeam() ? List.of() : battleTeam(playerUuid, lobby.inviterSide, pickMode(format));
+		List<PokemonResponse> team = battleTeam(playerUuid, lobby.inviterSide, format);
 		lobbiesByPlayer.remove(playerUuid);
-		if (team.isEmpty() && !format.randomTeam()) {
+		if (team.isEmpty()) {
 			cancelLobby(lobby, "EMPTY_TEAM", null);
 			return;
 		}
