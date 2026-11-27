@@ -3,6 +3,7 @@ package com.mystaria.phantasmon_backend.battle.format;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -11,29 +12,61 @@ import java.util.Set;
 import static com.mystaria.phantasmon_backend.battle.format.ShowdownData.toId;
 
 /**
- * The battle formats offered in the lobby (TODO-24, Adrien 2026-10-06): "Libre" (no rule, the default) plus 19
- * Smogon singles formats, National Dex first, then the Pokémon Champions singles formats (2026-11-27), then the doubles
- * formats (combat-double-plan.md): each format keeps Showdown's {@code gameType}, a doubles one starting the hosted
- * battle in doubles with two leads. Champions
- * formats check teams with Champions' own rules and lists (Showdown's {@code champions} mod, see
- * {@link ShowdownData#forMod}); the battle itself stays Cobblemon's Gen 9 engine, with Terastallization off as in
- * Champions. Each one's rules and bans are resolved from Showdown's own definitions
- * ({@link ShowdownData}), the way Showdown's rule table does: composite rules expand, a parent format named in a
- * ruleset is inherited, {@code !Rule} removes a rule, {@code +X} / {@code -X} unban / ban, {@code Rule = n} sets a
- * value.
+ * The battle formats offered in the lobby (TODO-24): "Libre" (no rule) plus every Showdown Gen 9 format the hosted
+ * engine can play (2026-11-27): singles and doubles, the players' own teams or teams Showdown generates (random
+ * formats). Listed in four columns (the lobby's format picker): singles, doubles, random, others (the Other
+ * Metagames); in each, the National Dex formats first, then by popularity (Smogon's ladder stats, 2026-10). Each
+ * format keeps Showdown's {@code gameType}, a doubles one starting the hosted battle in doubles. Champions formats
+ * check teams with Champions' own rules and lists (Showdown's {@code champions} mod, see {@link ShowdownData#forMod});
+ * the battle itself stays Cobblemon's Gen 9 engine, with Terastallization off as in Champions. Each one's rules and
+ * bans are resolved from Showdown's own definitions ({@link ShowdownData}), the way Showdown's rule table does:
+ * composite rules expand, a parent format named in a ruleset is inherited, {@code !Rule} removes a rule, {@code +X} /
+ * {@code -X} unban / ban, {@code *X} restricts, {@code Rule = n} sets a value ({@code !! Rule = n} overrides it).
+ * Left out: formats needing an engine mod (most Other Metagames), triples, free-for-all, multi battles, Champions
+ * random battles (Cobblemon's engine has no Champions mod).
  */
 public final class BattleFormats {
 
 	public static final String FREE = "free";
 
-	/** Offered formats, in lobby order: id (Showdown's) → fallback name (Showdown's name wins when known). */
-	public static final List<String> OFFERED = List.of(FREE,
-			"gen9nationaldex", "gen9nationaldexubers", "gen9nationaldexuu", "gen9nationaldexru",
-			"gen9nationaldexmonotype", "gen9nationaldexlc", "gen9nationaldex1v1", "gen9nationaldexag",
-			"gen9ou", "gen9ubers", "gen9uu", "gen9ru", "gen9nu", "gen9pu", "gen9zu", "gen9lc", "gen9monotype",
-			"gen91v1", "gen9anythinggoes",
-			"gen9championsou", "gen9championsuu", "gen9championsnationaldex",
-			"gen9doublesou", "gen9doublesubers", "gen9doublesuu", "gen9nationaldexdoubles", "gen9championsdoubles", "gen9championsvgc2026regmc");
+	/** The lobby picker's columns. */
+	public enum Column {
+		SINGLES, DOUBLES, RANDOM, OTHER
+	}
+
+	/** Offered formats in lobby order, by column: Showdown's id (Showdown's name is shown). */
+	public static final Map<String, Column> CATALOGUE = catalogue(
+			Column.SINGLES, List.of(
+					"gen9nationaldex", "gen9nationaldexubers", "gen9nationaldexmonotype", "gen9nationaldexuu",
+					"gen9championsnationaldex", "gen9nationaldexru", "gen9nationaldexlc", "gen9nationaldex1v1",
+					"gen9nationaldexag", "gen9nationaldexmonotypeubers", "gen9nationaldexubersuu",
+					"gen9ou", "gen9anythinggoes", "gen9championsou", "gen9championsbssregmc", "gen9ubers", "gen9monotype",
+					"gen9uu", "gen91v1", "gen9ru", "gen9pu", "gen9nu", "gen9lc", "gen9zu", "gen9championsuu",
+					"gen9bssregi", "gen9ubersuu", "gen9lcuu"),
+			Column.DOUBLES, List.of(
+					"gen9nationaldexdoubles", "gen9nationaldexdoublesubers",
+					"gen9championsvgc2026regmc", "gen9doublesou", "gen9doublesubers", "gen9doublesuu", "gen92v2doubles",
+					"gen9vgc2024regg", "gen9vgc2025regi", "gen9championsdoubles", "gen9doubleslc"),
+			Column.RANDOM, List.of(
+					"gen9randombattle", "gen9randomdoublesbattle", "gen9monotyperandombattle", "gen9hackmonscup",
+					"gen9doubleshackmonscup"),
+			Column.OTHER, List.of(FREE,
+					"gen9nationaldexaaa", "gen9nationaldexstabmons", "gen9nationaldexmonoletter",
+					"gen9balancedhackmons", "gen9almostanyability", "gen9stabmons", "gen9monocolor", "gen9nfe"));
+
+	/** Offered formats, in lobby order. */
+	public static final List<String> OFFERED = List.copyOf(CATALOGUE.keySet());
+
+	private static Map<String, Column> catalogue(Object... columns) {
+		Map<String, Column> catalogue = new LinkedHashMap<>();
+		for (int i = 0; i < columns.length; i += 2) {
+			Column column = (Column) columns[i];
+			for (Object id : (List<?>) columns[i + 1]) {
+				catalogue.put((String) id, column);
+			}
+		}
+		return java.util.Collections.unmodifiableMap(catalogue);
+	}
 
 	/** Showdown's game types: one Pokémon per side, or two. */
 	public static final String SINGLES = "singles";
@@ -46,9 +79,28 @@ public final class BattleFormats {
 	private static final Set<String> BATTLE_RULES = Set.of("sleepclausemod", "freezeclausemod", "endlessbattleclause",
 			"terastalclause", "megarayquazaclause", "zmoveclause", "dynamaxclause");
 
-	/** A resolved format. {@code rules}: rule ids; {@code bans} / {@code unbans}: ids of species, tags, items, moves... */
+	/**
+	 * A resolved format. {@code rules}: rule ids; {@code bans} / {@code unbans} / {@code restricted}: ids of species,
+	 * tags, items, moves...; {@code team}: Showdown's team generator ("random", "randomHC"), null when players bring
+	 * their own team.
+	 */
 	public record Format(String id, String name, String mod, String gameType, Set<String> rules, Set<String> bans,
-			Set<String> unbans, Map<String, Integer> values, List<String> battleRules) {
+			Set<String> unbans, Map<String, Integer> values, List<String> battleRules, String team, Set<String> restricted) {
+
+		/** Teams generated by Showdown for the battle: the players' own are neither needed nor checked. */
+		public boolean randomTeam() {
+			return team != null;
+		}
+
+		/** The lobby picker's column. */
+		public Column column() {
+			return CATALOGUE.getOrDefault(id, Column.OTHER);
+		}
+
+		/** A National Dex format (Pokémon, items and moves of every generation). */
+		public boolean natDex() {
+			return has("standardnatdex") || has("natdexmod");
+		}
 
 		/** Two Pokémon per side: two leads in the lobby, a doubles battle. */
 		public boolean doubles() {
@@ -73,14 +125,21 @@ public final class BattleFormats {
 			return rules.contains(rule);
 		}
 
-		/** Level every Pokémon is set to for the battle: 5 in Little Cup, else 100; 0 = their own (Libre). */
+		/**
+		 * Level every Pokémon is set to for the battle: 5 in Little Cup, 50 in VGC / BSS, else 100; 0 = their own
+		 * (Libre, random formats: the generated levels).
+		 */
 		public int adjustLevel() {
-			if (free()) {
+			if (free() || randomTeam()) {
 				return 0;
 			}
 			Integer level = values.get("adjustlevel");
 			if (level != null) {
 				return level;
+			}
+			Integer down = values.get("adjustleveldown");
+			if (down != null) {
+				return down; // only lowers in Showdown: Pokémon above it come down, the hosted battle sets everyone to it
 			}
 			return has("littlecup") ? 5 : 100;
 		}
@@ -135,7 +194,7 @@ public final class BattleFormats {
 
 	private Format resolve(String id) {
 		if (FREE.equals(id)) {
-			return new Format(FREE, "Libre", null, SINGLES, Set.of(), Set.of(), Set.of(), Map.of(), List.of());
+			return new Format(FREE, "Libre", null, SINGLES, Set.of(), Set.of(), Set.of(), Map.of(), List.of(), null, Set.of());
 		}
 		ShowdownData.FormatDef def = data.format(id);
 		if (def == null) {
@@ -146,6 +205,8 @@ public final class BattleFormats {
 		Builder builder = new Builder(source);
 		builder.addFormat(def, new HashSet<>());
 		builder.rules.removeAll(builder.removed);
+		// A restricted species or tag is no longer banned (Showdown: "*X" replaces "-X"): VGC Reg G's legendaries.
+		builder.bans.removeAll(builder.restricted);
 		if (CHAMPIONS.equals(def.mod())) {
 			builder.rules.add("terastalclause"); // Champions has no Terastallization
 		}
@@ -158,7 +219,8 @@ public final class BattleFormats {
 		}
 		return new Format(id, def.name(), def.mod(), DOUBLES.equals(def.gameType()) ? DOUBLES : SINGLES,
 				Set.copyOf(builder.rules), Set.copyOf(builder.bans),
-				Set.copyOf(builder.unbans), Map.copyOf(builder.values), List.copyOf(battleRules));
+				Set.copyOf(builder.unbans), Map.copyOf(builder.values), List.copyOf(battleRules), builder.team,
+				Set.copyOf(builder.restricted));
 	}
 
 	private static final class Builder {
@@ -168,6 +230,8 @@ public final class BattleFormats {
 		final Set<String> bans = new HashSet<>();
 		final Set<String> unbans = new HashSet<>();
 		final Map<String, Integer> values = new HashMap<>();
+		final Set<String> restricted = new HashSet<>();
+		String team;
 
 		Builder(ShowdownData data) {
 			this.data = data;
@@ -177,6 +241,10 @@ public final class BattleFormats {
 			if (!seen.add(toId(def.name()))) {
 				return;
 			}
+			if (team == null) {
+				team = def.team(); // the format's own first, then an inherited one
+			}
+			def.restricted().forEach(entry -> restricted.add(toId(entry)));
 			def.ruleset().forEach(entry -> addEntry(entry, seen));
 			def.banlist().forEach(entry -> ban(entry));
 			def.unbanlist().forEach(entry -> unbans.add(toId(entry)));
@@ -184,6 +252,9 @@ public final class BattleFormats {
 
 		void addEntry(String entry, Set<String> seen) {
 			String trimmed = entry.trim();
+			if (trimmed.startsWith("!!")) {
+				trimmed = trimmed.substring(2).trim(); // "!! Adjust Level = 50": overrides an inherited value
+			}
 			if (trimmed.startsWith("!")) {
 				removed.add(toId(trimmed.substring(1)));
 			} else if (trimmed.startsWith("+")) {
@@ -191,7 +262,7 @@ public final class BattleFormats {
 			} else if (trimmed.startsWith("-")) {
 				ban(trimmed.substring(1));
 			} else if (trimmed.startsWith("*")) {
-				// restricted: only matters for formats with restricted lists, none offered
+				restricted.add(toId(trimmed.substring(1)));
 			} else if (trimmed.contains("=")) {
 				String key = toId(trimmed.substring(0, trimmed.indexOf('=')));
 				String value = trimmed.substring(trimmed.indexOf('=') + 1).trim();

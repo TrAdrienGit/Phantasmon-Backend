@@ -50,17 +50,21 @@ public final class ShowdownData {
 			.enable(JsonReadFeature.ALLOW_JAVA_COMMENTS)
 			.build();
 
-	/** A format of {@code formats.js}. */
+	/**
+	 * A format of {@code formats.js}. {@code team}: how Showdown builds the teams ("random", "randomHC"...), null when
+	 * the players bring theirs; {@code restricted}: what "Limit One / Two Restricted" counts ("Restricted Legendary").
+	 */
 	public record FormatDef(String name, String mod, String gameType, List<String> ruleset, List<String> banlist,
-			List<String> unbanlist) {
+			List<String> unbanlist, String team, List<String> restricted) {
 	}
 
 	/**
 	 * A Pokémon species / forme of {@code pokedex.js} plus its tiers from {@code formats-data.js}. {@code doublesTier}
-	 * falls back on {@code tier} when absent, as in Showdown. {@code tags}: "Mythical", "Restricted Legendary"...
+	 * falls back on {@code tier} when absent, as in Showdown. {@code tags}: "Mythical", "Restricted Legendary"...;
+	 * {@code color}: the Pokédex colour (Same Color Clause).
 	 */
 	public record SpeciesDef(String id, String name, String baseSpeciesId, List<String> types, String prevo, List<String> evos,
-			String isNonstandard, String tier, String natDexTier, String doublesTier, List<String> tags) {
+			String isNonstandard, String tier, String natDexTier, String doublesTier, List<String> tags, String color) {
 	}
 
 	/** An item, ability or move: its name, its non-standard status, and (moves) the flags the clauses look at. */
@@ -114,7 +118,8 @@ public final class ShowdownData {
 			if (node.has("name")) {
 				String name = node.get("name").asString();
 				formats.put(toId(name), new FormatDef(name, text(node, "mod"), text(node, "gameType"), strings(node.get("ruleset")),
-						strings(node.get("banlist")), strings(node.get("unbanlist"))));
+						strings(node.get("banlist")), strings(node.get("unbanlist")), text(node, "team"),
+						strings(node.get("restricted"))));
 			}
 		}
 
@@ -133,7 +138,8 @@ public final class ShowdownData {
 					baseSpecies == null ? entry.getKey() : toId(baseSpecies), strings(node.get("types")),
 					text(node, "prevo"), strings(node.get("evos")), nonstandard,
 					tier == null ? null : text(tier, "tier"), tier == null ? null : text(tier, "natDexTier"),
-					tier == null ? null : orElse(text(tier, "doublesTier"), text(tier, "tier")), strings(node.get("tags"))));
+					tier == null ? null : orElse(text(tier, "doublesTier"), text(tier, "tier")), strings(node.get("tags")),
+					text(node, "color")));
 		}
 
 		ShowdownData base = new ShowdownData(formats, species, entries(files.get("items.js")), entries(files.get("moves.js")),
@@ -161,7 +167,7 @@ public final class ShowdownData {
 			if (def != null) {
 				moddedSpecies.put(id, new SpeciesDef(def.id(), def.name(), def.baseSpeciesId(), def.types(), def.prevo(),
 						def.evos(), fields.get("isNonstandard"), fields.get("tier"), fields.get("natDexTier"),
-						orElse(fields.get("doublesTier"), fields.get("tier")), def.tags()));
+						orElse(fields.get("doublesTier"), fields.get("tier")), def.tags(), def.color()));
 			}
 		});
 		Map<String, RuleDef> moddedRules = new HashMap<>(rules);
@@ -321,6 +327,11 @@ public final class ShowdownData {
 	/** Showdown's id convention: lower case, letters and digits only. */
 	public static String toId(String text) {
 		return text == null ? "" : text.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]", "");
+	}
+
+	/** Every format of Showdown's data, keyed by id (the lobby's catalogue is drawn from it). */
+	public Map<String, FormatDef> formats() {
+		return java.util.Collections.unmodifiableMap(formats);
 	}
 
 	public FormatDef format(String id) {

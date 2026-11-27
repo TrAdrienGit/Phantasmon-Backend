@@ -62,10 +62,11 @@ public final class TeamValidator {
 		List<List<Issue>> issues = new ArrayList<>();
 		team.forEach(member -> issues.add(new ArrayList<>()));
 		checkPreTera(format, team, issues); // whatever the format: the engine allows one Terastallization a battle
-		if (format == null || format.free()) {
-			return issues;
+		if (format == null || format.free() || format.randomTeam()) {
+			return issues; // random formats: Showdown generates the teams, the players' own are not used
 		}
 		Map<String, Integer> firstOfSpecies = new HashMap<>();
+		Map<String, Integer> abilityCounts = new HashMap<>();
 		Map<String, Integer> firstOfNickname = new HashMap<>();
 		Map<String, Integer> itemCounts = new HashMap<>();
 		for (int i = 0; i < team.size(); i++) {
@@ -98,6 +99,15 @@ public final class TeamValidator {
 			if (format.has("littlecup") && species != null && (species.prevo() != null || species.evos().isEmpty())) {
 				own.add(new Issue("LITTLE_CUP", species.name()));
 			}
+			if (format.has("notfullyevolved") && species != null && species.evos().isEmpty()) {
+				own.add(new Issue("CLAUSE", "Not Fully Evolved"));
+			}
+			// Ability Clause = n (Almost Any Ability): at most n Pokémon with the same ability.
+			String abilityId = toId(member.ability());
+			if (format.has("abilityclause") && !abilityId.isEmpty()
+					&& abilityCounts.merge(abilityId, 1, Integer::sum) > format.values().getOrDefault("abilityclause", 1)) {
+				own.add(new Issue("CLAUSE", "Ability Clause"));
+			}
 			if (format.has("speciesclause") && species != null) {
 				Integer first = firstOfSpecies.putIfAbsent(species.baseSpeciesId(), i);
 				if (first != null) {
@@ -120,6 +130,17 @@ public final class TeamValidator {
 		}
 		if (format.has("sametypeclause")) {
 			checkSameType(team, issues);
+		}
+		if (format.has("samecolorclause")) {
+			checkSameTrait(team, issues, species -> species.color() == null ? Set.of() : Set.of(species.color()), "Same Color Clause");
+		}
+		if (format.has("sameletterclause")) {
+			checkSameTrait(team, issues, species -> species.name().isEmpty() ? Set.of()
+					: Set.of(species.name().substring(0, 1).toUpperCase(java.util.Locale.ROOT)), "Same Letter Clause");
+		}
+		int restrictedLimit = format.has("limitonerestricted") ? 1 : format.has("limittworestricted") ? 2 : -1;
+		if (restrictedLimit >= 0) {
+			checkRestricted(format, team, issues, restrictedLimit);
 		}
 		if (format.has("gravitysleepclause")) {
 			checkGravitySleep(team, issues);
@@ -278,6 +299,51 @@ public final class TeamValidator {
 		}
 		if (format.has("accuracymovesclause") && move.accuracyBoost() < 0 && !move.selfTarget()) {
 			issues.add(new Issue("CLAUSE", "Accuracy Moves Clause"));
+		}
+	}
+
+	/**
+	 * Limit One / Two Restricted (VGC, BSS): at most that many restricted Pokémon (Restricted Legendaries); the ones
+	 * past the limit are flagged.
+	 */
+	private void checkRestricted(BattleFormats.Format format, List<Member> team, List<List<Issue>> issues, int limit) {
+		int count = 0;
+		for (int i = 0; i < team.size(); i++) {
+			ShowdownData.SpeciesDef species = species(team.get(i));
+			if (species == null) {
+				continue;
+			}
+			boolean restricted = format.restricted().contains(species.id())
+					|| format.restricted().contains(species.baseSpeciesId())
+					|| species.tags().stream().anyMatch(tag -> format.restricted().contains(toId(tag)));
+			if (restricted && ++count > limit) {
+				issues.get(i).add(new Issue("CLAUSE", limit == 1 ? "Limit One Restricted" : "Limit Two Restricted"));
+			}
+		}
+	}
+
+	/**
+	 * Same Color / Same Letter Clause: every member shares the trait — the members without the team's most common one
+	 * are flagged.
+	 */
+	private void checkSameTrait(List<Member> team, List<List<Issue>> issues,
+			java.util.function.Function<ShowdownData.SpeciesDef, Set<String>> trait, String clause) {
+		Map<String, Integer> counts = new LinkedHashMap<>();
+		List<Set<String>> traits = new ArrayList<>();
+		for (Member member : team) {
+			ShowdownData.SpeciesDef species = species(member);
+			Set<String> own = species == null ? Set.of() : trait.apply(species);
+			traits.add(own);
+			own.forEach(value -> counts.merge(value, 1, Integer::sum));
+		}
+		String best = counts.entrySet().stream().max(Map.Entry.comparingByValue()).map(Map.Entry::getKey).orElse(null);
+		if (best == null || counts.get(best) == team.size()) {
+			return;
+		}
+		for (int i = 0; i < team.size(); i++) {
+			if (!traits.get(i).contains(best)) {
+				issues.get(i).add(new Issue("CLAUSE", clause));
+			}
 		}
 	}
 

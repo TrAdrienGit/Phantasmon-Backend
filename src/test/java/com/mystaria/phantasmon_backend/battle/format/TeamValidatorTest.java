@@ -52,7 +52,7 @@ class TeamValidatorTest {
 		for (String id : BattleFormats.OFFERED) {
 			assertThat(formats.get(id)).as(id).isNotNull();
 		}
-		assertThat(formats.offered()).hasSize(29);
+		assertThat(formats.offered()).hasSize(53);
 		assertThat(formats.get("gen9nationaldex").name()).isEqualTo("[Gen 9] National Dex");
 	}
 
@@ -215,6 +215,67 @@ class TeamValidatorTest {
 				.contains(new TeamValidator.Issue("BANNED", "Mewtwo"));
 		assertThat(check("gen9championsvgc2026regmc", mon("mew", null, "protect")).get(0))
 				.contains(new TeamValidator.Issue("BANNED", "Mew"));
+	}
+
+	@Test
+	void restrictedFormatsAllowTheirLimitOfRestrictedLegendaries() {
+		BattleFormats.Format regG = formats.get("gen9vgc2024regg");
+		assertThat(regG.adjustLevel()).isEqualTo(50); // "!! Adjust Level = 50" overrides Flat Rules' level-down
+		assertThat(check("gen9vgc2024regg", mon("koraidon", null, "protect")).get(0)).isEmpty();
+		var two = check("gen9vgc2024regg", mon("koraidon", null, "protect"), mon("miraidon", null, "protect"));
+		assertThat(two.get(0)).isEmpty();
+		assertThat(two.get(1)).contains(new TeamValidator.Issue("CLAUSE", "Limit One Restricted"));
+		assertThat(check("gen9vgc2025regi", mon("koraidon", null, "protect"), mon("miraidon", null, "protect")).get(1)).isEmpty();
+		assertThat(check("gen9vgc2024regg", mon("mew", null, "protect")).get(0))
+				.contains(new TeamValidator.Issue("BANNED", "Mew"));
+	}
+
+	@Test
+	void bssPicksThreeOfSixInSingles() {
+		BattleFormats.Format bss = formats.get("gen9bssregi");
+		assertThat(bss.doubles()).isFalse();
+		assertThat(bss.pickedTeamSize()).isEqualTo(3);
+		assertThat(bss.adjustLevel()).isEqualTo(50);
+	}
+
+	@Test
+	void randomFormatsCheckNoTeam() {
+		BattleFormats.Format random = formats.get("gen9randombattle");
+		assertThat(random.randomTeam()).isTrue();
+		assertThat(random.team()).isEqualTo("random");
+		assertThat(random.adjustLevel()).isZero();
+		assertThat(random.column()).isEqualTo(BattleFormats.Column.RANDOM);
+		assertThat(formats.get("gen9doubleshackmonscup").team()).isEqualTo("randomHC");
+		assertThat(formats.get("gen9doubleshackmonscup").doubles()).isTrue();
+		assertThat(check("gen9randombattle", mon("arceus", null, "tackle")).get(0)).isEmpty();
+	}
+
+	@Test
+	void otherMetagameClauses() {
+		// Same Color: Pikachu (yellow) and Bulbasaur (green) cannot team up.
+		var color = check("gen9monocolor", mon("pikachu", null, "tackle"), mon("raichu", null, "tackle"), mon("bulbasaur", null, "tackle"));
+		assertThat(color.get(2)).contains(new TeamValidator.Issue("CLAUSE", "Same Color Clause"));
+		assertThat(color.get(0)).doesNotContain(new TeamValidator.Issue("CLAUSE", "Same Color Clause"));
+		var letter = check("gen9nationaldexmonoletter", mon("pikachu", null, "tackle"), mon("pidgey", null, "tackle"), mon("eevee", null, "tackle"));
+		assertThat(letter.get(2)).contains(new TeamValidator.Issue("CLAUSE", "Same Letter Clause"));
+		assertThat(check("gen9nfe", mon("venusaur", null, "tackle")).get(0))
+				.contains(new TeamValidator.Issue("CLAUSE", "Not Fully Evolved"));
+		assertThat(check("gen9nfe", mon("ivysaur", null, "tackle")).get(0))
+				.doesNotContain(new TeamValidator.Issue("CLAUSE", "Not Fully Evolved"));
+		// Ability Clause = 1 in AAA: two Pokémon with Pressure.
+		assertThat(check("gen9almostanyability", mon("pikachu", null, "tackle"), mon("eevee", null, "tackle")).get(1))
+				.contains(new TeamValidator.Issue("CLAUSE", "Ability Clause"));
+	}
+
+	@Test
+	void catalogueColumnsAndNationalDexFirst() {
+		assertThat(formats.get("gen9nationaldex").column()).isEqualTo(BattleFormats.Column.SINGLES);
+		assertThat(formats.get("gen9nationaldex").natDex()).isTrue();
+		assertThat(formats.get("gen9ou").natDex()).isFalse();
+		assertThat(formats.get("gen9nationaldexdoubles").column()).isEqualTo(BattleFormats.Column.DOUBLES);
+		assertThat(formats.get(BattleFormats.FREE).column()).isEqualTo(BattleFormats.Column.OTHER);
+		assertThat(formats.get("gen9stabmons").column()).isEqualTo(BattleFormats.Column.OTHER);
+		assertThat(BattleFormats.OFFERED.get(0)).isEqualTo("gen9nationaldex");
 	}
 
 	@Test
