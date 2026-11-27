@@ -224,6 +224,8 @@ public class PhantasmonWebSocketHandler extends TextWebSocketHandler {
 			case "BattleLobbySetTeam" -> liveBattleService.setLobbyTeam(playerUuid, uuidField(incoming, "lobby_uuid"), incoming.data());
 			case "BattleLobbySetLead" -> liveBattleService.setLobbyLead(playerUuid, uuidField(incoming, "lobby_uuid"),
 					incoming.data().get("index") instanceof Number index ? index.intValue() : null);
+			case "BattleLobbyPick" -> liveBattleService.toggleLobbyPick(playerUuid, uuidField(incoming, "lobby_uuid"),
+					incoming.data().get("index") instanceof Number index ? index.intValue() : null);
 			case "BattleLobbySetReady" -> liveBattleService.setLobbyReady(playerUuid, uuidField(incoming, "lobby_uuid"),
 					Boolean.TRUE.equals(incoming.data().get("ready")));
 			case "BattleLobbySetFormat" -> liveBattleService.setLobbyFormat(playerUuid, uuidField(incoming, "lobby_uuid"),

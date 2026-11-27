@@ -23,7 +23,7 @@ import lombok.extern.slf4j.Slf4j;
 /**
  * Where the format rules come from (TODO-24, Adrien 2026-10-06: checked for updates at every backend start). At
  * startup each Showdown file is downloaded (formats, tiers, Pokédex, items, moves, abilities from
- * {@code play.pokemonshowdown.com/data/}, rule definitions from the Showdown repository); a file that changed is
+ * {@code play.pokemonshowdown.com/data/}, rule definitions and the Champions mod's data from the Showdown repository); a file that changed is
  * written over its cached copy ({@code phantasmon.showdown.cache-dir}) and logged. A file that can't be downloaded
  * comes from the cache, else from the snapshot shipped with the backend ({@code resources/showdown/}), so the
  * backend always starts. Tests turn the download off.
@@ -32,14 +32,15 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class ShowdownDataSource {
 
-	private static final Map<String, String> URLS = Map.of(
-			"formats.js", "https://play.pokemonshowdown.com/data/formats.js",
-			"formats-data.js", "https://play.pokemonshowdown.com/data/formats-data.js",
-			"pokedex.js", "https://play.pokemonshowdown.com/data/pokedex.js",
-			"items.js", "https://play.pokemonshowdown.com/data/items.js",
-			"moves.js", "https://play.pokemonshowdown.com/data/moves.js",
-			"abilities.js", "https://play.pokemonshowdown.com/data/abilities.js",
-			"rulesets.ts", "https://raw.githubusercontent.com/smogon/pokemon-showdown/master/data/rulesets.ts");
+	private static final String REPOSITORY = "https://raw.githubusercontent.com/smogon/pokemon-showdown/master/data/";
+
+	/** Where each file of {@link ShowdownData#FILES} is downloaded from; the mods' files come from the repository. */
+	private static String url(String file) {
+		if (file.endsWith(".ts")) {
+			return REPOSITORY + file;
+		}
+		return "https://play.pokemonshowdown.com/data/" + file;
+	}
 
 	private final Path cacheDir;
 	private final boolean updateOnStart;
@@ -105,7 +106,7 @@ public class ShowdownDataSource {
 
 	private String download(HttpClient http, String file) {
 		try {
-			HttpRequest request = HttpRequest.newBuilder(URI.create(URLS.get(file))).timeout(Duration.ofSeconds(20)).GET().build();
+			HttpRequest request = HttpRequest.newBuilder(URI.create(url(file))).timeout(Duration.ofSeconds(20)).GET().build();
 			HttpResponse<String> response = http.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
 			if (response.statusCode() == 200 && !response.body().isBlank()) {
 				return response.body();
@@ -131,8 +132,9 @@ public class ShowdownDataSource {
 
 	private void writeCache(String file, String content) {
 		try {
-			Files.createDirectories(cacheDir);
-			Files.writeString(cacheDir.resolve(file), content, StandardCharsets.UTF_8);
+			Path path = cacheDir.resolve(file);
+			Files.createDirectories(path.getParent());
+			Files.writeString(path, content, StandardCharsets.UTF_8);
 		} catch (IOException ex) {
 			log.warn("Cannot cache {}", file, ex);
 		}

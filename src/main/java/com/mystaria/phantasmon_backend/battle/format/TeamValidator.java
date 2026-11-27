@@ -31,14 +31,24 @@ public final class TeamValidator {
 		}
 	}
 
-	/** One broken rule: {@code code} (BANNED, NONSTANDARD, CLAUSE, TEAM_SIZE, LITTLE_CUP, SAME_TYPE) and what it's about. */
+	/**
+	 * One broken rule: {@code code} (BANNED, NONSTANDARD, CLAUSE, TEAM_SIZE, LITTLE_CUP, SAME_TYPE, PRE_TERA_TWICE,
+	 * PRE_TERA_ITEM) and what it's about.
+	 */
 	public record Issue(String code, String subject) {
 	}
 
 	private static final Set<String> EVASION_ITEMS = Set.of("brightpowder", "laxincense");
 	private static final Set<String> EVASION_ABILITIES = Set.of("sandveil", "snowcloak");
+	/** Tier tags matched against a species' doubles tier rather than its singles one. */
+	private static final Set<String> DOUBLES_TAGS = Set.of("duber", "dou", "dbl", "duu", "dnu");
+	/** Sleep moves the Gravity Sleep Clause bans alongside Gravity. */
+	private static final Set<String> GRAVITY_SLEEP_MOVES = Set.of("darkvoid", "grasswhistle", "hypnosis", "lovelykiss",
+			"sing", "sleeppowder");
 
 	private final ShowdownData data;
+	/** Validators reading a mod's data (Champions), by mod. */
+	private final Map<String, TeamValidator> modded = new java.util.concurrent.ConcurrentHashMap<>();
 
 	public TeamValidator(ShowdownData data) {
 		this.data = data;
@@ -46,6 +56,9 @@ public final class TeamValidator {
 
 	/** One list of issues per member, in team order (empty = fine). Nothing for the "Libre" format. */
 	public List<List<Issue>> validate(BattleFormats.Format format, List<Member> team) {
+		if (format != null && format.mod() != null && data.forMod(format.mod()) != data) {
+			return modded.computeIfAbsent(format.mod(), mod -> new TeamValidator(data.forMod(mod))).validate(format, team);
+		}
 		List<List<Issue>> issues = new ArrayList<>();
 		team.forEach(member -> issues.add(new ArrayList<>()));
 		checkPreTera(format, team, issues); // whatever the format: the engine allows one Terastallization a battle
@@ -54,6 +67,7 @@ public final class TeamValidator {
 		}
 		Map<String, Integer> firstOfSpecies = new HashMap<>();
 		Map<String, Integer> firstOfNickname = new HashMap<>();
+		Map<String, Integer> itemCounts = new HashMap<>();
 		for (int i = 0; i < team.size(); i++) {
 			Member member = team.get(i);
 			List<Issue> own = issues.get(i);
@@ -90,6 +104,12 @@ public final class TeamValidator {
 					own.add(new Issue("CLAUSE", "Species Clause"));
 				}
 			}
+			// Item Clause = n: at most n Pokémon holding the same item (Champions: 1).
+			String itemId = toId(member.item());
+			if (format.has("itemclause") && !itemId.isEmpty()
+					&& itemCounts.merge(itemId, 1, Integer::sum) > format.values().getOrDefault("itemclause", 1)) {
+				own.add(new Issue("CLAUSE", "Item Clause"));
+			}
 			String nickname = toId(member.nickname());
 			if (format.has("nicknameclause") && !nickname.isEmpty()) {
 				Integer first = firstOfNickname.putIfAbsent(nickname, i);
@@ -101,8 +121,29 @@ public final class TeamValidator {
 		if (format.has("sametypeclause")) {
 			checkSameType(team, issues);
 		}
+		if (format.has("gravitysleepclause")) {
+			checkGravitySleep(team, issues);
+		}
 		issues.replaceAll(list -> new ArrayList<>(new java.util.LinkedHashSet<>(list)));
 		return issues;
+	}
+
+	/**
+	 * Gravity Sleep Clause (doubles): no team with Gravity and a sleep move that can miss (Showdown's banlist of the
+	 * rule). Every member holding either is flagged.
+	 */
+	private static void checkGravitySleep(List<Member> team, List<List<Issue>> issues) {
+		boolean gravity = team.stream().anyMatch(member -> member.moves().stream().anyMatch(move -> "gravity".equals(toId(move))));
+		boolean sleep = team.stream().anyMatch(member -> member.moves().stream().anyMatch(move -> GRAVITY_SLEEP_MOVES.contains(toId(move))));
+		if (!gravity || !sleep) {
+			return;
+		}
+		for (int i = 0; i < team.size(); i++) {
+			if (team.get(i).moves().stream().map(ShowdownData::toId)
+					.anyMatch(move -> "gravity".equals(move) || GRAVITY_SLEEP_MOVES.contains(move))) {
+				issues.get(i).add(new Issue("CLAUSE", "Gravity Sleep Clause"));
+			}
+		}
 	}
 
 	/**
@@ -121,6 +162,9 @@ public final class TeamValidator {
 				own.add(new Issue("PRE_TERA_TWICE", ""));
 			}
 			seen = true;
+			if (format != null && format.champions()) {
+				own.add(new Issue("CLAUSE", "Terastal Clause")); // Champions has no Terastallization at all
+			}
 			String itemId = toId(member.item());
 			ShowdownData.EntryDef item = itemId.isEmpty() ? null : data.item(itemId);
 			ShowdownData.SpeciesDef species = species(member);
@@ -151,9 +195,11 @@ public final class TeamValidator {
 		if (format.has("natdexmod") && "Illegal".equals(species.natDexTier())) {
 			issues.add(new Issue("NONSTANDARD", species.name()));
 		}
-		// A species ban covers all its formes; "X-Base" only the base forme.
+		// A species ban covers all its formes; "X-Base" only the base forme; a tag ban (Flat Rules: -Mythical,
+		// -Restricted Legendary) every species with that tag.
 		boolean speciesBan = format.bans().contains(species.id())
 				|| format.bans().contains(species.baseSpeciesId())
+				|| species.tags().stream().anyMatch(tag -> format.bans().contains(ShowdownData.toId(tag)))
 				|| species.id().equals(species.baseSpeciesId()) && format.bans().contains(species.id() + "base");
 		if (speciesBan) {
 			issues.add(new Issue("BANNED", species.name()));
@@ -161,10 +207,12 @@ public final class TeamValidator {
 		}
 		String tier = toId(species.tier());
 		String natDexTier = toId(species.natDexTier());
+		// Doubles tags (Showdown's tags.ts): DUber, DOU, DBL, DUU, and DNU for "(DUU)".
+		String doublesTier = "(DUU)".equals(species.doublesTier()) ? "dnu" : toId(species.doublesTier());
 		for (String ban : format.bans()) {
 			boolean natDex = ban.startsWith("nd");
 			String tag = natDex ? ban.substring(2) : ban;
-			String speciesTier = natDex ? natDexTier : tier;
+			String speciesTier = natDex ? natDexTier : DOUBLES_TAGS.contains(tag) ? doublesTier : tier;
 			if (!tag.isEmpty() && tag.equals(speciesTier)) {
 				issues.add(new Issue("BANNED", species.name()));
 				return;

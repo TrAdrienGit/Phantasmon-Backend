@@ -52,7 +52,7 @@ class TeamValidatorTest {
 		for (String id : BattleFormats.OFFERED) {
 			assertThat(formats.get(id)).as(id).isNotNull();
 		}
-		assertThat(formats.offered()).hasSize(20);
+		assertThat(formats.offered()).hasSize(29);
 		assertThat(formats.get("gen9nationaldex").name()).isEqualTo("[Gen 9] National Dex");
 	}
 
@@ -131,12 +131,12 @@ class TeamValidatorTest {
 	}
 
 	private static TeamValidator.Member form(String species, String form, String item) {
-		return new TeamValidator.Member(species, form, "pressure", item, List.of("tackle"), null);
+		return new TeamValidator.Member(species, form, "pressure", item, List.of("protect"), null);
 	}
 
 	@Test
 	void newMegaStonesAreLegalInChampionsFormatsAndFreeButNotInSmogonFormats() {
-		var champions = validator.validate(formats.resolveAny("gen9championsou"),
+		var champions = validator.validate(formats.get("gen9championsou"),
 				List.of(mon("clefable", "clefablite"), form("meowstic", "f", "meowsticite")));
 		assertThat(champions).allMatch(List::isEmpty);
 		assertThat(check(BattleFormats.FREE, mon("clefable", "clefablite"), form("meowstic", "f", "meowsticite")))
@@ -150,7 +150,7 @@ class TeamValidatorTest {
 
 	@Test
 	void aMegaStoneOnlyGoesToItsOwnSpecies() {
-		var champions = formats.resolveAny("gen9championsou");
+		var champions = formats.get("gen9championsou");
 		assertThat(champions).isNotNull();
 		assertThat(validator.validate(champions, List.of(mon("pikachu", "clefablite"))).get(0))
 				.contains(new TeamValidator.Issue("BANNED", "Clefablite"));
@@ -158,5 +158,84 @@ class TeamValidatorTest {
 				.contains(new TeamValidator.Issue("BANNED", "Garchompite"));
 		assertThat(check("gen9nationaldex", mon("garchomp", "garchompite")).get(0)).isEmpty();
 	}
-}
 
+	@Test
+	void championsFormatsAreOfferedWithChampionsOwnRules() {
+		BattleFormats.Format ou = formats.get("gen9championsou");
+		assertThat(ou).isNotNull();
+		assertThat(ou.champions()).isTrue();
+		assertThat(ou.adjustLevel()).isEqualTo(50); // Champions' Standard AG: Adjust Level = 50
+		assertThat(ou.battleRules()).contains("Terastal Clause");
+		assertThat(formats.get("gen9championsuu")).isNotNull();
+		assertThat(formats.get("gen9championsnationaldex")).isNotNull();
+		assertThat(formats.offered()).extracting(BattleFormats.Format::id).contains("gen9championsou");
+	}
+
+	@Test
+	void championsFormatsUseChampionsListsOfPokemonAndItems() {
+		// Bulbasaur and the Ability Shield are not in Champions, but are in Gen 9.
+		assertThat(check("gen9championsou", mon("bulbasaur", null)).get(0))
+				.contains(new TeamValidator.Issue("NONSTANDARD", "Bulbasaur"));
+		assertThat(check("gen9championsou", mon("garchomp", "abilityshield")).get(0))
+				.contains(new TeamValidator.Issue("NONSTANDARD", "Ability Shield"));
+		assertThat(check("gen9ou", mon("garchomp", "abilityshield")).get(0)).isEmpty();
+	}
+
+	@Test
+	void championsFormatsHaveTheItemClauseAndNoTerastallization() {
+		var issues = check("gen9championsou", mon("garchomp", "leftovers"), mon("dragonite", "leftovers"));
+		assertThat(issues.get(0)).isEmpty();
+		assertThat(issues.get(1)).contains(new TeamValidator.Issue("CLAUSE", "Item Clause"));
+		assertThat(check("gen9ou", mon("garchomp", "leftovers"), mon("dragonite", "leftovers"))).allMatch(List::isEmpty);
+		assertThat(check("gen9championsou", preTera("garchomp", null)).get(0))
+				.contains(new TeamValidator.Issue("CLAUSE", "Terastal Clause"));
+	}
+
+	@Test
+	void doublesFormatsAreOfferedAsDoubles() {
+		for (String id : List.of("gen9doublesou", "gen9doublesubers", "gen9doublesuu", "gen9nationaldexdoubles",
+				"gen9championsdoubles")) {
+			assertThat(formats.get(id).doubles()).as(id).isTrue();
+			assertThat(formats.get(id).activeCount()).isEqualTo(2);
+		}
+		assertThat(formats.get("gen9ou").doubles()).isFalse();
+		assertThat(formats.get(BattleFormats.FREE).gameType()).isEqualTo(BattleFormats.SINGLES);
+		assertThat(formats.get("gen9championsdoubles").champions()).isTrue();
+	}
+
+	@Test
+	void vgcPicksFourOfSixAtLevelFiftyWithoutRestrictedOrMythical() {
+		BattleFormats.Format vgc = formats.get("gen9championsvgc2026regmc");
+		assertThat(vgc.doubles()).isTrue();
+		assertThat(vgc.pickedTeamSize()).isEqualTo(4);
+		assertThat(vgc.adjustLevel()).isEqualTo(50);
+		assertThat(formats.get("gen9championsdoubles").pickedTeamSize()).isZero();
+		assertThat(formats.get("gen9doublesou").pickedTeamSize()).isZero();
+		assertThat(check("gen9championsvgc2026regmc", mon("mewtwo", null, "protect")).get(0))
+				.contains(new TeamValidator.Issue("BANNED", "Mewtwo"));
+		assertThat(check("gen9championsvgc2026regmc", mon("mew", null, "protect")).get(0))
+				.contains(new TeamValidator.Issue("BANNED", "Mew"));
+	}
+
+	@Test
+	void doublesFormatsBanByDoublesTiers() {
+		// Sneasler: Uber in singles, DOU in doubles.
+		assertThat(check("gen9doublesou", mon("sneasler", null, "protect")).get(0)).isEmpty();
+		assertThat(check("gen9doublesuu", mon("sneasler", null, "protect")).get(0))
+				.contains(new TeamValidator.Issue("BANNED", "Sneasler"));
+		assertThat(check("gen9doublesou", mon("mewtwo", null, "protect")).get(0))
+				.contains(new TeamValidator.Issue("BANNED", "Mewtwo"));
+		assertThat(check("gen9doublesubers", mon("mewtwo", null, "protect")).get(0)).isEmpty();
+	}
+
+	@Test
+	void gravitySleepClauseFlagsGravityWithAnInaccurateSleepMove() {
+		var issues = check("gen9doublesou", mon("bronzong", null, "gravity"), mon("amoonguss", null, "sleeppowder"),
+				mon("garchomp", null, "protect"));
+		assertThat(issues.get(0)).contains(new TeamValidator.Issue("CLAUSE", "Gravity Sleep Clause"));
+		assertThat(issues.get(1)).contains(new TeamValidator.Issue("CLAUSE", "Gravity Sleep Clause"));
+		assertThat(issues.get(2)).isEmpty();
+		assertThat(check("gen9doublesubers", mon("bronzong", null, "gravity"), mon("amoonguss", null, "sleeppowder")))
+				.as("Doubles Ubers lifts the clause").allMatch(List::isEmpty);
+	}
+}

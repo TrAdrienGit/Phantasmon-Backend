@@ -610,7 +610,8 @@ Pour ajouter une décision : prendre le numéro suivant, dater, et mettre à jou
   Champions de Showdown (mod `champions`) et en « Libre », refusées dans les formats Smogon ; une Méga-Gemme tenue
   par une autre espèce que la sienne est refusée (`itemUser`), anciennes gemmes comprises.
 - **Conséquences** : 40 formes ont un modèle ; Heatran, Darkrai, Zeraora, Tatsugiri (×3), Magearna (×2) et Zygarde
-  gardent leur modèle normal (la mise en scène Showtime joue). Aspect `mega_z` (Absol, Carchacrok, Lucario Z). Les
-  formats Champions ne sont pas encore proposés dans le lobby : aujourd'hui, seul « Libre » permet les nouvelles Méga.
+  gardent leur modèle normal (la mise en scène Showtime joue). Aspect `mega_z` (Absol, Carchacrok, Lucario Z). Depuis
+  le 2026-11-27, le lobby propose Champions OU, UU et National Dex : les équipes y sont vérifiées avec les données du
+  mod `champions` de Showdown (règles seulement, le combat reste en Gen 9 ; pas de Téracristallisation).
   Les noms français des 7 talents restent à trouver (anglais en attendant). Plan :
   `Phantasmon-Client/Documentation/research/nouvelles-megas-plan.md`.

@@ -93,7 +93,7 @@ compatibilité avec Battle Extras (3 mixins), musique du lobby jouée par Showti
 | Ghost | Sortie/rappel du Pokémon en emplacement 1, suivi fluide, balade, animations de Poké Ball, formes, sexe et chromatique | Overlay Ghost (O, puis haut / bas, R) |
 | Échange en direct | Invitation, choix des offres, double confirmation, échange atomique | Roue Cobblemon (**R**) uniquement |
 | Échange asynchrone | Offre par UUID, acceptation ou annulation plus tard | Retiré du client (TODO-22) ; API REST conservée |
-| Combat | Combat Ghost contre Ghost avec l'interface de Cobblemon, lobby (format Smogon, intro, scène, terrain), mise en scène de Cobblemon Battle Showtime, chrono optionnel, abandon | Roue Cobblemon (**R**) uniquement |
+| Combat | Combat Ghost contre Ghost avec l'interface de Cobblemon, lobby (format Smogon ou Champions, simple ou double — double à tester en jeu —, intro, scène, terrain), mise en scène de Cobblemon Battle Showtime, chrono optionnel, abandon | Roue Cobblemon (**R**) uniquement |
 | Spectateurs | Regarder un combat Ghost en cours, comme dans Cobblemon (D-31), aussi entre serveurs via le Global Hub ; rejoint en cours, il montre les Pokémon déjà sortis | Roue Cobblemon (**R**) → « Regarder le combat Ghost » |
 | Construction du Hub | Chaque Anchor bâtit chez les clients du serveur le schematic de son hub en blocs client, incassables (D-34) | Automatique (`hub_schematics/hub_<nom>/`) |
 | Plusieurs hubs | Créés / supprimés / rechargés par les admins, espaces séparés, un Anchor par hub et par joueur, sans chevauchement (D-35) | Gestionnaire des hubs (touche **H**) |
