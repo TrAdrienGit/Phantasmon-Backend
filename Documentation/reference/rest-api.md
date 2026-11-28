@@ -39,6 +39,8 @@
 | `GET` | [`/trades/{uuid}`](#get-tradesuuid) | Bearer | Détail |
 | `GET` | [`/players/{uuid}/trades`](#get-playersuuidtrades) | Bearer | Échanges du joueur |
 | `GET` | [`/battles/{uuid}`](#get-battlesuuid) | Bearer | Détail |
+| `GET` | [`/battles/formats`](#get-battlesformats) | Bearer | Formats proposés (PC) |
+| `POST` | [`/battles/validate`](#post-battlesvalidate) | Bearer | Vérifier une ligne d'équipe du PC |
 | `GET` | [`/admin/me`](#administration) | Bearer | L'appelant est-il admin ? |
 | `GET` | [`/admin/admins`](#administration) | Admin | Liste des admins |
 | `POST` | [`/admin/admins`](#administration) | Admin | Ajouter un admin |
@@ -399,6 +401,17 @@ Réservé aux deux participants (`403` sinon, `404 ERROR_TRADE_NOT_FOUND`).
 ### `GET /battles/{uuid}`
 
 Réservé aux deux joueurs (`403`), `404 ERROR_BATTLE_NOT_FOUND`.
+
+### `GET /battles/formats`
+
+Les formats qu'un joueur peut choisir, comme dans le sélecteur du lobby (2026-11-28 : formats des lignes d'équipe du PC) :
+`[{ "id", "name", "game_type", "column", "natdex", "champions", "random_team", "adjust_level", "picked_team_size", "max_team_size" }]`.
+
+### `POST /battles/validate`
+
+`{ "format_id", "pokemon": [uuid | null] }` → `{ "issues": [[{ "code", "subject" }]] }` : une ligne d'équipe du PC
+vérifiée dans ce format, comme l'équipe du lobby (mêmes codes, `TeamValidator`). Une entrée par case, dans l'ordre ; une case vide
+ou un Pokémon qui n'est pas à l'appelant donne une liste vide. Format inconnu : `400 ERROR_BATTLE_UNKNOWN_FORMAT`.
 
 ---
 

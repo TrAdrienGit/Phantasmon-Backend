@@ -91,4 +91,25 @@ class BattleControllerTest {
 		assertThat(battleRepository.count()).isEqualTo(before);
 		assertThat(battleRepository.findById(hosted.getUuid()).orElseThrow().getStatus()).isEqualTo(BattleStatus.ACTIVE);
 	}
+
+	@Test
+	void theFormatsAPlayerMayPickAreListed() throws Exception {
+		mockMvc.perform(get("/battles/formats").header("Authorization", aliceToken))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$[0].id").exists())
+				.andExpect(jsonPath("$[0].column").exists());
+	}
+
+	@Test
+	void aPcTeamRowIsCheckedAgainstAFormat() throws Exception {
+		// Not her Pokémon (unknown uuid) and an empty case: nothing to report for either.
+		mockMvc.perform(post("/battles/validate").header("Authorization", aliceToken).contentType(MediaType.APPLICATION_JSON)
+						.content("{\"format_id\":\"free\",\"pokemon\":[\"%s\",null]}".formatted(UUID.randomUUID())))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.issues.length()").value(2))
+				.andExpect(jsonPath("$.issues[0].length()").value(0));
+		mockMvc.perform(post("/battles/validate").header("Authorization", aliceToken).contentType(MediaType.APPLICATION_JSON)
+						.content("{\"format_id\":\"no-such-format\",\"pokemon\":[]}"))
+				.andExpect(status().isBadRequest());
+	}
 }

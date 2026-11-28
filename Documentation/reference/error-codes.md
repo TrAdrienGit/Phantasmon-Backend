@@ -95,7 +95,7 @@ Canaux : **REST**, **WS** (`Error`), **WS-T** (`TradeSessionError` ou `reason` d
 | `ERROR_PLAYER_NOT_FOUND` | 404 | REST | Aucun joueur Phantasmon de ce pseudo (admin) | `phantasmon.admin.error.player_not_found` |
 | `ERROR_ADMIN_NOTHING_TO_STOP` | 404 | REST | Le joueur n'est ni en combat ni dans un lobby | `phantasmon.admin.error.nothing_to_stop` |
 | `ERROR_BATTLE_TEAM_NOT_ALLOWED` | — | WS-B | « Prêt » alors que son équipe enfreint le format choisi | `phantasmon.battle.error.team_not_allowed` |
-| `ERROR_BATTLE_UNKNOWN_FORMAT` | — | WS-B | Format de combat inconnu | `phantasmon.battle.error.unknown_format` |
+| `ERROR_BATTLE_UNKNOWN_FORMAT` | — / 400 | WS-B, REST | Format de combat inconnu (lobby, ou `format_id` de `POST /battles/validate`) | `phantasmon.battle.error.unknown_format` |
 | `ERROR_BATTLE_LOBBY_NOT_FOUND` | — | WS-B | Action de lobby hors lobby ou mauvais `lobby_uuid` | `phantasmon.battle.error.lobby_not_found` |
 | `ERROR_BATTLE_INVALID_PARTY` | — | WS-B | Copie d'équipe Cobblemon refusée : `team` inconnu, 0 ou plus de 6 membres, champ manquant ou trop long, IV/EV illégaux, UUID en double | `phantasmon.battle.error.invalid_party` |
 | `ERROR_BATTLE_NOT_IN_BATTLE` | — | WS-B | Action hors combat ou mauvais `battle_uuid` (ignoré silencieusement par le client) | `phantasmon.battle.error.not_battling` |

@@ -336,6 +336,52 @@ public class LiveBattleService {
 		return problems;
 	}
 
+	/** The formats a player may pick (the lobby picker's list), for the PC's team rows (2026-11-28). */
+	public List<Map<String, Object>> offeredFormats() {
+		return showdown.formats().offered().stream().map(LiveBattleService::formatEntry).toList();
+	}
+
+	/**
+	 * A PC team row checked against a format (2026-11-28): {@code pokemon} the row's Pokémon uuids in order (null for an
+	 * empty case), all the player's own; per entry, the rules it breaks ({@code code}, {@code subject}), empty for an
+	 * empty case or a Pokémon that is fine. Null if the format is unknown.
+	 */
+	public List<List<Map<String, String>>> validateOwned(UUID playerUuid, String formatId, List<UUID> pokemon) {
+		BattleFormats.Format format = formatId == null ? null : showdown.formats().get(formatId);
+		if (format == null || pokemon == null) {
+			return null;
+		}
+		Map<UUID, PokemonResponse> owned = new HashMap<>();
+		for (PokemonResponse response : pokemonService.listForOwner(playerUuid)) {
+			owned.put(response.uuid(), response);
+		}
+		List<PokemonResponse> team = new ArrayList<>();
+		for (UUID uuid : pokemon) {
+			if (uuid != null && owned.containsKey(uuid)) {
+				team.add(owned.get(uuid));
+			}
+		}
+		List<List<TeamValidator.Issue>> issues = team.isEmpty() ? List.of()
+				: showdown.validator().validate(format, team.stream().map(LiveBattleService::member).toList());
+		List<List<Map<String, String>>> result = new ArrayList<>();
+		int member = 0;
+		for (UUID uuid : pokemon) {
+			if (uuid == null || !owned.containsKey(uuid)) {
+				result.add(List.of());
+				continue;
+			}
+			List<TeamValidator.Issue> own = member < issues.size() ? issues.get(member) : List.of();
+			member++;
+			result.add(own.stream().map(issue -> {
+				Map<String, String> entry = new HashMap<>();
+				entry.put("code", issue.code());
+				entry.put("subject", issue.subject());
+				return entry;
+			}).toList());
+		}
+		return result;
+	}
+
 	private TournamentHook tournamentHook;
 
 	public void setTournamentHook(TournamentHook hook) {
